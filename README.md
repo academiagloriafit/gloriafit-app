@@ -122,7 +122,15 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 - Cópia de segurança: `python -m app.backup /dados/app.db /backups` (usa a
   cópia segura do próprio SQLite, confere a integridade e guarda as 14 últimas). Isso fica no
   mesmo servidor; **falta** mandar uma cópia diária para fora dele.
-- Autorizar os computadores no servidor: `docker exec -it <contêiner> python -m app.dispositivos codigo --nome "..."`.
+- Autorizar os computadores no servidor: no painel da Hostinger, Gerenciador Docker, projeto `gloriafit-app`,
+  link **Terminal** (abre um shell dentro do contêiner do app), e lá
+  `python -m app.dispositivos codigo --nome "..."`. O código vale 15 minutos e só funciona uma vez:
+  gere-o com a pessoa já diante do computador, que abre `https://app.gloriafit.com.br/autorizar`.
+- **Verificação de saúde** (`deploy/healthcheck.py`): precisa mandar o endereço do app no cabeçalho
+  `Host`. Com o Host padrão (`127.0.0.1`) o app a recusava (400), o Docker marcava o contêiner como
+  "doente" e o Traefik o ignorava: o site ficava com certificado de erro. Há testes travando isso.
+- No ar desde 07/10/2026 em https://app.gloriafit.com.br (conferido: certificado válido, HSTS, CSP,
+  API sem autorização responde 401, `/` redireciona para `/autorizar`).
 
 ## Rotas
 
