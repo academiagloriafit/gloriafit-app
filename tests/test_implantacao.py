@@ -120,3 +120,55 @@ def test_compose_usa_imagem_pronta_do_ghcr_com_commit_fixo_e_nao_constroi_no_ser
 
     assert repositorio == "ghcr.io/academiagloriafit/gloriafit-app"
     assert etiqueta != "latest" and etiqueta  # "latest" mudaria sozinho num reinício
+
+
+# ------------------------------------------------------------------ verificação de saúde do contêiner
+
+import importlib.util  # noqa: E402
+
+
+def _carregar_healthcheck():
+    caminho = RAIZ / "deploy" / "healthcheck.py"
+    especificacao = importlib.util.spec_from_file_location("healthcheck_do_conteiner", caminho)
+    modulo = importlib.util.module_from_spec(especificacao)
+    especificacao.loader.exec_module(modulo)
+    return modulo
+
+
+def test_healthcheck_leva_o_endereco_do_app_no_host(monkeypatch):
+    # Lição de 07/10/2026: com o Host "127.0.0.1:8000" o app recusava a própria verificação (400),
+    # o Docker marcava o contêiner como doente e o Traefik o ignorava (site fora do ar).
+    pedido = _carregar_healthcheck().montar_pedido({"GLORIAFIT_DOMINIO": "app.gloriafit.com.br"})
+
+    assert pedido.full_url == "http://127.0.0.1:8000/saude"
+    assert pedido.get_header("Host") == "app.gloriafit.com.br"
+
+
+def test_healthcheck_sem_dominio_configurado_usa_o_endereco_local():
+    pedido = _carregar_healthcheck().montar_pedido({})
+
+    assert pedido.get_header("Host") == "127.0.0.1:8000"
+
+
+def test_o_app_aceita_o_pedido_que_o_healthcheck_monta(tmp_path, monkeypatch):
+    # Mesmas variáveis do compose de produção: domínio fixo + atrás do proxy.
+    from app.db import conectar, criar_tabelas
+    from app.web import criar_app
+
+    monkeypatch.setenv("GLORIAFIT_DOMINIO", SERVICO["environment"]["GLORIAFIT_DOMINIO"])
+    monkeypatch.setenv("GLORIAFIT_ATRAS_DE_PROXY", "1")
+    caminho = tmp_path / "saude.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.close()
+    pedido = _carregar_healthcheck().montar_pedido({"GLORIAFIT_DOMINIO": SERVICO["environment"]["GLORIAFIT_DOMINIO"]})
+
+    resposta = criar_app(caminho).test_client().get("/saude", headers={"Host": pedido.get_header("Host")})
+
+    assert resposta.status_code == 200
+
+
+def test_dockerfile_copia_e_usa_o_healthcheck_e_ele_nao_e_ignorado():
+    assert re.search(r"^COPY\s+deploy/healthcheck\.py\s+\./healthcheck\.py", DOCKERFILE, re.M)
+    assert re.search(r"^HEALTHCHECK\b.*\\\n\s+CMD \[\"python\", \"healthcheck\.py\"\]", DOCKERFILE, re.M)
+    assert not any(p in IGNORADOS for p in ("deploy", "deploy/healthcheck.py", "*.py"))

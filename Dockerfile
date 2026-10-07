@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt "gunicorn==26.2.0"
 COPY app ./app
 COPY dados ./dados
 COPY deploy/entrypoint.sh ./entrypoint.sh
+COPY deploy/healthcheck.py ./healthcheck.py
 
 # Roda sem ser administrador: se alguém achar uma falha no app, não chega no sistema inteiro.
 # /dados guarda o banco (volume) e /backups as cópias de segurança (volume).
@@ -29,6 +30,6 @@ EXPOSE 8000
 
 # O Docker marca o contêiner como "saudável" quando /saude responde.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=3).status == 200 else 1)"
+    CMD ["python", "healthcheck.py"]
 
 CMD ["./entrypoint.sh"]
