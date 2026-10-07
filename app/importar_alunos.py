@@ -39,10 +39,10 @@ import sys
 import zipfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.alunos import SITUACOES, WhatsappInvalido, validar_whatsapp
+from app.alunos import FUSO_DA_ACADEMIA, SITUACOES, WhatsappInvalido, validar_whatsapp
 from app.db import conectar, criar_tabelas
 
 TABELAS_USADAS = ("PESSOA", "PESSOA_STATUS", "CONTATO_PESSOA")
@@ -151,6 +151,10 @@ def carregar_copia(origem: str | Path) -> Copia:
             )
         tabelas[nome] = linhas
 
+    return _montar_copia(extraido_em, tabelas)
+
+
+def _montar_copia(extraido_em: datetime, tabelas: dict[str, list[dict]]) -> Copia:
     periodos: dict[int, list[dict]] = defaultdict(list)
     for linha in tabelas["PESSOA_STATUS"]:
         if not isinstance(linha["DT_INI_STATUS"], str) or not isinstance(linha["DT_FIM_STATUS"], str):
@@ -163,6 +167,79 @@ def carregar_copia(origem: str | Path) -> Copia:
     for linha in tabelas["CONTATO_PESSOA"]:
         contatos[linha["ID_PESSOA"]].append(linha)
     return Copia(extraido_em, tabelas["PESSOA"], dict(periodos), dict(contatos))
+
+
+# ------------------------------------------------------------------ pacote enviado pelo navegador
+#
+# Na tela "Atualizar alunos", o navegador do computador autorizado abre o base_total.zip,
+# confere a cópia contra o manifesto e envia SÓ as três tabelas e SÓ as colunas de que o app
+# precisa (nada de RG, nascimento, senha, e-mail, pagamentos, digitais...). O formato:
+#
+#   {"extracao": "07/10/2026 05:00:17",
+#    "tabelas": {"PESSOA": {"colunas": ["ID", ...], "linhas": [[1, ...], ...]}, ...}}
+
+IDADE_MAXIMA_DA_COPIA = timedelta(days=5)  # fim de semana com o PC desligado cabe; cópia velha demais, não
+TOLERANCIA_DE_RELOGIO = timedelta(days=1)
+LIMITE_DE_LINHAS_POR_TABELA = 1_000_000
+
+_TIPOS_DAS_COLUNAS = {
+    # (tipo obrigatório, aceita vazio?). int não aceita bool (True seria 1).
+    "PESSOA": {"ID": (int, False), "NM_PESSOA": (str, True), "TP_PESSOA": (str, True), "NR_CPF": (str, True), "ST_DELETED": (str, True)},
+    "PESSOA_STATUS": {"ID_PESSOA": (int, False), "DT_INI_STATUS": (str, False), "DT_FIM_STATUS": (str, False), "CD_STATUS": (str, True)},
+    "CONTATO_PESSOA": {"ID_CONTATO": (int, False), "ID_PESSOA": (int, False), "ID_TIPO_CONTATO": (int, True), "DS_CONTATO": (str, True)},
+}
+
+
+def _valor_serve(valor, tipo, aceita_vazio: bool) -> bool:
+    if valor is None:
+        return aceita_vazio
+    return isinstance(valor, tipo) and not isinstance(valor, bool)
+
+
+def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
+    """Valida o pacote enviado pelo navegador e o transforma em `Copia`. Nada é gravado aqui."""
+    agora = agora or datetime.now(timezone.utc)
+    if not isinstance(pacote, dict) or not isinstance(pacote.get("tabelas"), dict):
+        raise CopiaInvalida("O pacote enviado não está no formato esperado.")
+    try:
+        extraido_em = datetime.strptime(pacote["extracao"], "%d/%m/%Y %H:%M:%S")
+    except (KeyError, ValueError, TypeError):
+        raise CopiaInvalida("O pacote não informa direito a data e a hora da cópia do Data4U.") from None
+    agora_local = agora.astimezone(FUSO_DA_ACADEMIA).replace(tzinfo=None)
+    if extraido_em > agora_local + TOLERANCIA_DE_RELOGIO:
+        raise CopiaInvalida(f"A cópia diz ser de {extraido_em:%d/%m/%Y %H:%M}, que ainda não chegou. Confira a data do computador.")
+    if agora_local - extraido_em > IDADE_MAXIMA_DA_COPIA:
+        raise CopiaInvalida(
+            f"A cópia é de {extraido_em:%d/%m/%Y %H:%M}, velha demais "
+            f"(mais de {IDADE_MAXIMA_DA_COPIA.days} dias). Gere uma cópia nova no PC da recepção."
+        )
+    if set(pacote["tabelas"]) != set(TABELAS_USADAS):
+        raise CopiaInvalida("O pacote precisa ter exatamente as tabelas " + ", ".join(TABELAS_USADAS) + ".")
+
+    tabelas: dict[str, list[dict]] = {}
+    for nome in TABELAS_USADAS:
+        bloco = pacote["tabelas"][nome]
+        colunas = bloco.get("colunas") if isinstance(bloco, dict) else None
+        linhas = bloco.get("linhas") if isinstance(bloco, dict) else None
+        if not isinstance(colunas, list) or not isinstance(linhas, list):
+            raise CopiaInvalida(f"{nome}: formato inesperado.")
+        # Exatamente as colunas usadas: coluna a mais seria dado pessoal que o app não precisa.
+        if len(colunas) != len(set(colunas)) or set(colunas) != set(COLUNAS_NECESSARIAS[nome]):
+            raise CopiaInvalida(f"{nome}: as colunas enviadas precisam ser exatamente {', '.join(COLUNAS_NECESSARIAS[nome])}.")
+        if len(linhas) > LIMITE_DE_LINHAS_POR_TABELA:
+            raise CopiaInvalida(f"{nome}: linhas demais.")
+        tipos = _TIPOS_DAS_COLUNAS[nome]
+        convertidas = []
+        for numero, linha in enumerate(linhas, start=1):
+            if not isinstance(linha, list) or len(linha) != len(colunas):
+                raise CopiaInvalida(f"{nome}, linha {numero}: formato inesperado.")
+            registro = dict(zip(colunas, linha))
+            for coluna, (tipo, aceita_vazio) in tipos.items():
+                if not _valor_serve(registro[coluna], tipo, aceita_vazio):
+                    raise CopiaInvalida(f"{nome}, linha {numero}: a coluna {coluna} está num formato inesperado.")
+            convertidas.append(registro)
+        tabelas[nome] = convertidas
+    return _montar_copia(extraido_em, tabelas)
 
 
 # ------------------------------------------------------------------ regras (funções puras)
@@ -274,6 +351,18 @@ class Relatorio:
     @property
     def importadas(self) -> int:
         return self.novos + self.provisorios_juntados + self.atualizados + self.iguais
+
+    def como_dicionario(self) -> dict:
+        """Para a tela "Atualizar alunos": só contagens e o texto do relatório (sem nome, CPF ou telefone)."""
+        return {
+            "extraido_em": f"{self.extraido_em:%d/%m/%Y %H:%M}",
+            "importadas": self.importadas,
+            "novos": self.novos,
+            "atualizados": self.atualizados,
+            "iguais": self.iguais,
+            "provisorios_juntados": self.provisorios_juntados,
+            "texto": self.texto(),
+        }
 
     def texto(self) -> str:
         linhas = [

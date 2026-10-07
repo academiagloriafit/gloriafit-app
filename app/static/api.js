@@ -9,11 +9,12 @@ export const MENSAGEM_NAO_AUTORIZADO =
 
 // Faz um POST com `dados` em JSON. Devolve { status, corpo }, onde `corpo` é o JSON
 // da resposta (ou null se a resposta não for JSON, como uma página de erro).
+// `tempoMaximoMs` (opcional) troca o prazo padrão, para pedidos grandes como o de atualizar alunos.
 // Se a rede cair ou o servidor não responder a tempo, a promessa é REJEITADA:
 // quem chama precisa tratar, porque nesse caso não sabemos se o servidor gravou.
-export async function enviarJson(url, dados) {
+export async function enviarJson(url, dados, tempoMaximoMs = TEMPO_MAXIMO_MS) {
   const controle = new AbortController();
-  const relogio = setTimeout(() => controle.abort(), TEMPO_MAXIMO_MS);
+  const relogio = setTimeout(() => controle.abort(), tempoMaximoMs);
   try {
     const resposta = await fetch(url, {
       method: "POST",

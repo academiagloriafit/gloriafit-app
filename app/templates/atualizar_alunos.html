@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atualizar alunos · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% set menu_ativo = "atualizar" %}
+  {% include "_topo.html" %}
+
+  <main class="pagina pagina-larga">
+    <a class="voltar" href="{{ url_for('pagina_alunos') }}">&larr; Voltar à busca</a>
+    <h1 class="titulo-grande">Atualizar alunos</h1>
+
+    <div class="montagem-grade">
+      <section class="painel painel-formulario" aria-labelledby="titulo-arquivo">
+        <p class="texto-apoio">Traz para o app os alunos que estão no Data4U. Faça uma vez por dia, de manhã, depois das 05:00.</p>
+
+        <div class="campo">
+          <label id="titulo-arquivo" for="arquivo">Arquivo base_total.zip</label>
+          <input id="arquivo" type="file" accept=".zip,application/zip">
+          <p class="dica">No PC da recepção ele fica na pasta NFSE, na Área de Trabalho. O arquivo não sai do computador: o navegador separa e envia só nome, CPF, situação e celular.</p>
+        </div>
+
+        <p id="resumo" class="texto-apoio" role="status" aria-live="polite"></p>
+        <p id="erro-geral" class="aviso-campo aviso-erro" role="alert"></p>
+
+        <div class="acoes-formulario">
+          <button id="botao-enviar" type="button" class="botao-principal" disabled>Enviar e atualizar alunos</button>
+        </div>
+
+        <pre id="relatorio" class="relatorio-importacao" hidden></pre>
+      </section>
+
+      <aside class="painel coluna-lateral-estreita" aria-labelledby="titulo-como">
+        <h2 id="titulo-como">O que acontece</h2>
+        <ol class="passos">
+          <li><span class="passo-numero">1</span><div><strong>Escolha o arquivo</strong><p>O navegador mostra de quando é a cópia, antes de enviar qualquer coisa.</p></div></li>
+          <li><span class="passo-numero">2</span><div><strong>Envie</strong><p>Quem é novo entra, quem mudou é atualizado. Ninguém é apagado e os treinos ficam como estão.</p></div></li>
+          <li><span class="passo-numero">3</span><div><strong>Confira o resumo</strong><p>Aparece só com números, sem nome de aluno.</p></div></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='atualizar_alunos.js') }}"></script>
+</body>
+</html>

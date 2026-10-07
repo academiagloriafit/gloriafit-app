@@ -13,12 +13,16 @@ from urllib.parse import urlsplit
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app import acesso, alunos, cupom, db, exercicios, provisorios, treinos
+from app import acesso, alunos, cupom, db, exercicios, importar_alunos, provisorios, treinos
 
 
 # Um treino enorme (26 fichas x 100 exercícios) tem poucas dezenas de KB. Acima disto o
 # pedido é recusado antes de ser lido inteiro: ninguém precisa mandar megabytes para salvar.
 TAMANHO_MAXIMO_DO_PEDIDO = 512 * 1024
+
+# Só a rota de "Atualizar alunos" recebe um pedido grande: as 3 tabelas do Data4U, com só as
+# colunas usadas, dão alguns MB (51 mil linhas de situação). O teto vale só para ela.
+TAMANHO_MAXIMO_DA_IMPORTACAO = 25 * 1024 * 1024
 
 
 # Páginas e rotas que NÃO exigem computador autorizado (o resto exige). Quem cria uma
@@ -304,6 +308,26 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             limite=inteiro_opcional("limite") or alunos.LIMITE_PADRAO,
         )
         return jsonify(resultado)
+
+    @app.get("/alunos/atualizar")
+    def pagina_atualizar_alunos():
+        """Tela onde a recepção escolhe o base_total.zip e atualiza os alunos do app."""
+        return render_template("atualizar_alunos.html")
+
+    @app.post("/api/alunos/importar")
+    def api_importar_alunos():
+        """Importa os alunos a partir do pacote que o navegador montou (ver importar_alunos.copia_de_pacote).
+
+        200 com o relatório (só contagens); 400 {"erro"} se o pacote não serve (nada é gravado).
+        """
+        request.max_content_length = TAMANHO_MAXIMO_DA_IMPORTACAO  # só nesta rota, antes de ler o corpo
+        pacote = corpo_json()
+        try:
+            copia = importar_alunos.copia_de_pacote(pacote)
+        except importar_alunos.CopiaInvalida as erro:
+            return jsonify(erro=str(erro)), 400
+        relatorio = importar_alunos.importar(conexao(), copia)
+        return jsonify(relatorio.como_dicionario())
 
     @app.get("/alunos/novo")
     def pagina_novo_aluno():

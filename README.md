@@ -28,12 +28,20 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
    07/10/2026). Rodar de novo atualiza quem já existe e acrescenta quem é novo. Quando a pessoa
    aparece pela primeira vez e há um aluno provisório com o **mesmo CPF**, os dois são juntados
    (o treino continua com o aluno).
+   **Tela "Atualizar alunos"** (`/alunos/atualizar`, no menu): no PC da recepção, a pessoa escolhe
+   o `base_total.zip` (pasta NFSE). **O navegador abre o `.zip` no próprio computador**, confere a
+   cópia contra o `_manifesto.json` (data, número de linhas, colunas), mostra de quando ela é e,
+   só ao clicar em "Enviar e atualizar alunos", manda ao servidor **apenas 3 tabelas e apenas as
+   colunas usadas** (nome, CPF, situação, celular; nada de RG, nascimento, e-mail, pagamentos...).
+   O servidor confere o pacote de novo (colunas exatamente iguais às esperadas, tipos dos valores,
+   cópia de no máximo 5 dias) e grava tudo ou nada. A resposta traz só contagens, nunca nome ou CPF.
+   Enviar de novo não duplica ninguém. O `base_total.zip` inteiro **nunca chega ao servidor**.
 7. **Imprimir o treino** (`/treinos/<id>/imprimir`): cupom para a impressora térmica (Bematech
    MP-4200 TH, papel de 80 mm) no formato do desenho: academia, aluno, treino, data, professor e,
    por ficha, os exercícios com etiqueta (A1, A2 de bi-set; 3, 4... dos soltos), séries X
    repetições, carga e o aviso "BI-SET: FAÇA A1 E A2 SEGUIDOS". O botão **Imprimir na térmica**
-   aparece depois de salvar o treino e em cada treino da ficha do aluno. **Ainda não foi testado
-   na impressora de verdade** (ver "Ainda não existe").
+   aparece depois de salvar o treino e em cada treino da ficha do aluno. **Testado em 07/10/2026
+   na impressora do PC dos professores: imprimiu certo** (segundo o Thiago; ver "Ainda em aberto").
 8. **Proteção da área do professor**: só **computadores autorizados** abrem as telas e a API
    (hoje serão dois: o dos professores e o da recepção). Cada um é autorizado uma vez, com um
    **código de uso único** gerado no servidor (`python -m app.dispositivos`), e passa a ser
@@ -58,6 +66,9 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/dispositivos.py` | Comando do servidor: `codigo --nome "..."` (gera o código), `listar`, `revogar <número>` |
 | `app/web.py` | O servidor: páginas e rotas da API (tabela "Rotas" abaixo) e a guarda que barra quem não é computador autorizado |
 | `app/templates/`, `app/static/` | Páginas, estilo e JavaScript |
+| `app/static/zip_leitor.js` | Lê o `.zip` no navegador sem biblioteca: acha uma entrada pelo índice e descompacta só ela (deflate ou sem compressão); recusa senha, ZIP64, arquivo cortado, tamanho que não bate e "bomba de zip" |
+| `app/static/copia_modelo.js` | Prepara o que a tela "Atualizar alunos" envia: confere o manifesto, reduz às colunas necessárias, só celular (tipo 30), CPF/telefone como texto; textos de aviso e leitura da resposta do servidor |
+| `app/static/atualizar_alunos.js` | A tela em si (escolher arquivo, mostrar resumo, enviar). Usa só `textContent` |
 | `app/static/treino_modelo.js` | Lógica do treino (fichas, bi-set, validação, rascunho, nome sugerido, pedido de salvar), sem nada de tela |
 | `app/static/montar.js`, `salvar.js`, `biblioteca.js` | Desenho da tela de montar treino, da tela de salvar e da lista de exercícios |
 | `app/static/api.js` | `enviarJson`: envia um POST em JSON com limite de tempo (20 s) e devolve status + corpo; usado por salvar treino e WhatsApp |
@@ -229,13 +240,17 @@ treino é único por aluno, sem diferenciar maiúscula nem acento (regra do Data
   (a busca mostra o **último treino salvo**) e ainda falta o app do aluno.
 - A **situação** mostrada é a letra do Data4U (Ativo, Pendente...), no lugar do "Em dia" do
   desenho. "Em dia" não foi verificado (o desenho dizia "pagou nos últimos 30 dias").
-- Importar todo dia, sozinho: falta decidir como o `base_total.zip` chega ao servidor e a tarefa
-  agendada. **A cópia atual tem as 258 tabelas do Data4U (pelo nome: digitais, anamnese, pagamentos; não abri o conteúdo)** e o app
-  só usa 3: antes de mandar para o servidor, extrair só essas (princípio da necessidade, LGPD).
+- Importar todo dia, **sozinho**: hoje é manual, pela tela "Atualizar alunos" (alguém da recepção
+  escolhe o `base_total.zip` depois das 05:00). Automatizar exigiria mandar os dados do PC da
+  recepção ao servidor sem ninguém na tela: ainda não decidido. A cópia tem as 258 tabelas do Data4U
+  (digitais, anamnese, pagamentos...) e o app só usa 3; a tela já envia só elas e só as colunas usadas.
+- A tela "Atualizar alunos" lê o `.zip` com o `DecompressionStream` do navegador (Chrome e Edge
+  atuais) e **não lê ZIP64** (só usado acima de 4 GB). Foi testada com `.zip` gerado pelo Python
+  (deflate) num Chromium de verdade; **falta testar com o `base_total.zip` real** no PC da recepção.
 - Dos 369 alunos ativos, trancados ou pendentes: 19 não têm CPF no Data4U (não conseguirão entrar
   no app do aluno) e 136 estão sem WhatsApp usável (12 sem celular; 112 com celular de 9 números, sem DDD,
   que o app não completa; 12 com número fora do formato). A recepção corrige na ficha (WhatsApp) ou no Data4U (CPF).
-- **Impressão (não testada na impressora):** não sei qual bobina está instalada (80 mm ou 57 mm), nem a
+- **Impressão (testada em 07/10/2026 no PC dos professores: imprimiu certo):** não sei qual bobina está instalada (80 mm ou 57 mm), nem a
   largura útil real (o cupom usa 72 mm, `--largura-util` em `imprimir.css`). O tamanho do papel **não** é
   pedido pela página (o Chrome não aceita altura automática no `@page` e uma altura fixa gastaria
   bobina): é preciso escolher o papel de 80 mm da Bematech na janela de impressão ou, melhor, nas

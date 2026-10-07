@@ -555,3 +555,16 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 @media (max-width: 900px) {
   .aluno-novo { order: -1; }  /* no celular, o cartão "Aluno novo?" fica acima da lista */
 }
+
+/* ---- atualizar alunos ---- */
+.relatorio-importacao {
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f6f4ef;
+  font: 14px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.relatorio-importacao[hidden] { display: none; }
+.campo input[type="file"] { padding: 12px; font-size: 16px; }

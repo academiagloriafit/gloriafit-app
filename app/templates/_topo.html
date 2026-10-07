@@ -5,6 +5,7 @@
       <div class="marca">GLÓRIA <span>FIT</span></div>
       <nav class="topo-menu" aria-label="Principal">
         <a href="{{ url_for('pagina_alunos') }}"{% if menu_ativo == "alunos" %} class="ativo" aria-current="page"{% endif %}>Alunos</a>
+        <a href="{{ url_for('pagina_atualizar_alunos') }}"{% if menu_ativo == "atualizar" %} class="ativo" aria-current="page"{% endif %}>Atualizar alunos</a>
       </nav>
     </div>
     <div class="topo-nota">{{ dispositivo_nome or "Computador autorizado" }}</div>
