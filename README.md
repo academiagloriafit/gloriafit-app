@@ -110,7 +110,9 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 
 - `deploy/docker-compose.yml` é a receita para colar no Gerenciador Docker da Hostinger (endereço
   `app.gloriafit.com.br`, etiquetas do Traefik copiadas do jeito que o servidor já usa, banco e cópias
-  em volumes, **sem abrir porta**). Falta só trocar `context` pelo endereço do código no GitHub.
+  em volumes, **sem abrir porta**). A imagem é construída pelo GitHub (`.github/workflows/imagem.yml`:
+  roda os testes, constrói e publica em `ghcr.io/academiagloriafit/gloriafit-app`) e o servidor só a baixa.
+  Para atualizar o app: trocar a etiqueta da imagem pelo commit novo e clicar em Implantar.
 - O banco novo é criado na primeira subida (tabelas + exercícios). Banco existente nunca é apagado.
 - SQLite em modo WAL com espera de 5 s por trava: vários processos podem usar o mesmo arquivo.
 - Cabeçalho `Strict-Transport-Security` de 1 semana quando a conexão é HTTPS (subir para 1 ano

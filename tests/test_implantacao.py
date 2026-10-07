@@ -111,3 +111,12 @@ def test_compose_nao_tem_senha_nem_token_escritos():
     texto = (RAIZ / "deploy" / "docker-compose.yml").read_text(encoding="utf-8").lower()
 
     assert not re.search(r"token|senha|password|secret|x-access-token", texto)
+
+
+def test_compose_usa_imagem_pronta_do_ghcr_com_commit_fixo_e_nao_constroi_no_servidor():
+    # O servidor tem 1 vCPU e metade da memória em uso: quem constrói é o GitHub.
+    assert "build" not in SERVICO
+    repositorio, _, etiqueta = SERVICO["image"].rpartition(":")
+
+    assert repositorio == "ghcr.io/academiagloriafit/gloriafit-app"
+    assert etiqueta != "latest" and etiqueta  # "latest" mudaria sozinho num reinício

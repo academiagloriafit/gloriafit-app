@@ -1,0 +1,48 @@
+# Testa o código e, se passar, constrói a imagem Docker e publica no GitHub (ghcr.io).
+# O servidor da Hostinger só BAIXA a imagem pronta: construir lá gasta a memória dele.
+name: Imagem Docker
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permissões mínimas: ler o código e escrever o pacote (a imagem). Nada além disso.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  imagem:
+    runs-on: ubuntu-latest
+    env:
+      IMAGEM: ghcr.io/${{ github.repository_owner }}/gloriafit-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Testes
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q
+
+      - name: Construir a imagem
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            -t "$IMAGEM:${{ github.sha }}" \
+            -t "$IMAGEM:latest" \
+            .
+
+      - name: Entrar no ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USUARIO: ${{ github.actor }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$USUARIO" --password-stdin
+
+      - name: Publicar a imagem
+        run: docker push --all-tags "$IMAGEM"

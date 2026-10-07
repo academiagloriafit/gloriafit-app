@@ -1,13 +1,14 @@
 # Receita do app no servidor da Hostinger (Gerenciador Docker > Compose manualmente).
 # O Traefik que já roda lá cuida do HTTPS: este arquivo só diz o endereço e a porta do app.
 #
-# Antes de colar no painel, trocar a linha "context" pelo endereço do código no GitHub
-# (ex.: https://github.com/academiagloriafit/app-gloriafit.git#<etiqueta-ou-commit>).
-# Fixar uma etiqueta/commit (e não "main") evita que um reinício publique código novo sem querer.
+# A imagem NÃO é construída no servidor (gastaria a memória dele): o GitHub constrói e
+# publica a cada envio para a "main" (.github/workflows/imagem.yml). Para atualizar o app,
+# trocar a etiqueta depois dos dois-pontos pelo código do commit novo (o texto longo que o
+# GitHub mostra na aba Actions / na lista de commits) e clicar em Implantar.
+# Fixar o commit (e não "latest") evita que um reinício publique código novo sem querer.
 services:
   app:
-    build:
-      context: .
+    image: ghcr.io/academiagloriafit/gloriafit-app:COMMIT_COMPLETO_AQUI
     restart: unless-stopped
     environment:
       GLORIAFIT_DOMINIO: app.gloriafit.com.br
