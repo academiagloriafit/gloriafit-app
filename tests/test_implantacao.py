@@ -172,3 +172,47 @@ def test_dockerfile_copia_e_usa_o_healthcheck_e_ele_nao_e_ignorado():
     assert re.search(r"^COPY\s+deploy/healthcheck\.py\s+\./healthcheck\.py", DOCKERFILE, re.M)
     assert re.search(r"^HEALTHCHECK\b.*\\\n\s+CMD \[\"python\", \"healthcheck\.py\"\]", DOCKERFILE, re.M)
     assert not any(p in IGNORADOS for p in ("deploy", "deploy/healthcheck.py", "*.py"))
+
+
+# ------------------------------------------------------------------ servico de backup diario
+
+BACKUP = COMPOSE["services"]["backup"]
+
+
+def test_backup_usa_a_mesma_imagem_do_app_para_nunca_rodar_codigo_de_outra_versao():
+    # A etiqueta aparece nos dois serviços; quem troca só uma deixaria o backup numa versão velha.
+    assert BACKUP["image"] == SERVICO["image"]
+
+
+def test_backup_nao_atende_ninguem_nao_abre_porta_nem_e_exposto_pelo_traefik():
+    assert "ports" not in BACKUP
+    assert "network_mode" not in BACKUP
+    assert not any(str(k).startswith("traefik") for k in BACKUP.get("labels", []))
+    assert "labels" not in BACKUP
+
+
+def test_backup_enxerga_o_banco_e_as_copias_e_reinicia_sozinho():
+    assert set(BACKUP["volumes"]) == {"app-dados:/dados", "app-backups:/backups"}
+    assert BACKUP["restart"] == "unless-stopped"
+
+
+def test_backup_roda_o_agendador_que_existe_e_nao_o_servidor_web():
+    import app.backup_agendado as agendado
+
+    assert BACKUP["command"] == ["python", "-m", "app.backup_agendado"]
+    assert callable(agendado.main) and callable(agendado.rodar)
+
+
+def test_backup_nao_herda_a_verificacao_do_app_que_chama_o_site():
+    # Sem este bloco, valeria o HEALTHCHECK da imagem (chama /saude, que o backup não serve):
+    # o contêiner ficaria "unhealthy" para sempre e ninguém saberia quando o backup falhar de verdade.
+    teste = BACKUP["healthcheck"]["test"]
+
+    assert teste == ["CMD", "python", "-m", "app.backup_agendado", "--verificar"]
+    assert BACKUP["healthcheck"]["retries"] >= 1
+
+
+def test_a_imagem_leva_o_agendador_de_backup():
+    # O Dockerfile copia a pasta app inteira; este teste avisa se alguém trocar isso por uma lista.
+    assert re.search(r"^COPY\s+app\s+\./app\s*$", DOCKERFILE, re.M)
+    assert (RAIZ / "app" / "backup_agendado.py").is_file()

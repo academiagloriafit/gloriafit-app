@@ -6,6 +6,7 @@
 # trocar a etiqueta depois dos dois-pontos pelo código do commit novo (o texto longo que o
 # GitHub mostra na aba Actions / na lista de commits) e clicar em Implantar.
 # Fixar o commit (e não "latest") evita que um reinício publique código novo sem querer.
+# A etiqueta aparece em DOIS lugares (o app e o backup): trocar nos dois.
 services:
   app:
     image: ghcr.io/academiagloriafit/gloriafit-app:COMMIT_COMPLETO_AQUI
@@ -26,6 +27,25 @@ services:
       - traefik.http.routers.gloriafitapp.tls=true
       - traefik.http.routers.gloriafitapp.tls.certresolver=letsencrypt
       - traefik.http.services.gloriafitapp.loadbalancer.server.port=8000
+
+  # Cópia de segurança do banco, sozinha: uma por dia às 03:00 de Vila Velha, guarda as 30 mais
+  # novas em /backups (app/backup_agendado.py). Mesma imagem do app, outro comando. Não tem
+  # "ports" nem rótulos do Traefik: não atende ninguém. Se ficar 30 h sem cópia nova, o Docker
+  # marca este contêiner como "unhealthy" (visível no painel).
+  # ATENÇÃO: as cópias ficam no MESMO servidor; não protegem contra perder o servidor inteiro.
+  backup:
+    image: ghcr.io/academiagloriafit/gloriafit-app:COMMIT_COMPLETO_AQUI
+    restart: unless-stopped
+    command: ["python", "-m", "app.backup_agendado"]
+    volumes:
+      - app-dados:/dados
+      - app-backups:/backups
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.backup_agendado", "--verificar"]
+      interval: 1h
+      timeout: 10s
+      start_period: 2m
+      retries: 1
 
 volumes:
   app-dados:

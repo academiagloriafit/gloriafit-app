@@ -59,6 +59,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/exercicios.py` | Consultas: grupos e busca de exercícios |
 | `app/alunos.py` | Busca de alunos (nome, CPF ou matrícula), ficha com os treinos salvos e correção do WhatsApp (valida e grava) |
 | `app/importar_alunos.py` | Lê a cópia diária do Data4U (só 3 tabelas: `PESSOA`, `PESSOA_STATUS`, `CONTATO_PESSOA`), confere se está inteira (manifesto) e grava os alunos, tudo ou nada. Imprime um relatório só com contagens |
+| `app/backup.py`, `app/backup_agendado.py` | Cópia segura do banco (à mão) e o agendador que a faz todo dia às 03:00, guardando 30 cópias |
 | `app/provisorios.py` | Aluno provisório: valida nome e CPF (dígitos verificadores) e cadastra, recusando CPF que já exista (a conferência e a gravação são um comando só no SQLite, então dois pedidos juntos não passam os dois) |
 | `app/cupom.py` | Monta o conteúdo do cupom do treino (linhas, etiquetas, avisos de bi-set/tri-set); o desenho fica em `templates/imprimir.html` e `static/imprimir.css` |
 | `app/treinos.py` | Salvar e ler treinos: confere tudo de novo no servidor e grava tudo-ou-nada |
@@ -130,9 +131,19 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
   quando estiver tudo funcionando, porque o navegador "lembra" e não deixa mais abrir por HTTP).
 - O registro de acessos do gunicorn grava método, caminho, código e tempo, **sem** o que vem depois
   do `?` (a busca de aluno pode levar CPF).
-- Cópia de segurança: `python -m app.backup /dados/app.db /backups` (usa a
-  cópia segura do próprio SQLite, confere a integridade e guarda as 14 últimas). Isso fica no
-  mesmo servidor; **falta** mandar uma cópia diária para fora dele.
+- Cópia de segurança, à mão: `python -m app.backup /dados/app.db /backups` (usa a cópia segura do
+  próprio SQLite, confere a integridade e guarda as 14 últimas). Convém fazer uma antes de cada
+  atualização do app.
+- **Cópia de segurança diária, sozinha** (`app/backup_agendado.py`, serviço `backup` do compose, mesma
+  imagem do app): uma por dia às 03:00 de Vila Velha, guarda as **30 mais novas** em `/backups`. Ao
+  ligar, se a cópia mais nova tem mais de 20 h, faz uma na hora; se uma falhar, escreve
+  `BACKUP FALHOU` no registro do contêiner e tenta de novo em 1 h. Se passar de 30 h sem cópia nova,
+  o Docker marca o contêiner `backup` como "unhealthy" no painel. **Decisão do Thiago (07/10/2026):
+  as cópias ficam só no servidor.** Isso protege contra erro (apagar aluno sem querer, banco
+  quebrado), **não** contra perder o servidor inteiro; para isso existe só o backup semanal do VPS
+  na Hostinger. A etiqueta da imagem está nos **dois** serviços do compose: trocar nos dois.
+  **Restaurar ainda não foi ensaiado no servidor.** A cópia é um arquivo SQLite comum (testes abrem
+  uma cópia e leem os dados); os passos de restauração no servidor ficam para testar com calma.
 - Autorizar os computadores no servidor: no painel da Hostinger, Gerenciador Docker, projeto `gloriafit-app`,
   link **Terminal** (abre um shell dentro do contêiner do app), e lá
   `python -m app.dispositivos codigo --nome "..."`. O código vale 15 minutos e só funciona uma vez:
