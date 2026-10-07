@@ -1,0 +1,136 @@
+/* Cupom do treino (impressora térmica Bematech MP-4200 TH, papel de 80 mm).
+   Carregado só pela tela de impressão (por isso o @page aqui não afeta as outras páginas).
+
+   O tamanho do papel (80 mm) NÃO é pedido por aqui: o Chrome não aceita altura "automática"
+   no @page, e um papel de altura fixa gastaria bobina. Quem define o papel é a janela de
+   impressão / o driver da Bematech (escolher o papel de 80 mm).
+
+   AINDA NÃO CONFERIDO NA IMPRESSORA: a largura útil (72 mm abaixo é o usual para papel de
+   80 mm) e qual bobina está instalada (80 mm ou 57 mm). Se o texto sair cortado nas bordas,
+   o ajuste é só o valor de --largura-util. */
+
+:root {
+  --largura-util: 72mm;
+}
+
+/* Sem margem da página: o cupom já tem a sua (centralizado, 72 mm dentro dos 80 mm). */
+@page {
+  margin: 0;
+}
+
+.tela-impressao {
+  background: #e3e2dd;
+  margin: 0;
+}
+
+.barra-impressao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 16px 16px;
+  box-sizing: border-box;
+}
+
+.barra-impressao .titulo-grande,
+.barra-impressao .texto-apoio {
+  margin: 0;
+}
+
+.acoes-impressao {
+  display: flex;
+  gap: 10px;
+}
+
+.tela-impressao main {
+  display: flex;
+  justify-content: center;
+  padding: 8px 16px 40px;
+}
+
+/* ------------------------------------------------------------ o cupom */
+
+.cupom {
+  width: var(--largura-util);
+  box-sizing: border-box;
+  padding: 4mm 0 8mm;
+  background: #fff;
+  color: #000;
+  font-family: "Courier New", Courier, ui-monospace, monospace;
+  font-size: 2.5mm; /* letra de ~1,5 mm de largura: cabem ~48 letras na largura útil (como no desenho) */
+  line-height: 1.5;
+  /* Na tela o cupom aparece ampliado para dar para ler; no papel (abaixo) volta ao tamanho real. */
+  zoom: 1.75;
+  box-shadow: 0 2px 0 #c9c8c2, 0 12px 24px rgba(20, 20, 20, 0.12);
+}
+
+.cupom-titulo {
+  text-transform: uppercase;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.15em;
+  letter-spacing: 0.04em;
+}
+
+.cupom-separador {
+  border: 0;
+  border-top: 1px dashed #000;
+  margin: 0.6em 1mm;
+}
+
+.cupom-linha {
+  padding: 0 1mm;
+  overflow-wrap: anywhere; /* nome comprido quebra em vez de sair do papel */
+  text-transform: uppercase;
+}
+
+.cupom-forte {
+  font-weight: 700;
+}
+
+.cupom-exercicio {
+  display: flex;
+  gap: 1ch;
+}
+
+.cupom-etiqueta {
+  flex: none;
+  min-width: 2ch;
+}
+
+.cupom-dose {
+  display: flex;
+  justify-content: space-between;
+  gap: 1ch;
+  padding-left: calc(1mm + 3ch); /* alinhada com o nome do exercício, depois da etiqueta */
+}
+
+.cupom-carga {
+  text-align: right;
+}
+
+.cupom-aviso {
+  padding-left: calc(1mm + 3ch);
+}
+
+@media print {
+  .tela-impressao {
+    background: #fff;
+  }
+  .barra-impressao {
+    display: none; /* só o cupom vai para o papel */
+  }
+  .tela-impressao main {
+    display: block;
+    padding: 0;
+  }
+  .cupom {
+    zoom: 1;
+    margin: 0 auto;
+    box-shadow: none;
+    break-inside: auto;
+  }
+}

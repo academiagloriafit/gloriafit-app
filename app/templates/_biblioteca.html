@@ -1,0 +1,17 @@
+{# Lista de exercícios (busca + grupos + resultados). O JavaScript é static/biblioteca.js. #}
+<div class="biblioteca" data-biblioteca>
+  <div class="campo">
+    <label for="busca">Buscar entre {{ "{:,}".format(total_exercicios).replace(",", ".") }} exercícios</label>
+    <input id="busca" data-busca type="search" placeholder="Ex.: supino" autocomplete="off" maxlength="100">
+  </div>
+
+  <div class="grupos" data-grupos role="group" aria-label="Grupo muscular">
+    <button type="button" class="grupo" data-grupo="" aria-pressed="true">Todos</button>
+    {% for grupo in grupos %}
+    <button type="button" class="grupo" data-grupo="{{ grupo.id }}" aria-pressed="false">{{ grupo.nome }}</button>
+    {% endfor %}
+  </div>
+
+  <p class="resumo" data-resumo aria-live="polite"></p>
+  <ul class="lista" data-lista></ul>
+</div>

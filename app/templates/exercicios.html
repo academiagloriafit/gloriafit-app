@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lista de exercícios · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% include "_topo.html" %}
+
+  <main class="pagina">
+    <section class="painel" aria-labelledby="titulo-lista">
+      <h1 id="titulo-lista">Lista de exercícios</h1>
+      {% include "_biblioteca.html" %}
+    </section>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='exercicios.js') }}"></script>
+</body>
+</html>

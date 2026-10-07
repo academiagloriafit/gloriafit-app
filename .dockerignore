@@ -1,0 +1,15 @@
+# Nada disto entra na imagem (principalmente banco, segredos e dados de aluno).
+.git
+.github
+.env
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.zip
+node_modules
+tests
+tests_js
+__pycache__
+.pytest_cache
+README.md

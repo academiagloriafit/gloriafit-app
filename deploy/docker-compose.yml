@@ -1,0 +1,31 @@
+# Receita do app no servidor da Hostinger (Gerenciador Docker > Compose manualmente).
+# O Traefik que já roda lá cuida do HTTPS: este arquivo só diz o endereço e a porta do app.
+#
+# Antes de colar no painel, trocar a linha "context" pelo endereço do código no GitHub
+# (ex.: https://github.com/academiagloriafit/app-gloriafit.git#<etiqueta-ou-commit>).
+# Fixar uma etiqueta/commit (e não "main") evita que um reinício publique código novo sem querer.
+services:
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      GLORIAFIT_DOMINIO: app.gloriafit.com.br
+      GLORIAFIT_ATRAS_DE_PROXY: "1"
+    volumes:
+      - app-dados:/dados
+      - app-backups:/backups
+    # SEM "ports:" de propósito: o app só pode ser alcançado pelo Traefik. É isso que torna
+    # seguro confiar no endereço e no https que o Traefik informa (GLORIAFIT_ATRAS_DE_PROXY).
+    labels:
+      - traefik.enable=true
+      # Nome do roteador diferente dos do site (gloriafit, gloriafit-web, ...), senão colidem.
+      - traefik.http.routers.gloriafitapp.rule=Host(`app.gloriafit.com.br`)
+      - traefik.http.routers.gloriafitapp.entrypoints=websecure
+      - traefik.http.routers.gloriafitapp.tls=true
+      - traefik.http.routers.gloriafitapp.tls.certresolver=letsencrypt
+      - traefik.http.services.gloriafitapp.loadbalancer.server.port=8000
+
+volumes:
+  app-dados:
+  app-backups:

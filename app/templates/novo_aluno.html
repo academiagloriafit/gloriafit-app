@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aluno provisório · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% set menu_ativo = "alunos" %}
+  {% include "_topo.html" %}
+
+  <main class="pagina pagina-larga">
+    <a class="voltar" href="{{ url_for('pagina_alunos') }}">&larr; Voltar à busca</a>
+    <h1 class="titulo-grande">Aluno provisório</h1>
+
+    <div class="montagem-grade">
+      <form id="form-novo-aluno" class="painel painel-formulario" novalidate>
+        <p class="texto-apoio">Para quem acabou de se matricular e ainda não está na cópia do Data4U.</p>
+
+        <div class="campo">
+          <label for="nome">Nome completo</label>
+          <input id="nome" name="nome" type="text" autocomplete="off" maxlength="100" autofocus aria-describedby="erro-nome">
+          <p id="erro-nome" class="aviso-campo aviso-erro" role="alert"></p>
+        </div>
+
+        <div class="campo">
+          <label for="cpf">CPF</label>
+          <input id="cpf" name="cpf" type="text" inputmode="numeric" autocomplete="off" maxlength="20"
+                 placeholder="000.000.000-00" aria-describedby="dica-cpf erro-cpf">
+          <p id="dica-cpf" class="dica">É o CPF que liga este cadastro ao do Data4U amanhã. Confira os 11 números.</p>
+          <p id="erro-cpf" class="aviso-campo aviso-erro" role="alert"></p>
+          <ul id="cpf-existentes" class="lista-existentes"></ul>
+        </div>
+
+        <div class="campo">
+          <label for="whatsapp">WhatsApp com DDD (pode deixar em branco)</label>
+          <input id="whatsapp" name="whatsapp" type="text" inputmode="tel" autocomplete="off" maxlength="20"
+                 placeholder="(27) 90000-0000" aria-describedby="dica-whatsapp erro-whatsapp">
+          <p id="dica-whatsapp" class="dica">O número do aluno, com DDD. Em branco, dá para preencher depois na ficha do aluno.</p>
+          <p id="erro-whatsapp" class="aviso-campo aviso-erro" role="alert"></p>
+        </div>
+
+        <p id="erro-geral" class="aviso-campo aviso-erro" role="alert"></p>
+        <div class="acoes-formulario">
+          <button id="botao-salvar-novo" type="submit" class="botao-principal">Salvar e montar treino</button>
+          <a class="botao-link botao-link-grande" href="{{ url_for('pagina_alunos') }}">Cancelar</a>
+        </div>
+      </form>
+
+      <aside class="painel coluna-lateral-estreita" aria-labelledby="titulo-depois">
+        <h2 id="titulo-depois">O que acontece depois</h2>
+        <ol class="passos">
+          <li><span class="passo-numero">1</span><div><strong>Hoje</strong><p>Você monta e salva o treino do aluno.</p></div></li>
+          <li><span class="passo-numero">2</span><div><strong>Amanhã cedo</strong><p>O app procura o aluno na cópia do Data4U pelo CPF e junta os dois cadastros. O treino continua com ele.</p></div></li>
+          <li><span class="passo-numero">3</span><div><strong>Se não achar</strong><p>O aluno continua como provisório até alguém conferir o CPF.</p></div></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='novo_aluno.js') }}"></script>
+</body>
+</html>

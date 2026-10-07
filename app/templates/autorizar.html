@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autorizar este computador · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {# Sem o menu das outras telas: aqui ainda não há nada para abrir. #}
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="marca">GLÓRIA <span>FIT</span></div>
+    </div>
+  </header>
+
+  <main class="pagina">
+    <section class="painel painel-autorizar" aria-labelledby="titulo-autorizar">
+      <h1 id="titulo-autorizar">Autorizar este computador</h1>
+      <p class="texto-apoio">
+        Esta área é só para os computadores da academia. Peça o código de autorização a quem
+        cuida do servidor e digite abaixo. O código vale 15 minutos e só funciona uma vez.
+      </p>
+
+      <form id="form-autorizar" class="form-autorizar" novalidate>
+        <div class="campo">
+          <label for="codigo">Código de autorização</label>
+          <input id="codigo" name="codigo" class="campo-codigo" type="text" inputmode="text"
+                 placeholder="XXXXX-XXXXX" maxlength="20" autocomplete="off" autocapitalize="characters"
+                 spellcheck="false" aria-describedby="aviso-autorizar" autofocus>
+        </div>
+        <button id="botao-autorizar" class="botao-principal" type="submit">Autorizar este computador</button>
+        <p id="aviso-autorizar" class="aviso-campo" role="status"></p>
+      </form>
+    </section>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='autorizar.js') }}"></script>
+</body>
+</html>

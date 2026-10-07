@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Imprimir treino · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='imprimir.css') }}">
+</head>
+<body class="tela-impressao">
+  <header class="barra-impressao">
+    <div>
+      <h1 class="titulo-grande">Impressão</h1>
+      <p class="texto-apoio">Papel de 80 mm · Bematech MP-4200 TH</p>
+    </div>
+    <div class="acoes-impressao">
+      <a class="botao-link botao-link-grande" href="{{ url_for('pagina_ficha', aluno_id=cupom.aluno_id) }}">Voltar</a>
+      <button type="button" id="botao-imprimir" class="botao-principal">Imprimir</button>
+    </div>
+  </header>
+
+  <main>
+    <article class="cupom" aria-label="Pré-visualização do cupom">
+      <div class="cupom-titulo">{{ cupom.academia }}</div>
+      <hr class="cupom-separador">
+      {% for rotulo, valor in cupom.cabecalho %}
+      <div class="cupom-linha{% if rotulo in ('ALUNO', 'TREINO') %} cupom-forte{% endif %}">{{ rotulo }}: {{ valor }}</div>
+      {% endfor %}
+      {% for ficha in cupom.fichas %}
+      <hr class="cupom-separador">
+      <div class="cupom-linha cupom-forte cupom-ficha">{{ ficha.nome }}</div>
+      {% for linha in ficha.linhas %}
+      {% if linha.tipo == "exercicio" %}
+      <div class="cupom-linha cupom-forte cupom-exercicio"><span class="cupom-etiqueta">{{ linha.etiqueta }}</span><span>{{ linha.esquerda }}</span></div>
+      {% elif linha.tipo == "dose" %}
+      <div class="cupom-linha cupom-dose"><span>{{ linha.esquerda }}</span><span class="cupom-carga">{{ linha.direita }}</span></div>
+      {% else %}
+      <div class="cupom-linha cupom-aviso">{{ linha.esquerda }}</div>
+      {% endif %}
+      {% endfor %}
+      {% endfor %}
+      {% if cupom.endereco_do_app %}
+      <hr class="cupom-separador">
+      <div class="cupom-linha">ENTRE NO APP COM O SEU CPF:</div>
+      <div class="cupom-linha cupom-forte">{{ cupom.endereco_do_app }}</div>
+      {% endif %}
+    </article>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='imprimir.js') }}"></script>
+</body>
+</html>

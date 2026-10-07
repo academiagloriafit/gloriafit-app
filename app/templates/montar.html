@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Montar treino · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% set menu_ativo = "alunos" %}
+  {% include "_topo.html" %}
+
+  <main class="pagina pagina-larga" data-aluno="{{ aluno.id }}">
+    <a class="voltar" href="{{ url_for('pagina_ficha', aluno_id=aluno.id) }}">&larr; Voltar à ficha do aluno</a>
+    <p class="aluno-nome">Aluno: <strong>{{ aluno.nome }}</strong></p>
+
+    <div class="area-montagem" id="area-montagem">
+      <div class="cabecalho-montar">
+        <h1>Montar treino</h1>
+        <div class="abas" id="abas" role="tablist" aria-label="Treinos do aluno"></div>
+      </div>
+
+      <div class="montagem-grade">
+        <section class="painel painel-montagem" id="montagem" aria-label="Treino em montagem"></section>
+
+        <aside class="painel painel-biblioteca" aria-labelledby="titulo-lista">
+          <h2 id="titulo-lista">Lista de exercícios</h2>
+          {% include "_biblioteca.html" %}
+        </aside>
+      </div>
+
+      <div class="barra-acoes">
+        <ul id="problemas" class="problemas" role="alert" hidden></ul>
+        <p id="aviso" class="aviso" aria-live="polite"></p>
+        <button type="button" id="salvar" class="botao-principal">Salvar treino</button>
+      </div>
+    </div>
+
+    <section class="painel painel-salvar" id="painel-salvar" aria-labelledby="titulo-salvar" hidden>
+      <h1 id="titulo-salvar" tabindex="-1">Salvar treino</h1>
+      <ul id="resumo-salvar" class="resumo-fichas"></ul>
+
+      <div class="campo">
+        <label for="nome-treino">Nome do treino</label>
+        <input id="nome-treino" type="text" maxlength="40" autocomplete="off" aria-describedby="dica-nome-treino">
+        <p id="dica-nome-treino" class="dica"></p>
+      </div>
+
+      <div class="campo">
+        <label for="quem-montou">Quem montou este treino? <span class="obrigatorio">(obrigatório)</span></label>
+        <input id="quem-montou" type="text" maxlength="60" autocomplete="off" aria-required="true" aria-describedby="dica-quem-montou">
+        <p id="dica-quem-montou" class="dica">Digite o seu nome. Ele fica gravado junto com o treino.</p>
+      </div>
+
+      <ul id="erros-salvar" class="problemas" role="alert" hidden></ul>
+
+      <div class="barra-salvar">
+        <button type="button" id="confirmar-salvar" class="botao-principal">Confirmar e salvar</button>
+        <button type="button" id="voltar-ao-treino" class="botao-discreto">Voltar ao treino</button>
+      </div>
+    </section>
+
+    <section class="painel painel-salvo" id="treino-salvo" aria-labelledby="titulo-salvo" hidden>
+      <h1 id="titulo-salvo" tabindex="-1">Treino salvo</h1>
+      <p id="texto-salvo" class="texto-salvo"></p>
+      <div class="barra-salvar">
+        <a id="imprimir-treino" class="botao-link botao-link-forte" href="#" hidden>Imprimir na térmica</a>
+        <button type="button" id="montar-outro" class="botao-principal">Montar outro treino</button>
+        <a id="ver-ficha" class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=aluno.id) }}">Ver ficha do aluno</a>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='montar.js') }}"></script>
+</body>
+</html>

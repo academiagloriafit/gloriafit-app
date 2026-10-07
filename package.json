@@ -1,0 +1,12 @@
+{
+  "name": "app-gloriafit",
+  "private": true,
+  "type": "module",
+  "description": "Só para testar o JavaScript do app (Vitest). O app em si não usa npm: os arquivos de app/static são servidos como estão.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  }
+}

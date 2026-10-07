@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ ficha.nome }} · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% set menu_ativo = "alunos" %}
+  {% include "_topo.html" %}
+
+  <main class="pagina pagina-larga" data-aluno="{{ ficha.id }}">
+    <a class="voltar" href="{{ url_for('pagina_alunos') }}">&larr; Voltar à busca</a>
+
+    <div class="cabecalho-ficha">
+      <h1 class="titulo-grande">{{ ficha.nome }}</h1>
+      {% if ficha.provisorio %}<span class="selo-situacao">Provisório</span>
+      {% elif ficha.situacao %}<span class="selo-situacao situacao-{{ ficha.situacao }}">{{ ficha.situacao_nome }}</span>{% endif %}
+      {% if ficha.matricula %}<span class="matricula-ficha">Matrícula {{ ficha.matricula }}</span>{% endif %}
+    </div>
+
+    <div class="montagem-grade">
+      <section class="cartao-lista painel-treinos" aria-labelledby="titulo-treinos">
+        <div class="cabecalho-lista">
+          <h2 id="titulo-treinos">Treinos</h2>
+          <a class="botao-link botao-link-forte" href="{{ url_for('pagina_montar', aluno_id=ficha.id) }}">Montar novo treino</a>
+        </div>
+
+        {% for treino in ficha.treinos %}
+        <article class="treino-salvo">
+          <h3>{{ treino.nome }}</h3>
+          <p class="autor">Montado por {{ treino.montado_por }} em {{ treino.criado_em }}</p>
+          <p><a class="botao-link" href="{{ url_for('pagina_imprimir_treino', treino_id=treino.id) }}">Imprimir na térmica</a></p>
+          {% for f in treino.fichas %}
+          <details class="ficha-detalhe">
+            <summary><span class="ficha-nome">{{ f.nome }}</span><span class="ficha-resumo">{{ f.resumo }}</span></summary>
+            <ol class="itens-ficha">
+              {% for item in f.itens %}
+              <li>
+                <span class="etiqueta">{{ item.etiqueta }}</span>
+                <span class="item-ficha-nome">{{ item.exercicio }}</span>
+                <span class="item-ficha-dose">{{ item.series }} × {{ item.repeticoes }}{% if item.carga %} · {{ item.carga }}{% endif %}</span>
+              </li>
+              {% endfor %}
+            </ol>
+          </details>
+          {% endfor %}
+        </article>
+        {% else %}
+        <p class="lista-vazia">Este aluno ainda não tem treino. Clique em "Montar novo treino".</p>
+        {% endfor %}
+      </section>
+
+      <aside class="coluna-lateral">
+        <section class="painel" aria-labelledby="titulo-whatsapp">
+          <h2 id="titulo-whatsapp">WhatsApp do aluno</h2>
+          <p class="dica">É para esse número que o app manda o código de acesso.</p>
+          <div class="campo">
+            <label for="whatsapp">Número com DDD</label>
+            <input id="whatsapp" type="text" inputmode="tel" autocomplete="off" maxlength="20"
+                   value="{{ ficha.whatsapp or '' }}" placeholder="(27) 90000-0000" aria-describedby="aviso-whatsapp">
+          </div>
+          <button type="button" id="salvar-whatsapp" class="botao-escuro botao-largo">Salvar número</button>
+          <p id="aviso-whatsapp" class="aviso-campo" role="status"></p>
+          <p class="dica">O número salvo aqui vale na hora para o código. No Data4U ele só muda se alguém corrigir lá também.{% if ficha.whatsapp_corrigido_no_app %} Este número já foi corrigido aqui no app.{% endif %}</p>
+        </section>
+
+        <section class="painel" aria-labelledby="titulo-dados">
+          <h2 id="titulo-dados">Cadastro</h2>
+          <dl class="dados">
+            <div><dt>CPF</dt><dd>{{ ficha.cpf or "Não cadastrado" }}</dd></div>
+            {% if ficha.matricula %}<div><dt>Matrícula</dt><dd>{{ ficha.matricula }}</dd></div>{% endif %}
+            {% if ficha.situacao_nome %}<div><dt>Situação no Data4U</dt><dd>{{ ficha.situacao_nome }}</dd></div>{% endif %}
+            {% if ficha.provisorio %}<div><dt>Origem</dt><dd>Provisório (ainda não ligado ao Data4U)</dd></div>{% endif %}
+          </dl>
+          {% if not ficha.cpf %}<p class="dica">O Data4U não tem o CPF desta pessoa. Sem CPF ela não consegue entrar no app do aluno.</p>{% endif %}
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='ficha.js') }}"></script>
+</body>
+</html>

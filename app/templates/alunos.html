@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Buscar aluno · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% set menu_ativo = "alunos" %}
+  {% include "_topo.html" %}
+
+  <main class="pagina pagina-larga">
+    <h1 class="titulo-grande">Buscar aluno</h1>
+
+    <div class="campo campo-busca-aluno">
+      <label for="busca-aluno">Nome, CPF ou matrícula</label>
+      <input id="busca-aluno" type="search" placeholder="Digite para buscar" autocomplete="off" maxlength="100" autofocus>
+    </div>
+
+    <div class="montagem-grade">
+      <section class="cartao-lista painel-treinos" aria-labelledby="titulo-resultados">
+        <div class="cabecalho-lista">
+          <h2 id="titulo-resultados">Alunos encontrados</h2>
+          <p class="resumo" id="resumo-alunos" aria-live="polite"></p>
+        </div>
+        <div class="titulos-alunos" aria-hidden="true">
+          <span>Aluno</span><span>Matrícula</span><span>Último treino</span><span>Atualizado</span><span>Situação</span>
+        </div>
+        <ul class="linhas" id="lista-alunos"></ul>
+      </section>
+
+      <aside class="coluna-lateral aluno-novo" aria-labelledby="titulo-aluno-novo">
+        <section class="painel">
+          <h2 id="titulo-aluno-novo">Aluno novo?</h2>
+          <p class="dica">Quem acabou de se matricular só aparece aqui no dia seguinte. Cadastre como provisório para montar o treino agora.</p>
+          <a class="botao-link botao-link-forte botao-largo botao-centro" href="{{ url_for('pagina_novo_aluno') }}">Cadastrar aluno provisório</a>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='alunos.js') }}"></script>
+</body>
+</html>
