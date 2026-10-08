@@ -1,25 +1,38 @@
-// Tela "Montar treino" do professor. A lógica do treino está em treino_modelo.js
+// Tela "Lançar treino" do professor. A lógica do treino está em treino_modelo.js
 // (testada à parte); aqui só desenhamos a tela e ligamos os botões.
+// Palavras do Data4U: o TREINO tem um nome e várias FICHAS (A, B, C...); cada ficha
+// tem exercícios com séries, repetições e peso.
 import { iniciarBiblioteca } from "./biblioteca.js";
-import { iniciarPainelDeSalvar } from "./salvar.js";
+import { iniciarSalvar } from "./salvar.js";
 import * as M from "./treino_modelo.js";
 
 const raiz = document.querySelector("[data-aluno]");
 const CHAVE_RASCUNHO = "rascunho-treino-" + raiz.dataset.aluno;
+const CHAVE_DADOS = "rascunho-dados-" + raiz.dataset.aluno;
 
 const elAbas = document.getElementById("abas");
 const elMontagem = document.getElementById("montagem");
 const elProblemas = document.getElementById("problemas");
 const elAviso = document.getElementById("aviso");
+const campoNome = document.getElementById("nome-treino");
+const campoQuem = document.getElementById("quem-montou");
+const dicaNome = document.getElementById("dica-nome-treino");
 const botaoSalvar = document.getElementById("salvar");
+const botaoCancelar = document.getElementById("cancelar");
+const elConfirmarDescarte = document.getElementById("confirmar-descarte");
+const areaMontagem = document.getElementById("area-montagem");
 
 // ------------------------------------------------------------------ estado da tela
+
+const MAXIMO_DE_MENSAGENS = 4; // problemas escritos na lista antes de "E mais N"
 
 let estado = lerRascunhoGuardado() || M.criarEstado();
 let fichaAtual = 0;
 let selecionados = new Set(); // uids marcados para juntar em bi-set
 let confirmandoExclusao = false;
 let mostrarProblemas = false; // vira true depois de clicar em "Salvar treino"
+let errosDoServidor = []; // o que o servidor recusou (ex.: nome de treino repetido)
+let nomeEditadoPeloProfessor = false; // se sim, não trocamos o nome por outra sugestão
 let erroDeBloco = "";
 let focoPendente = null; // onde devolver o foco depois de redesenhar
 let refs = {}; // pedaços da tela que atualizamos sem redesenhar tudo
@@ -40,16 +53,37 @@ function lerRascunhoGuardado() {
 function guardarRascunho() {
   try {
     sessionStorage.setItem(CHAVE_RASCUNHO, M.serializar(estado));
+    sessionStorage.setItem(
+      CHAVE_DADOS,
+      JSON.stringify({ nome: campoNome.value, editado: nomeEditadoPeloProfessor, professor: campoQuem.value }),
+    );
   } catch {
     /* sem armazenamento: segue sem rascunho */
   }
 }
 
-// Depois que o servidor confirmou o treino, o rascunho não serve mais: o próximo
-// treino começa em branco.
+// Nome do treino e professor guardados junto com o rascunho (qualquer coisa fora do
+// formato é ignorada).
+function lerDadosGuardados() {
+  try {
+    const dados = JSON.parse(sessionStorage.getItem(CHAVE_DADOS) || "null");
+    if (!dados || typeof dados !== "object") return;
+    if (typeof dados.professor === "string") campoQuem.value = dados.professor.slice(0, 60);
+    if (dados.editado === true && typeof dados.nome === "string") {
+      campoNome.value = dados.nome.slice(0, 40);
+      nomeEditadoPeloProfessor = true;
+    }
+  } catch {
+    /* sem rascunho dos dados: campos começam em branco */
+  }
+}
+
+// Depois que o servidor confirmou o treino (ou o professor descartou), o rascunho não
+// serve mais: o próximo treino começa em branco.
 function apagarRascunho() {
   try {
     sessionStorage.removeItem(CHAVE_RASCUNHO);
+    sessionStorage.removeItem(CHAVE_DADOS);
   } catch {
     /* sem armazenamento: nada a apagar */
   }
@@ -89,6 +123,40 @@ function mudar(novoEstado, foco = null) {
   desenhar();
 }
 
+// ------------------------------------------------------------------ nome do treino e professor
+
+function atualizarDicaDoNome() {
+  const n = M.tamanho(M.limparEspacos(campoNome.value));
+  dicaNome.textContent = `${n} de ${M.LIMITE_NOME_TREINO} letras (limite do Data4U)`;
+}
+
+// Enquanto o professor não mexer no nome, ele acompanha as fichas ("TREINO ABC 08/10/26").
+function atualizarNomeSugerido() {
+  if (!nomeEditadoPeloProfessor) campoNome.value = M.sugerirNomeDoTreino(estado, M.formatarData(new Date()));
+  atualizarDicaDoNome();
+}
+
+campoNome.addEventListener("input", () => {
+  nomeEditadoPeloProfessor = true;
+  errosDoServidor = [];
+  atualizarDicaDoNome();
+  guardarRascunho();
+  atualizarProblemas();
+});
+campoQuem.addEventListener("input", () => {
+  guardarRascunho();
+  atualizarProblemas();
+});
+for (const campo of [campoNome, campoQuem]) {
+  // Enter nestes dois campos salva, como no botão (os campos de uma linha só)
+  campo.addEventListener("keydown", (evento) => {
+    if (evento.key === "Enter" && !evento.isComposing) {
+      evento.preventDefault();
+      botaoSalvar.click();
+    }
+  });
+}
+
 // ------------------------------------------------------------------ abas (as fichas)
 
 function desenharAbas() {
@@ -116,7 +184,7 @@ function desenharAbas() {
       el("button", {
         type: "button",
         classe: "aba aba-nova",
-        texto: "+ Novo treino",
+        texto: "+ Nova ficha",
         aoClicar: () => {
           mudar(M.adicionarFicha(estado));
           fichaAtual = estado.fichas.length - 1;
@@ -124,7 +192,7 @@ function desenharAbas() {
           confirmandoExclusao = false;
           erroDeBloco = "";
           desenhar();
-          anunciar("Criado: " + fichaDaTela().nome);
+          anunciar("Criada: " + fichaDaTela().nome);
         },
       }),
     );
@@ -135,10 +203,10 @@ function desenharAbas() {
 
 function desenharNomeDaFicha() {
   const ficha = fichaDaTela();
-  const contador = el("p", { classe: "dica" });
+  const contador = el("span", { classe: "dica" });
   const atualizarContador = () => {
     const n = fichaDaTela().nome.trim().length;
-    contador.textContent = `${n} de ${M.LIMITE_NOME_FICHA} letras. O Data4U aceita no máximo ${M.LIMITE_NOME_FICHA}.`;
+    contador.textContent = `${n}/${M.LIMITE_NOME_FICHA} letras`; // o Data4U aceita no máximo 15
   };
   atualizarContador();
 
@@ -154,6 +222,7 @@ function desenharNomeDaFicha() {
       guardarRascunho();
       atualizarContador();
       desenharAbas(); // o nome aparece na aba
+      atualizarNomeSugerido(); // e pode mudar o nome sugerido do treino
       atualizarProblemas();
     },
   });
@@ -164,7 +233,7 @@ function desenharNomeDaFicha() {
       botaoExcluir = el("button", {
         type: "button",
         classe: "botao-discreto",
-        texto: "Excluir este treino",
+        texto: "Excluir ficha",
         aoClicar: () => {
           if (fichaDaTela().itens.length === 0) return excluirFicha();
           confirmandoExclusao = true;
@@ -175,7 +244,7 @@ function desenharNomeDaFicha() {
       botaoExcluir = el(
         "span",
         { classe: "confirmacao" },
-        el("span", { texto: `Excluir ${ficha.nome.trim() || "este treino"} e seus exercícios?` }),
+        el("span", { texto: `Excluir ${ficha.nome.trim() || "esta ficha"} e seus exercícios?` }),
         el("button", { type: "button", classe: "botao-perigo", texto: "Sim, excluir", aoClicar: excluirFicha }),
         el("button", {
           type: "button",
@@ -193,29 +262,33 @@ function desenharNomeDaFicha() {
   return el(
     "div",
     { classe: "bloco-nome" },
-    el("div", { classe: "campo campo-nome" }, el("label", { for: "nome-ficha", texto: "Nome do treino" }), campo),
-    el("div", { classe: "nome-lateral" }, contador, botaoExcluir),
+    el("div", { classe: "campo campo-nome" }, el("label", { for: "nome-ficha", texto: "Nome da ficha" }), campo),
+    contador,
+    desenharSelecao(),
+    el("div", { classe: "nome-lateral" }, botaoExcluir),
+    refs.erroDeBloco,
   );
 }
 
 function excluirFicha() {
-  const nome = fichaDaTela().nome.trim() || "treino";
+  const nome = fichaDaTela().nome.trim() || "ficha";
   estado = M.removerFicha(estado, fichaAtual);
   fichaAtual = Math.max(0, Math.min(fichaAtual, estado.fichas.length - 1));
   selecionados.clear();
   confirmandoExclusao = false;
   guardarRascunho();
   desenhar();
-  anunciar("Excluído: " + nome);
+  anunciar("Excluída: " + nome);
 }
 
 // ------------------------------------------------------------------ lista de exercícios
 
-function botaoDeAcao(texto, rotulo, foco, aoClicar, desligado = false) {
+function botaoDeAcao(texto, rotulo, foco, aoClicar, desligado = false, classe = "botao-icone") {
   return el("button", {
     type: "button",
-    classe: "botao-icone",
+    classe,
     texto,
+    title: rotulo,
     "aria-label": rotulo,
     "data-foco": foco,
     disabled: desligado,
@@ -268,13 +341,13 @@ function desenharLinha(item, etiqueta, dentroDeBloco) {
     el("span", { classe: "linha-nome", texto: item.nome }),
     campoDePrescricao(item, "series", "Séries"),
     campoDePrescricao(item, "repeticoes", "Repetições"),
-    campoDePrescricao(item, "carga", "Carga"),
+    campoDePrescricao(item, "carga", "Peso"),
     el("span", { classe: "celula-acoes" }, [
-      botaoDeAcao("✕", "Remover " + item.nome, "remover", () => {
+      botaoDeAcao("Remover", "Remover " + item.nome, "remover", () => {
         selecionados.delete(item.uid);
         mudar(M.removerItem(estado, fichaAtual, item.uid), { tipo: "lista" });
         anunciar("Removido: " + item.nome);
-      }),
+      }, false, "botao-texto"),
     ]),
   );
 }
@@ -311,7 +384,7 @@ function desenharLista() {
             botaoDeAcao("↓", `Descer o ${titulo.toLowerCase()}`, `mover-${primeiroUid}-1`, descer, ehUltima),
             el("button", {
               type: "button",
-              classe: "botao-discreto",
+              classe: "botao-texto",
               texto: "Desfazer",
               "aria-label": `Desfazer o ${titulo.toLowerCase()}`,
               aoClicar: () => mudar(M.desfazerBloco(estado, fichaAtual, unidade.bloco), { tipo: "lista" }),
@@ -325,7 +398,9 @@ function desenharLista() {
   return itens;
 }
 
-function desenharCabecalhoDaLista() {
+// "5 exercícios, 1 bi-set", quantos estão marcados e o botão de juntar em bi-set/tri-set.
+// Fica na mesma linha do nome da ficha para a tabela de exercícios subir na tela.
+function desenharSelecao() {
   const ficha = fichaDaTela();
   refs.contador = el("span", { classe: "contador-selecao" });
   refs.botaoJuntar = el("button", {
@@ -349,15 +424,12 @@ function desenharCabecalhoDaLista() {
 
   return el(
     "div",
-    { classe: "cabecalho-lista" },
-    el(
-      "h2",
-      { tabindex: "-1", id: "titulo-exercicios" },
-      "Exercícios ",
-      el("span", { classe: "titulo-suave", texto: "· " + M.descreverFicha(ficha) }),
-    ),
-    el("div", { classe: "selecao" }, refs.contador, refs.botaoJuntar),
-    refs.erroDeBloco,
+    { classe: "selecao" },
+    // título só para leitor de tela e para devolver o foco depois de mover ou remover
+    el("h2", { tabindex: "-1", id: "titulo-exercicios", classe: "so-leitor", texto: "Exercícios da ficha" }),
+    el("span", { classe: "so-leitor", texto: M.descreverFicha(ficha) }), // "5 exercícios, 1 bi-set", só para leitor de tela
+    refs.contador,
+    refs.botaoJuntar,
   );
 }
 
@@ -375,36 +447,62 @@ function desenharMontagem() {
   elMontagem.textContent = "";
   const ficha = fichaDaTela();
   elMontagem.append(
-    desenharNomeDaFicha(),
     el(
       "div",
       { classe: "cartao-lista" },
-      desenharCabecalhoDaLista(),
+      desenharNomeDaFicha(),
       el(
         "div",
         { classe: "titulos-colunas", "aria-hidden": "true" },
         el("span", { classe: "coluna-nome", texto: "Exercício" }),
         el("span", { classe: "coluna-pequena", texto: "Séries" }),
         el("span", { classe: "coluna-pequena", texto: "Repetições" }),
-        el("span", { classe: "coluna-pequena", texto: "Carga" }),
+        el("span", { classe: "coluna-pequena", texto: "Peso" }),
       ),
       ficha.itens.length
         ? desenharLista()
-        : el("p", { classe: "lista-vazia", texto: "Escolha um exercício na lista ao lado para adicionar." }),
+        : el("p", { classe: "lista-vazia", texto: "Escolha um exercício na lista ao lado para adicionar a esta ficha." }),
     ),
   );
 }
 
 // ------------------------------------------------------------------ problemas (botão "Salvar treino")
 
+// Tudo o que impede de salvar, na ordem da tela: nome do treino e professor (no alto),
+// depois as fichas, e por fim o que o servidor recusou.
+function listarProblemas() {
+  const dados = M.validarDadosDoTreino({ nomeTreino: campoNome.value, montadoPor: campoQuem.value });
+  return [
+    ...dados.map((p) => ({ tipo: "dados", campo: p.campo, mensagem: p.mensagem })),
+    ...M.validar(estado).map((p) => ({ tipo: "ficha", ...p })),
+    ...errosDoServidor.map((mensagem) => ({ tipo: "servidor", campo: "nome-treino", mensagem })),
+  ];
+}
+
 function atualizarProblemas() {
-  const problemas = mostrarProblemas ? M.validar(estado) : [];
+  const problemas = mostrarProblemas || errosDoServidor.length ? listarProblemas() : [];
   elProblemas.textContent = "";
   elProblemas.hidden = problemas.length === 0;
-  problemas.forEach((p) => elProblemas.append(el("li", { texto: p.mensagem })));
+  // só as primeiras mensagens: a lista não pode tomar a tela quando faltam muitos campos
+  problemas.slice(0, MAXIMO_DE_MENSAGENS).forEach((p) => elProblemas.append(el("li", { texto: p.mensagem })));
+  if (problemas.length > MAXIMO_DE_MENSAGENS) {
+    const resto = problemas.length - MAXIMO_DE_MENSAGENS;
+    elProblemas.append(el("li", { texto: `E mais ${resto} ${resto === 1 ? "problema" : "problemas"}. Os campos que faltam estão em vermelho.` }));
+  }
+
+  // as abas das fichas com problema ganham uma bolinha vermelha
+  const fichasComProblema = new Set(problemas.filter((p) => p.tipo === "ficha").map((p) => p.ficha));
+  elAbas.querySelectorAll(".aba:not(.aba-nova)").forEach((aba, i) => aba.classList.toggle("aba-com-problema", fichasComProblema.has(i)));
+
+  // campos do alto (nome do treino e professor)
+  for (const campo of [campoNome, campoQuem]) {
+    const ruim = problemas.some((p) => p.tipo !== "ficha" && p.campo === campo.id);
+    if (ruim) campo.setAttribute("aria-invalid", "true");
+    else campo.removeAttribute("aria-invalid");
+  }
 
   // marca os campos com problema na ficha que está na tela
-  const naTela = problemas.filter((p) => p.ficha === fichaAtual);
+  const naTela = problemas.filter((p) => p.tipo === "ficha" && p.ficha === fichaAtual);
   elMontagem.querySelectorAll("[data-campo]").forEach((campo) => {
     const uid = campo.dataset.uid ? Number(campo.dataset.uid) : null;
     const ruim = naTela.some((p) => p.campo === campo.dataset.campo && p.uid === uid);
@@ -414,31 +512,76 @@ function atualizarProblemas() {
   return problemas;
 }
 
-const painelDeSalvar = iniciarPainelDeSalvar({
+// ------------------------------------------------------------------ salvar e cancelar
+
+const salvar = iniciarSalvar({
   alunoId: raiz.dataset.aluno,
   alunoNome: document.querySelector(".aluno-nome strong").textContent,
   obterEstado: () => estado,
+  obterDados: () => ({ nomeTreino: campoNome.value, montadoPor: campoQuem.value }),
   aoSalvar: apagarRascunho,
+  aoTravar: (travado) => {
+    areaMontagem.inert = travado; // nada se edita enquanto o servidor responde
+    botaoSalvar.disabled = travado;
+    botaoSalvar.textContent = travado ? "Salvando…" : "Salvar treino";
+    if (!travado) botaoSalvar.focus();
+  },
+  aoErros: (mensagens, { nomeJaUsado }) => {
+    errosDoServidor = mensagens;
+    atualizarProblemas();
+    elProblemas.scrollIntoView({ block: "nearest" });
+    if (nomeJaUsado) campoNome.focus();
+  },
 });
 
 botaoSalvar.addEventListener("click", () => {
   mostrarProblemas = true;
-  const problemas = M.validar(estado);
+  errosDoServidor = [];
+  const problemas = atualizarProblemas();
   if (problemas.length) {
-    if (problemas[0].ficha !== fichaAtual) {
-      fichaAtual = problemas[0].ficha;
+    const primeiro = problemas[0];
+    if (primeiro.tipo === "dados") {
+      document.getElementById(primeiro.campo).focus();
+    } else if (primeiro.ficha !== fichaAtual) {
+      fichaAtual = primeiro.ficha;
       selecionados.clear();
       confirmandoExclusao = false;
+      desenhar();
     }
     anunciar("");
-    desenhar();
     elProblemas.scrollIntoView({ block: "nearest" });
     return;
   }
   mostrarProblemas = false; // tudo certo: só volta a cobrar no próximo "Salvar treino"
+  atualizarProblemas();
   anunciar("");
-  desenhar();
-  painelDeSalvar.abrir(); // próxima etapa: nome do treino e quem montou
+  salvar.enviar();
+});
+
+function temAlgoParaPerder() {
+  return estado.fichas.some((f) => f.itens.length > 0) || campoQuem.value.trim() !== "" || nomeEditadoPeloProfessor;
+}
+
+function voltarParaAFicha() {
+  window.location.href = document.querySelector("a.voltar").href;
+}
+
+// Um só aviso ao cancelar (no Data4U há dois, e num deles "Sim" grava). Aqui: "Sim, descartar"
+// joga o treino fora, "Não, continuar" volta para a tela.
+botaoCancelar.addEventListener("click", () => {
+  if (!temAlgoParaPerder()) return voltarParaAFicha();
+  botaoCancelar.hidden = true;
+  elConfirmarDescarte.hidden = false;
+  document.getElementById("continuar-editando").focus();
+});
+document.getElementById("descartar").addEventListener("click", () => {
+  apagarRascunho();
+  voltarParaAFicha();
+});
+document.getElementById("continuar-editando").addEventListener("click", () => {
+  elConfirmarDescarte.hidden = true;
+  botaoCancelar.hidden = false;
+  botaoCancelar.focus();
 });
 
 // ------------------------------------------------------------------ desenho geral
@@ -460,6 +603,7 @@ function devolverFoco() {
 function desenhar() {
   desenharAbas();
   desenharMontagem();
+  atualizarNomeSugerido();
   atualizarProblemas();
   devolverFoco();
 }
@@ -469,15 +613,16 @@ iniciarBiblioteca(document.querySelector("[data-biblioteca]"), {
     const antes = estado;
     const novo = M.adicionarItem(estado, fichaAtual, exercicio);
     if (novo === antes) {
-      anunciar(`Limite de ${M.MAXIMO_ITENS_POR_FICHA} exercícios por treino.`);
+      anunciar(`Limite de ${M.MAXIMO_ITENS_POR_FICHA} exercícios por ficha.`);
       return;
     }
     mudar(novo);
-    anunciar(`Adicionado: ${exercicio.nome} (${fichaDaTela().nome.trim() || "treino"})`);
+    anunciar(`Adicionado: ${exercicio.nome} (${fichaDaTela().nome.trim() || "ficha"})`);
     // leva o novo exercício à vista, sem tirar o foco da lista de exercícios
     const linhas = elMontagem.querySelectorAll(".linha");
     linhas[linhas.length - 1]?.scrollIntoView({ block: "nearest" });
   },
 });
 
+lerDadosGuardados();
 desenhar();

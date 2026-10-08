@@ -5,6 +5,7 @@
 // Estado:
 //   { proximoUid, proximoBloco,
 //     fichas: [ { nome, itens: [ { uid, exercicioId, nome, series, repeticoes, carga, bloco } ] } ] }
+// ("carga" é o campo "Peso" da tela; o nome interno não muda porque é o do servidor e do banco.)
 // "bloco": itens vizinhos com o mesmo número formam um bi-set (2) ou tri-set (3);
 // null = exercício sozinho.
 
@@ -24,8 +25,9 @@ function copiar(estado) {
   return structuredClone(estado);
 }
 
+// Mesmas palavras do Data4U: o TREINO tem um nome e várias FICHAS (A, B, C...).
 function nomePadraoDaFicha(indice) {
-  return "TREINO " + LETRAS[indice];
+  return "FICHA " + LETRAS[indice];
 }
 
 export function criarEstado() {
@@ -234,9 +236,9 @@ export function validar(estado) {
   const problemas = [];
   estado.fichas.forEach((ficha, f) => {
     const nome = ficha.nome.trim();
-    const rotulo = nome || "treino " + (f + 1);
+    const rotulo = nome || "ficha " + (f + 1);
     if (!nome) {
-      problemas.push({ ficha: f, uid: null, campo: "nome", mensagem: "Dê um nome ao treino " + (f + 1) + "." });
+      problemas.push({ ficha: f, uid: null, campo: "nome", mensagem: "Dê um nome à ficha " + (f + 1) + "." });
     } else if (nome.length > LIMITE_NOME_FICHA) {
       problemas.push({
         ficha: f,
@@ -252,7 +254,7 @@ export function validar(estado) {
       for (const [campo, nomeDoCampo, obrigatorio] of [
         ["series", "séries", true],
         ["repeticoes", "repetições", true],
-        ["carga", "carga", false],
+        ["carga", "peso", false],
       ]) {
         const valor = item[campo].trim();
         if (obrigatorio && valor === "") {
@@ -331,12 +333,12 @@ export function formatarData(data) {
 
 // Sugestão de nome para o treino inteiro (o Data4U exige um nome por treino, até 40
 // letras, e não aceita dois iguais para o mesmo aluno). O professor pode trocar.
-//   fichas "TREINO A", "TREINO B", "TREINO C" -> "TREINO ABC 07/10/26"
+//   fichas "FICHA A", "FICHA B", "FICHA C" (ou "TREINO A"...) -> "TREINO ABC 07/10/26"
 //   outros nomes -> "A POST/CORRIDA + B SUP/POSTURA 07/10/26" (cortado para caber)
 // `dataTexto` vem de fora (ex.: "07/10/26") para esta função continuar pura e testável.
 export function sugerirNomeDoTreino(estado, dataTexto) {
   const nomes = estado.fichas.map((f) => limparEspacos(f.nome)).filter(Boolean);
-  const letras = nomes.map((n) => /^TREINO ([A-Z])$/i.exec(n));
+  const letras = nomes.map((n) => /^(?:FICHA|TREINO) ([A-Z])$/i.exec(n));
   let base;
   if (nomes.length === 0) {
     base = "TREINO";
@@ -367,7 +369,7 @@ export function validarDadosDoTreino({ nomeTreino, montadoPor }) {
     }
   };
   confere("nome-treino", nomeTreino, "Dê um nome ao treino.", "O nome do treino", LIMITE_NOME_TREINO, " (limite do Data4U)");
-  confere("quem-montou", montadoPor, "Informe quem montou este treino.", "O nome de quem montou", LIMITE_QUEM_MONTOU, "");
+  confere("quem-montou", montadoPor, "Informe o professor que montou o treino.", "O nome do professor", LIMITE_QUEM_MONTOU, "");
   return problemas;
 }
 

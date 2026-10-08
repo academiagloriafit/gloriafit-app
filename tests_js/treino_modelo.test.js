@@ -52,22 +52,22 @@ const blocos = (estado, f = 0) => estado.fichas[f].itens.map((i) => i.bloco);
 // ---------------------------------------------------------------- fichas
 
 describe("fichas", () => {
-  it("começa com uma ficha vazia chamada TREINO A", () => {
+  it("começa com uma ficha vazia chamada FICHA A (palavras do Data4U: o treino tem fichas)", () => {
     const e = criarEstado();
-    expect(e.fichas).toEqual([{ nome: "TREINO A", itens: [] }]);
+    expect(e.fichas).toEqual([{ nome: "FICHA A", itens: [] }]);
   });
 
   it("novas fichas ganham a próxima letra livre", () => {
     let e = adicionarFicha(criarEstado());
     e = adicionarFicha(e);
-    expect(e.fichas.map((f) => f.nome)).toEqual(["TREINO A", "TREINO B", "TREINO C"]);
+    expect(e.fichas.map((f) => f.nome)).toEqual(["FICHA A", "FICHA B", "FICHA C"]);
   });
 
   it("não repete um nome padrão que já existe, mesmo depois de renomear", () => {
     let e = adicionarFicha(criarEstado()); // A, B
     e = renomearFicha(e, 0, "PERNAS"); // PERNAS, B
     e = adicionarFicha(e);
-    expect(e.fichas.map((f) => f.nome)).toEqual(["PERNAS", "TREINO B", "TREINO A"]);
+    expect(e.fichas.map((f) => f.nome)).toEqual(["PERNAS", "FICHA B", "FICHA A"]);
   });
 
   it("para em 26 fichas", () => {
@@ -85,7 +85,7 @@ describe("fichas", () => {
   it("remove uma ficha, mas nunca a última", () => {
     let e = adicionarFicha(criarEstado());
     e = removerFicha(e, 0);
-    expect(e.fichas.map((f) => f.nome)).toEqual(["TREINO B"]);
+    expect(e.fichas.map((f) => f.nome)).toEqual(["FICHA B"]);
     expect(removerFicha(e, 0)).toBe(e);
   });
 
@@ -417,13 +417,25 @@ describe("validar", () => {
     }
   });
 
+  it("fala de 'ficha' e de 'peso' (as palavras do Data4U)", () => {
+    let e = renomearFicha(comItens(1), 0, "  ");
+    expect(validar(e).map((p) => p.mensagem)).toContain("Dê um nome à ficha 1.");
+    e = renomearFicha(e, 0, "A");
+    e = atualizarItem(e, 0, 1, "series", "3");
+    e = atualizarItem(e, 0, 1, "repeticoes", "10");
+    e = atualizarItem(e, 0, 1, "carga", "x".repeat(LIMITE_CAMPO + 1));
+    const [problema] = validar(e);
+    expect(problema.mensagem).toContain("peso de EXERCICIO 1");
+    expect(problema.mensagem).not.toContain("carga");
+  });
+
   it("aponta o problema na ficha certa", () => {
     let e = preencher(comItens(1));
     e = adicionarFicha(e); // ficha B vazia
     const p = validar(e);
     expect(p).toHaveLength(1);
     expect(p[0].ficha).toBe(1);
-    expect(p[0].mensagem).toContain("TREINO B");
+    expect(p[0].mensagem).toContain("FICHA B");
   });
 });
 

@@ -227,11 +227,12 @@ def test_montar_mostra_o_aluno_a_lista_de_exercicios_e_os_scripts(cliente_com_al
     assert resposta.status_code == 200
     assert "MARIA DE TESTE" in html
     assert 'data-aluno="1"' in html
-    assert "Montar treino" in html
+    assert "Lançar treino" in html  # o mesmo nome do botão no Data4U
     assert "Lista de exercícios" in html
     assert "data-biblioteca" in html  # a mesma lista da página /exercicios
     assert 'type="module" src="/static/montar.js"' in html
     assert 'id="salvar"' in html and "Salvar treino" in html
+    assert 'id="cancelar"' in html
 
 
 def test_montar_escapa_o_nome_do_aluno(cliente_com_alunos):
@@ -254,21 +255,34 @@ def test_montar_nao_tem_script_nem_estilo_embutido_nem_recurso_externo(cliente_c
     assert "http://" not in html and "https://" not in html
 
 
-def test_montar_tem_os_campos_de_salvar_com_os_limites_certos(cliente_com_alunos):
+def test_montar_tem_nome_do_treino_e_professor_no_alto_com_os_limites_certos(cliente_com_alunos):
     html = cliente_com_alunos.get("/alunos/1/montar").get_data(as_text=True)
 
-    # painéis de salvar e de "salvo" começam escondidos
-    assert re.search(r'<section[^>]*id="painel-salvar"[^>]*\bhidden\b', html)
+    # o painel de "treino salvo" começa escondido; a antiga segunda tela de salvar não existe mais
     assert re.search(r'<section[^>]*id="treino-salvo"[^>]*\bhidden\b', html)
-    # "Quem montou este treino?" é obrigatório e limitado a 60; o nome do treino a 40
-    assert "Quem montou este treino?" in html
+    assert 'id="painel-salvar"' not in html
+    # "Professor" é obrigatório e limitado a 60; o nome do treino a 40 (limite do Data4U)
+    assert re.search(r'<label for="quem-montou">Professor', html)
+    assert "(obrigatório)" in html
     assert re.search(r'<input[^>]*id="quem-montou"[^>]*maxlength="60"', html)
     assert re.search(r'<input[^>]*id="quem-montou"[^>]*aria-required="true"', html)
     assert re.search(r'<input[^>]*id="nome-treino"[^>]*maxlength="40"', html)
-    # o campo de quem montou NÃO vem preenchido (cada professor digita o seu nome)
+    # o campo do professor NÃO vem preenchido (cada professor digita o seu nome)
     assert not re.search(r'<input[^>]*id="quem-montou"[^>]*\bvalue=', html)
-    for id_ in ("confirmar-salvar", "voltar-ao-treino", "montar-outro", "erros-salvar", "resumo-salvar"):
+    # nome e professor ficam ANTES das fichas e da lista de exercícios, dentro da área de montagem
+    assert html.index('id="area-montagem"') < html.index('id="nome-treino"') < html.index('id="quem-montou"') < html.index('id="abas"')
+    for id_ in ("salvar", "cancelar", "confirmar-descarte", "descartar", "continuar-editando", "montar-outro", "problemas", "abas", "montagem"):
         assert f'id="{id_}"' in html
+
+
+def test_montar_usa_as_palavras_do_data4u(cliente_com_alunos):
+    html = cliente_com_alunos.get("/alunos/1/montar").get_data(as_text=True)
+
+    # a lista de exercícios mostra os grupos recolhidos em "Parte do corpo", como o filtro do Data4U
+    assert "data-filtro-grupos" in html and "Parte do corpo:" in html
+    # a página de consulta de exercícios continua com os grupos sempre à vista
+    consulta = cliente_com_alunos.get("/exercicios").get_data(as_text=True)
+    assert "data-filtro-grupos" not in consulta and "data-grupos" in consulta
 
 
 def test_scripts_nao_usam_funcoes_que_interpretam_html_ou_codigo():
@@ -606,6 +620,8 @@ def test_ficha_sem_treino_mostra_orientacao(cliente_busca):
     html = cliente_busca.get("/alunos/1").get_data(as_text=True)
 
     assert "ainda não tem treino" in html
+    assert "Lançar treino" in html  # o botão tem o mesmo nome do Data4U
+    assert 'class="titulos-treinos"' not in html  # sem treino, não há tabela
 
 
 def test_ficha_de_provisorio_mostra_o_selo(cliente_busca):
@@ -621,7 +637,7 @@ def test_ficha_lista_o_treino_salvo_com_quem_montou_e_os_exercicios(cliente_busc
     html = cliente_busca.get("/alunos/1").get_data(as_text=True)
 
     assert "TREINO AB 07/10/26" in html
-    assert "Montado por Ana Paula" in html
+    assert 'class="treino-professor">Ana Paula<' in html  # coluna "Professor" da tabela de treinos
     assert "TREINO A" in html and "TREINO B" in html
     assert "2 exercícios, 1 bi-set" in html  # ficha A: supino + crucifixo em bi-set
     assert "1 exercício<" in html  # ficha B: só a remada

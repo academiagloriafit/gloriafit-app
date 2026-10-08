@@ -181,60 +181,85 @@ button { font-family: inherit; }
   line-height: 1;
 }
 .botao-icone:disabled { color: #b9b8b0; border-color: var(--borda); cursor: not-allowed; }
+.botao-icone { width: 36px; height: 36px; font-size: 16px; }
+.botao-texto {
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--alerta-texto);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
 
-/* ---- tela de montar treino ---- */
-.pagina-larga { display: flex; flex-direction: column; gap: 20px; }
+/* ---- tela de lançar treino ----
+   Mesma ideia do Data4U (treino com nome e professor no alto, fichas em abas, tabela de
+   exercícios, um só botão de salvar), mais enxuta para caber na tela do computador. */
+.pagina-larga { display: flex; flex-direction: column; gap: 16px; }
 .aluno-nome { margin: 0; font-size: 17px; }
-.cabecalho-montar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; }
-.cabecalho-montar h1 {
+.titulo-tela { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; }
+.titulo-tela .voltar { align-self: baseline; min-height: 36px; margin-left: auto; }
+.titulo-pagina {
   margin: 0;
   font-family: Anton, Impact, "Arial Narrow", sans-serif;
   font-weight: 400;
-  font-size: 44px;
-  line-height: 1.05;
+  font-size: 32px;
+  line-height: 1.1;
   letter-spacing: 0.01em;
   text-transform: uppercase;
 }
 
-.abas { display: flex; flex-wrap: wrap; gap: 8px; }
+.cartao { background: var(--branco); border: 1px solid var(--borda); border-radius: 12px; padding: 12px 16px; }
+.cabecalho-treino { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px 24px; align-items: start; }
+.tela-treino .campo input { height: 44px; font-size: 18px; }
+.tela-treino .dica { font-size: 14px; }
+.obrigatorio { font-weight: 700; color: var(--alerta-texto); }
+
+.area-montagem { display: flex; flex-direction: column; gap: 16px; }
+.fichas-e-lista { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+.coluna-ficha { min-width: 0; }
+
+/* fichas: uma aba para cada, coladas no cartão da ficha */
+.abas { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: -1px; position: relative; z-index: 1; }
 .aba {
-  min-height: 48px;
-  padding: 0 22px;
+  min-height: 40px;
+  padding: 0 18px;
   border: 1px solid var(--borda);
-  border-radius: 12px 12px 0 0;
-  background: var(--branco);
-  color: var(--escuro);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: #e6e5de;
+  color: var(--texto-suave);
   font: inherit;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
 }
-.aba-ativa { background: var(--escuro); border-color: var(--escuro); color: #ffffff; font-weight: 700; }
-.aba-nova { border: 1.5px dashed #8c8b83; background: transparent; }
-
-.montagem-grade { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
-.painel-montagem { flex: 999 1 640px; min-width: 0; max-width: none; }
-.painel-biblioteca {
-  flex: 1 1 380px;
-  min-width: 0;
-  max-width: 520px;
-  position: sticky;  /* fica à vista enquanto o treino cresce */
-  top: 16px;
+.aba:hover { background: #efeee9; }
+.aba-ativa, .aba-ativa:hover {
+  background: var(--branco);
+  color: var(--escuro);
+  font-weight: 700;
+  border-top: 3px solid var(--laranja);
+  border-bottom: 1px solid var(--branco);
 }
-/* a lista de resultados tem rolagem própria: a página não cresce com 50 resultados */
-.painel-biblioteca .lista { max-height: 52vh; overflow-y: auto; }
-.painel-biblioteca h2 { margin: 0; font-size: 20px; font-weight: 700; }
-.biblioteca { display: flex; flex-direction: column; gap: 16px; }
+.aba-nova { border: 1.5px dashed #8c8b83; border-bottom: 0; background: transparent; }
 
-.bloco-nome { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24px; }
-.campo-nome { flex: 0 1 300px; }
-.nome-lateral { flex: 1 1 220px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.cartao-lista { background: var(--branco); border: 1px solid var(--borda); border-radius: 12px; overflow: hidden; }
+.coluna-ficha .cartao-lista { border-top-left-radius: 0; }
+.bloco-nome { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 16px; padding: 12px 16px; border-bottom: 1px solid var(--borda); }
+.campo-nome { flex: 0 1 220px; }
+.bloco-nome > .dica { padding-bottom: 12px; }
+.nome-lateral { display: flex; align-items: center; }
+.bloco-nome .selecao { margin-left: auto; }
+.so-leitor { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .dica { margin: 0; font-size: 15px; color: var(--texto-suave); }
 .confirmacao { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
 
-.cartao-lista { background: var(--branco); border: 1px solid var(--borda); border-radius: 16px; overflow: hidden; }
 .cabecalho-lista {
-  padding: 14px 20px;
+  padding: 10px 16px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -242,25 +267,25 @@ button { font-family: inherit; }
   gap: 8px 16px;
   border-bottom: 1px solid var(--borda);
 }
-.cabecalho-lista h2 { margin: 0; font-size: 20px; font-weight: 700; }
-.titulo-suave { font-weight: 500; color: var(--texto-suave); font-size: 17px; }
+.cabecalho-lista h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.titulo-suave { font-weight: 500; color: var(--texto-suave); font-size: 16px; }
 .selecao { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.contador-selecao { font-size: 16px; color: var(--texto-suave); }
-.erro-bloco { flex-basis: 100%; margin: 0; color: var(--alerta-texto); font-size: 15px; font-weight: 600; }
+.contador-selecao { font-size: 15px; color: var(--texto-suave); }
+.erro-bloco { flex-basis: 100%; margin: 0; color: var(--alerta-texto); font-size: 15px; font-weight: 600; text-align: right; }
 .erro-bloco:empty { display: none; }
 
 /* Mesmas colunas no título e em todas as linhas (soltas ou dentro de um bi-set):
-   caixa de seleção | etiqueta | nome | séries | repetições | carga | botões */
+   caixa de seleção | etiqueta | nome | séries | repetições | peso | botões */
 .titulos-colunas, .linha {
   display: grid;
-  grid-template-columns: 44px 44px minmax(0, 1fr) 84px 84px 84px 140px;
+  grid-template-columns: 32px 34px minmax(0, 1fr) 72px 104px 120px 152px;
   align-items: center;
   gap: 8px;
 }
 .titulos-colunas {
-  padding: 10px 12px;
-  background: #f7f6f2;
-  font-size: 13px;
+  padding: 8px 12px;
+  background: #f1f0eb;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -270,18 +295,14 @@ button { font-family: inherit; }
 .coluna-pequena { text-align: center; }
 
 .linhas { list-style: none; margin: 0; padding: 0; }
-.linha {
-  padding: 8px 12px;
-  border-top: 1px solid var(--borda);
-  background: var(--branco);
-}
+.linha { padding: 6px 12px; border-top: 1px solid var(--borda); background: var(--branco); }
 .linha-bloco { background: #fff8f4; }
-.celula-marcar, .celula-vazia { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; }
-.celula-marcar input { width: 22px; height: 22px; accent-color: var(--escuro); }
+.celula-marcar, .celula-vazia { width: 32px; height: 38px; flex: none; display: flex; align-items: center; justify-content: center; }
+.celula-marcar input { width: 20px; height: 20px; accent-color: var(--escuro); }
 .etiqueta {
   flex: none;
-  width: 44px;
-  height: 36px;
+  width: 34px;
+  height: 30px;
   border-radius: 8px;
   background: var(--escuro);
   color: var(--laranja);
@@ -289,27 +310,27 @@ button { font-family: inherit; }
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
 }
 .linha-nome { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
 .campo-prescricao {
   width: 100%;
-  height: 44px;
+  height: 38px;
   border: 1.5px solid #8c8b83;
   border-radius: 8px;
   padding: 0 8px;
   font: inherit;
-  font-size: 17px;
+  font-size: 16px;
   text-align: center;
   background: var(--branco);
   color: var(--escuro);
 }
 .campo-prescricao[aria-invalid="true"], .campo input[aria-invalid="true"] { border-color: #b00020; background: #fff1f1; }
-.celula-acoes { display: flex; justify-content: flex-end; gap: 4px; }
+.celula-acoes { display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
 
 .cabecalho-bloco {
   background: var(--alerta-fundo);
-  padding: 8px 14px;
+  padding: 6px 14px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -317,46 +338,77 @@ button { font-family: inherit; }
   gap: 6px 16px;
   border-top: 1px solid var(--borda);
 }
-.bloco-titulo { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--alerta-texto); }
+.bloco-titulo { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--alerta-texto); }
 .bloco-acoes { display: flex; align-items: center; gap: 4px; }
 .lista-vazia { margin: 0; padding: 24px 20px; color: var(--texto-suave); }
 
-.barra-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
-.aviso { margin: 0; font-size: 16px; color: var(--texto-suave); flex: 1 1 300px; }
+/* lista de exercícios ao lado: busca, grupos e resultados com rolagem própria */
+.painel-biblioteca { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.painel-biblioteca h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.biblioteca { display: flex; flex-direction: column; gap: 10px; }
+.painel-biblioteca .campo input { height: 42px; font-size: 17px; }
+.painel-biblioteca .grupos { gap: 6px; }
+.painel-biblioteca .grupo { min-height: 32px; padding: 0 12px; border-radius: 16px; font-size: 14px; }
+.painel-biblioteca .lista { max-height: calc(100vh - 320px); min-height: 200px; overflow-y: auto; }
+.filtro-grupos { border: 1px solid var(--borda); border-radius: 10px; background: #fbfaf7; }
+.filtro-grupos summary { min-height: 40px; padding: 0 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 15px; }
+.filtro-grupos summary:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+.filtro-grupos .grupos { padding: 4px 12px 12px; }
+.painel-biblioteca .item { padding: 6px 2px; }
+.painel-biblioteca .item-nome { font-size: 15px; }
+.painel-biblioteca .item-detalhe { font-size: 13px; }
+.painel-biblioteca .botao-adicionar { min-height: 34px; padding: 0 12px; font-size: 14px; }
+
+/* rodapé: Salvar treino e Cancelar sempre à vista, com os problemas logo acima */
+.rodape-treino {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0 8px;
+  background: var(--fundo);
+  border-top: 1px solid var(--borda);
+}
+.rodape-botoes { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.rodape-treino .botao-principal { min-height: 46px; }
+.aviso { margin: 0; font-size: 15px; color: var(--texto-suave); flex: 1 1 240px; }
 .problemas {
   flex-basis: 100%;
   margin: 0;
-  padding: 12px 16px 12px 36px;
+  padding: 10px 16px 10px 36px;
   border-radius: 12px;
   background: #fff1f1;
   border: 1px solid #e6b3b3;
   color: #7a0016;
-  font-size: 16px;
+  font-size: 15px;
 }
+.rodape-treino .problemas { max-height: 28vh; overflow-y: auto; }
+.aba-com-problema::after { content: " ●"; color: #b00020; }
 
+@media (max-width: 1100px) {
+  .fichas-e-lista { grid-template-columns: minmax(0, 1fr); }
+  .painel-biblioteca { position: static; }
+  .painel-biblioteca .lista { max-height: 50vh; }
+}
 @media (max-width: 900px) {
   .titulos-colunas { display: none; }
   .linha { display: flex; flex-wrap: wrap; }
   .linha-nome { flex: 1 1 calc(100% - 120px); }
   .campo-prescricao { width: 84px; }
+  .cabecalho-treino { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ---- salvar treino ---- */
-.area-montagem { display: flex; flex-direction: column; gap: 20px; }
-.painel-salvar h1, .painel-salvo h1 { margin: 0; font-size: 26px; font-weight: 700; }
-.painel-salvar h1:focus, .painel-salvo h1:focus { outline: none; }
-.resumo-fichas {
-  margin: 0;
-  padding: 12px 16px 12px 32px;
-  border-radius: 12px;
-  background: #f7f6f2;
-  font-size: 16px;
-}
-.obrigatorio { font-weight: 700; color: var(--alerta-texto); }
+/* ---- treino salvo ---- */
+.painel-salvo h1 { margin: 0; font-size: 26px; font-weight: 700; }
+.painel-salvo h1:focus { outline: none; }
 .barra-salvar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 .botao-principal:disabled { background: #d9a692; cursor: wait; }
 .texto-salvo { margin: 0; font-size: 18px; }
-.painel-salvar .problemas { flex-basis: auto; }
+
+/* ---- grade de duas colunas (ficha do aluno) ---- */
+.montagem-grade { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
 
 /* ---- topo com menu ---- */
 .topo-esquerda { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 32px; }
@@ -472,9 +524,51 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .dados dt { color: var(--texto-suave); }
 .dados dd { margin: 0; font-weight: 600; text-align: right; }
 
-.treino-salvo { padding: 16px 20px; border-top: 1px solid var(--borda); display: flex; flex-direction: column; gap: 8px; }
-.treino-salvo h3 { margin: 0; font-size: 19px; font-weight: 700; overflow-wrap: anywhere; }
-.treino-salvo .autor { margin: 0; font-size: 15px; color: var(--texto-suave); overflow-wrap: anywhere; }
+/* tabela de treinos (como a aba Treinos do Data4U): uma linha por treino, abre para mostrar as fichas */
+.titulos-treinos, .resumo-treino {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 60px minmax(0, 0.7fr);
+  align-items: center;
+  gap: 12px;
+}
+.titulos-treinos {
+  padding: 8px 16px;
+  border-left: 4px solid transparent;
+  background: #f1f0eb;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+}
+.titulos-treinos span:first-child { padding-left: 24px; }
+.linha-treino { border-top: 1px solid var(--borda); border-left: 4px solid transparent; }
+.resumo-treino { min-height: 52px; padding: 8px 16px; list-style: none; cursor: pointer; }
+.resumo-treino::-webkit-details-marker { display: none; }
+.resumo-treino:hover { background: #f7f6f2; }
+.resumo-treino:focus-visible { outline: 3px solid var(--foco); outline-offset: -3px; }
+.treino-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 700; overflow-wrap: anywhere; }
+.treino-nome::before { content: "▸"; flex: none; width: 16px; color: var(--texto-suave); transition: transform 0.1s; }
+.linha-treino[open] > .resumo-treino .treino-nome::before { transform: rotate(90deg); }
+.treino-data, .treino-fichas, .treino-professor { font-size: 15px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.treino-recente { background: #fff8f4; border-left-color: var(--laranja); }
+.treino-recente > .resumo-treino:hover { background: #fff1e8; }
+.selo-recente {
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: var(--laranja);
+  color: #111111;
+  font-size: 12px;
+  font-weight: 700;
+}
+.treino-conteudo { padding: 4px 16px 16px 40px; display: flex; flex-direction: column; gap: 8px; }
+.acoes-treino { margin: 0 0 4px; }
+@media (max-width: 700px) {
+  .titulos-treinos { display: none; }
+  .resumo-treino { grid-template-columns: minmax(0, 1fr) auto; }
+  .treino-fichas, .treino-professor { display: none; }
+  .treino-conteudo { padding-left: 16px; }
+}
 .ficha-detalhe { border: 1px solid var(--borda); border-radius: 10px; background: #fbfaf7; }
 .ficha-detalhe summary {
   min-height: 48px;
@@ -502,7 +596,7 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .item-ficha-obs { grid-column: 2 / -1; font-size: 15px; color: var(--texto-suave); font-style: italic; overflow-wrap: anywhere; }
 .selo-origem {
   display: inline-block;
-  margin-left: 6px;
+  margin-left: 0;
   padding: 2px 10px;
   border-radius: 12px;
   background: #e8e7e1;

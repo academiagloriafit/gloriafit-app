@@ -4,6 +4,8 @@ Os treinos do histórico são gravados direto no banco (sem passar pelo importad
 seus próprios testes em test_importar_treinos.py). Todos os dados são inventados.
 """
 
+import re
+
 import pytest
 
 from app import acesso
@@ -156,6 +158,30 @@ def test_pagina_da_ficha_marca_o_que_veio_do_data4u(cliente):
     assert html.count("selo-origem") == 1  # só o TREINO ANTIGO, não o TREINO NOVO
     assert html.index("TREINO NOVO") < html.index("TREINO ANTIGO")  # e o do app vem primeiro
     assert 'class="selo-origem" title="Treino antigo, copiado do Data4U">Data4U</span>' in html
+
+
+def test_pagina_da_ficha_e_uma_tabela_de_treinos_com_o_mais_recente_aberto_e_destacado(cliente):
+    html = cliente.get("/alunos/2").get_data(as_text=True)
+
+    # colunas como a aba Treinos do Data4U
+    for coluna in ("Treino", "Data", "Fichas", "Professor"):
+        assert f"<span>{coluna}</span>" in html
+    assert html.count('class="linha-treino') == 2
+    assert html.count("Mais recente") == 1  # só o primeiro (o mais novo), nunca o histórico
+    assert re.search(r'<details class="linha-treino treino-recente" open>', html)
+    antigo = html[html.index("TREINO ANTIGO") - 400 : html.index("TREINO ANTIGO")]
+    assert "treino-recente" not in antigo and " open" not in antigo.split("<details")[-1]
+    # o professor e a data do treino aparecem na linha, sem a palavra "Montado por"
+    assert 'class="treino-professor">PROF ANA<' in html
+    assert 'class="treino-data">01/10/2026<' in html
+    assert "Montado por" not in html
+
+
+def test_pagina_da_ficha_so_com_historico_tambem_destaca_o_mais_recente(cliente):
+    html = cliente.get("/alunos/1").get_data(as_text=True)
+
+    assert html.count("Mais recente") == 1
+    assert html.index("TREINO 2022") < html.index("Mais recente") < html.index("TREINO 2021")
 
 
 def test_pagina_da_ficha_mostra_dose_carga_pausa_e_observacao(cliente):

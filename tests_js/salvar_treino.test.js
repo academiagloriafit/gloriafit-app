@@ -61,6 +61,16 @@ describe("sugerirNomeDoTreino", () => {
     expect(sugerirNomeDoTreino(e, DATA)).toBe("TREINO ABC 07/10/26");
   });
 
+  it("fichas FICHA A, B, C (nomes que o app dá sozinho) viram 'TREINO ABC' com a data", () => {
+    const e = comFichas("FICHA A", "FICHA B", "FICHA C");
+    expect(sugerirNomeDoTreino(e, DATA)).toBe("TREINO ABC 07/10/26");
+  });
+
+  it("FICHA e TREINO misturados também valem; 'FICHA AB' (duas letras) entra como nome", () => {
+    expect(sugerirNomeDoTreino(comFichas("ficha a", "TREINO B"), DATA)).toBe("TREINO AB 07/10/26");
+    expect(sugerirNomeDoTreino(comFichas("FICHA AB"), DATA)).toBe("FICHA AB 07/10/26");
+  });
+
   it("uma ficha só: 'TREINO A'", () => {
     expect(sugerirNomeDoTreino(criarEstado(), DATA)).toBe("TREINO A 07/10/26");
   });
@@ -142,12 +152,12 @@ describe("validarDadosDoTreino", () => {
     expect(validarDadosDoTreino(bons)).toEqual([]);
   });
 
-  it("'quem montou' vazio ou só com espaços é obrigatório", () => {
+  it("professor vazio ou só com espaços é obrigatório", () => {
     for (const vazio of ["", "   ", "\n\t "]) {
       const problemas = validarDadosDoTreino({ ...bons, montadoPor: vazio });
       expect(problemas).toHaveLength(1);
       expect(problemas[0].campo).toBe("quem-montou");
-      expect(problemas[0].mensagem).toBe("Informe quem montou este treino.");
+      expect(problemas[0].mensagem).toBe("Informe o professor que montou o treino.");
     }
   });
 
@@ -222,7 +232,7 @@ describe("montarPedido", () => {
     expect(pedido.nome_treino).toBe("TREINO A 07/10/26");
     expect(pedido.montado_por).toBe("Ana Paula");
     expect(pedido.fichas).toHaveLength(1);
-    expect(pedido.fichas[0].nome).toBe("TREINO A");
+    expect(pedido.fichas[0].nome).toBe("FICHA A");
     expect(pedido.fichas[0].itens.map((i) => [i.exercicio_id, i.series, i.repeticoes, i.carga, i.bloco])).toEqual([
       [11, "3", "12", "20", 1],
       [22, "3", "12", "", 1],

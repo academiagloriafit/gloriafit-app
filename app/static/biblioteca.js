@@ -114,6 +114,15 @@ export function iniciarBiblioteca(raiz, opcoes = {}) {
     blocoGrupos.querySelectorAll("button").forEach((b) => {
       b.setAttribute("aria-pressed", b === botao ? "true" : "false");
     });
+    // Quando os grupos ficam recolhidos ("Parte do corpo: ..."), a escolha aparece no título
+    // e a lista de grupos fecha sozinha.
+    const nomeDoGrupo = raiz.querySelector("[data-grupo-atual]");
+    if (nomeDoGrupo) nomeDoGrupo.textContent = grupoAtual === "" ? "Todas" : botao.textContent;
+    const filtro = raiz.querySelector("[data-filtro-grupos]");
+    if (filtro) {
+      filtro.open = false;
+      filtro.querySelector("summary").focus();
+    }
     buscar();
   });
 

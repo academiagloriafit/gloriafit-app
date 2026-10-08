@@ -5,20 +5,28 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 1. **Banco de dados** (SQLite) + importação do quadro de 1.161 exercícios.
 2. **Servidor web** (Flask) com a lista de exercícios da tela do professor: busca por nome
    (sem diferenciar acento nem maiúscula) e filtro por grupo muscular.
-3. **Tela de montar treino** (`/alunos/<id>/montar`): fichas (Treino A, B, C...), exercícios
-   com séries/repetições/carga, bi-set e tri-set, conferência dos limites do Data4U.
-   O rascunho fica no navegador até salvar.
-4. **Salvar treino**: o professor confere o nome do treino (o app sugere um, ex.:
-   "TREINO ABC 07/10/26") e **digita o próprio nome em "Quem montou este treino?"
-   (obrigatório)**. O treino é gravado no banco com esse nome. Treinos montados no futuro
-   por robô/Claude levam `Academia Glória Fit` (constante `AUTOR_AUTOMATICO`).
+3. **Tela "Lançar treino"** (`/alunos/<id>/montar`), no jeito do Data4U (palavras e fluxo que os
+   professores já conhecem, visual mais atual): o **Treino** tem nome e **Professor** no alto, as
+   **fichas** (FICHA A, B, C... ou o nome que o professor der, até 15 letras) são abas, e cada ficha
+   é uma tabela de exercícios com séries, repetições e **Peso** (no banco e na API o campo continua
+   `carga`), bi-set e tri-set, conferência dos limites do Data4U. A lista de exercícios fica ao lado
+   (busca por nome; "Parte do corpo" recolhido). O rascunho (fichas, nome e professor) fica no
+   navegador até salvar.
+4. **Salvar treino**: um só botão, **Salvar treino**, sempre à vista no rodapé. O nome do treino vem
+   sugerido (ex.: "TREINO ABC 07/10/26") e acompanha as fichas até o professor mexer nele; o
+   **Professor** é digitado pelo próprio professor (obrigatório, não vem preenchido). Quem tenta
+   sair com algo digitado vê **um** aviso ("Descartar este treino sem salvar?"). O treino é gravado
+   no banco com esse nome. Treinos montados no futuro por robô/Claude levam `Academia Glória Fit`
+   (constante `AUTOR_AUTOMATICO`). (Antes havia uma segunda tela só para salvar; foi retirada em
+   08/10/2026 a pedido do Thiago.)
 5. **Buscar aluno** (`/alunos`, a página inicial) e **ficha do aluno** (`/alunos/<id>`):
    a busca acha por nome (palavras em qualquer ordem, sem diferenciar acento nem maiúscula),
    por CPF (ou um pedaço dele) ou por matrícula (número igual). A lista mostra matrícula, último
    treino e a **situação** (Ativo, Trancado, Pendente, Desistente, Inativo, Cancelado, ou
-   Provisório). A ficha mostra os treinos salvos (mais novo primeiro, com quem montou e a data),
-   o botão **Montar novo treino**, o WhatsApp do aluno (editável) e o cadastro (CPF, matrícula,
-   situação).
+   Provisório). A ficha mostra os treinos numa **tabela** (Treino, Data, Fichas, Professor; mais novo primeiro). O
+   mais recente vem aberto, com o selo "Mais recente" (é só o mais novo por data, não quer dizer
+   "treino ativo"); os antigos abrem com um clique. Botão **Lançar treino**, WhatsApp do aluno
+   (editável) e cadastro (CPF, matrícula, situação).
    **Aluno provisório** (`/alunos/novo`): para quem se matriculou hoje e ainda não está na cópia
    do Data4U. O professor digita nome, CPF e WhatsApp (opcional) e já monta o treino. O app
    confere o CPF (11 números e os dois dígitos verificadores) e recusa CPF que já esteja no app.
@@ -40,7 +48,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
    MP-4200 TH, papel de 80 mm) no formato do desenho: academia, aluno, treino, data, professor e,
    por ficha, os exercícios com etiqueta (A1, A2 de bi-set; 3, 4... dos soltos), séries X
    repetições, carga e o aviso "BI-SET: FAÇA A1 E A2 SEGUIDOS". O botão **Imprimir na térmica**
-   aparece depois de salvar o treino e em cada treino da ficha do aluno. **Testado em 07/10/2026
+   aparece depois de salvar o treino; em cada treino da ficha do aluno o link se chama **Visualizar e imprimir**. **Testado em 07/10/2026
    na impressora do PC dos professores: imprimiu certo** (segundo o Thiago; ver "Ainda em aberto").
 8. **Proteção da área do professor**: só **computadores autorizados** abrem as telas e a API
    (hoje serão dois: o dos professores e o da recepção). Cada um é autorizado uma vez, com um
@@ -82,7 +90,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/static/copia_modelo.js` | Prepara o que a tela "Atualizar alunos" envia, em dois pacotes (alunos e treinos): confere o manifesto, reduz às colunas necessárias, só celular (tipo 30), CPF/telefone como texto; envia um depois do outro; textos de aviso e leitura da resposta do servidor |
 | `app/static/atualizar_alunos.js` | A tela em si (escolher arquivo, mostrar resumo, enviar os dois pacotes, mostrar o relatório). Usa só `textContent`. Com `?simular_treinos=1` na página, o histórico é só simulado |
 | `app/static/treino_modelo.js` | Lógica do treino (fichas, bi-set, validação, rascunho, nome sugerido, pedido de salvar), sem nada de tela |
-| `app/static/montar.js`, `salvar.js`, `biblioteca.js` | Desenho da tela de montar treino, da tela de salvar e da lista de exercícios |
+| `app/static/montar.js`, `salvar.js`, `biblioteca.js` | Desenho da tela Lançar treino (nome, professor, fichas, tabela), envio do treino ao servidor e lista de exercícios |
 | `app/static/api.js` | `enviarJson`: envia um POST em JSON com limite de tempo (20 s) e devolve status + corpo; usado por salvar treino e WhatsApp |
 | `app/static/autorizar.js`, `autorizar_modelo.js` | Tela `/autorizar`: envia o código e mostra a resposta (o texto de cada resposta fica em `autorizar_modelo.js`, testado à parte) |
 | `app/static/novo_aluno.js`, `novo_aluno_modelo.js` | Tela `/alunos/novo`: envia o cadastro e mostra erros por campo ou os links de quem já tem o CPF (o que mostrar para cada resposta fica em `novo_aluno_modelo.js`, testado à parte) |
@@ -262,7 +270,7 @@ treino é único por aluno, sem diferenciar maiúscula nem acento (regra do Data
   Os ids de aluno são sequenciais (1, 2, 3...); hoje só computador autorizado chega até eles.
 - O WhatsApp corrigido na ficha vale só no app (`whatsapp_corrigido_no_app`); o Data4U não
   é alterado.
-- "Quem montou" é texto livre e **não prova quem fez**: qualquer pessoa na tela de um computador
+- "Professor" (campo `montado_por`) é texto livre e **não prova quem fez**: qualquer pessoa na tela de um computador
   autorizado digita qualquer nome. Serve de registro, não de controle de acesso.
 - O servidor só aceita `POST` com `Content-Type: application/json` (um formulário de outro
   site não consegue mandar esse tipo), com cookie `SameSite=Lax` e com conferência de origem:
