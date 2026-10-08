@@ -551,7 +551,8 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .situacao-A { background: #e4f1e4; color: #1f5a2b; }
 .situacao-D, .situacao-I, .situacao-C { background: #e8e7e1; color: var(--texto-suave); }
 .matricula-ficha { font-size: 17px; color: var(--texto-suave); }
-.painel-treinos { flex: 999 1 560px; min-width: 0; }
+/* 700px: abaixo disso a coluna do WhatsApp desce para baixo da tabela, e a tabela ganha a largura toda */
+.painel-treinos { flex: 999 1 700px; min-width: 0; }
 .coluna-lateral { flex: 1 1 340px; min-width: 0; max-width: 520px; display: flex; flex-direction: column; gap: 16px; }
 .coluna-lateral .painel { max-width: none; }
 .coluna-lateral h2 { margin: 0; font-size: 20px; font-weight: 700; }
@@ -566,7 +567,8 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 /* tabela de treinos (como a aba Treinos do Data4U): uma linha por treino, abre para mostrar as fichas */
 .titulos-treinos, .resumo-treino {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) 92px 92px 76px minmax(0, 0.9fr) minmax(0, 0.8fr);
+  /* o nome do treino tem um mínimo (nunca quebra no meio da palavra em tela de notebook); o professor cede espaço */
+  grid-template-columns: minmax(170px, 1.7fr) 92px 92px 76px minmax(0, 0.8fr) minmax(0, 0.7fr);
   align-items: center;
   gap: 12px;
 }
@@ -586,8 +588,9 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .resumo-treino::-webkit-details-marker { display: none; }
 .resumo-treino:hover { background: #f7f6f2; }
 .resumo-treino:focus-visible { outline: 3px solid var(--foco); outline-offset: -3px; }
-.treino-nome { display: flex; align-items: center; gap: 4px 8px; font-weight: 700; }
-.treino-titulo { min-width: 0; overflow-wrap: anywhere; }
+.treino-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 700; }
+/* "break-word" (e não "anywhere"): o selo "Data4U" desce para a linha de baixo em vez de espremer o nome */
+.treino-titulo { min-width: 0; flex: 1 1 100px; overflow-wrap: break-word; }
 .treino-nome .selo-origem { flex: none; }
 .treino-nome::before { content: "▸"; flex: none; width: 16px; color: var(--texto-suave); transition: transform 0.1s; }
 .linha-treino[open] > .resumo-treino .treino-nome::before { transform: rotate(90deg); }
