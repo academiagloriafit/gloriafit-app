@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from app import importar_alunos, importar_treinos
+from app import importar_alunos, importar_treinos, treinos
 from app.db import conectar, criar_tabelas
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -154,4 +154,38 @@ def test_pacote_do_navegador_vira_historico_no_banco(pacotes):
         (importar_treinos.NOME_DO_EXERCICIO_NAO_INFORMADO, "3", "15", "MODERADO", 0, None),  # sem exercício, com dose: entra
     ]  # (e a linha 105, sem exercício e em branco, ficou de fora)
     assert relatorio.itens_vazios_ignorados == 1
+    conn.close()
+
+
+# ---------------------------------------------------------------- tela de montar -> servidor
+
+MODELO_DO_TREINO = (RAIZ / "app" / "static" / "treino_modelo.js").as_uri()
+
+
+def test_pedido_montado_pelo_navegador_com_intervalo_e_observacao_e_gravado_pelo_servidor():
+    """O que a tela de montar manda (intervalo em minutos e segundos -> segundos, observação) é o que o servidor grava."""
+    pedido = _node(f"""
+        import * as M from "{MODELO_DO_TREINO}";
+        let e = M.criarEstado();
+        e = M.adicionarItem(e, 0, {{ id: 1, nome: "SUPINO" }});
+        e = M.adicionarItem(e, 0, {{ id: 2, nome: "REMADA" }});
+        for (const uid of [1, 2]) {{
+          e = M.atualizarItem(e, 0, uid, "series", "3");
+          e = M.atualizarItem(e, 0, uid, "repeticoes", "12");
+        }}
+        e = M.atualizarItem(e, 0, 1, "pausaMin", "1");
+        e = M.atualizarItem(e, 0, 1, "pausaSeg", "30");
+        e = M.atualizarItem(e, 0, 1, "observacao", "  descer   devagar ");
+        if (M.validar(e).length) throw new Error("a tela recusaria este treino");
+        console.log(JSON.stringify(M.montarPedido(e, {{ nomeTreino: "TREINO A", montadoPor: "Ana Paula" }})));
+    """)
+    conn = conectar()
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ALUNO')")
+    conn.executemany("INSERT INTO exercicio (id, nome, origem, ativo) VALUES (?, ?, 'app', 1)", [(1, "SUPINO"), (2, "REMADA")])
+
+    treino_id = treinos.salvar_treino(conn, 1, pedido)
+
+    itens = treinos.obter_treino(conn, treino_id)["fichas"][0]["itens"]
+    assert [(i["pausa"], i["observacao"]) for i in itens] == [(90, "descer devagar"), (None, None)]
     conn.close()

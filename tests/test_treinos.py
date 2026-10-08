@@ -38,9 +38,10 @@ def exercicios(conn):
     return ids
 
 
-def _item(exercicio_id, series="3", repeticoes="12", carga="20", bloco=None):
+def _item(exercicio_id, series="3", repeticoes="12", carga="20", bloco=None, **extras):
+    """`extras`: campos opcionais do exercício (`pausa` em segundos, `observacao`)."""
     return {"exercicio_id": exercicio_id, "series": series, "repeticoes": repeticoes,
-            "carga": carga, "bloco": bloco}
+            "carga": carga, "bloco": bloco, **extras}
 
 
 def _pedido(fichas, nome_treino="TREINO AB", montado_por="Ana Paula"):
@@ -424,6 +425,112 @@ def test_mensagem_de_erro_diz_em_qual_ficha_e_exercicio(conn, aluno_id, exercici
 
     assert len(problemas) == 1
     assert "TREINO B" in problemas[0] and "exercício 2" in problemas[0]
+
+
+# ------------------------------------------------------------------ intervalo e observação
+
+# Pedido do Thiago (08/10/2026): os professores usam Intervalo e Observações em cada exercício.
+
+
+def _item_gravado(conn, treino_id, posicao=0):
+    return obter_treino(conn, treino_id)["fichas"][0]["itens"][posicao]
+
+
+def test_grava_o_intervalo_em_segundos_e_a_observacao(conn, aluno_id, exercicios):
+    pedido = _pedido([_ficha([_item(exercicios["a"], pausa=90, observacao="Descer devagar")])])
+
+    treino_id = salvar_treino(conn, aluno_id, pedido)
+
+    item = _item_gravado(conn, treino_id)
+    assert item["pausa"] == 90
+    assert item["observacao"] == "Descer devagar"
+
+
+def test_sem_intervalo_e_sem_observacao_ficam_vazios(conn, aluno_id, exercicios):
+    # pedido antigo (sem os dois campos), vazio, nulo e zero: tudo vira "sem valor"
+    itens = [
+        _item(exercicios["a"]),
+        _item(exercicios["b"], pausa=None, observacao=None),
+        _item(exercicios["c"], pausa=0, observacao=""),
+        _item(exercicios["a"], observacao="   "),
+    ]
+
+    treino_id = salvar_treino(conn, aluno_id, _pedido([_ficha(itens)]))
+
+    for posicao in range(4):
+        item = _item_gravado(conn, treino_id, posicao)
+        assert item["pausa"] is None and item["observacao"] is None
+
+
+def test_observacao_tem_os_espacos_limpos(conn, aluno_id, exercicios):
+    pedido = _pedido([_ficha([_item(exercicios["a"], observacao="  até   a\nfalha  ")])])
+
+    treino_id = salvar_treino(conn, aluno_id, pedido)
+
+    assert _item_gravado(conn, treino_id)["observacao"] == "até a falha"
+
+
+def test_aceita_os_limites_do_intervalo_e_da_observacao(conn, aluno_id, exercicios):
+    pedido = _pedido(
+        [_ficha([_item(exercicios["a"], pausa=1, observacao="x" * 200), _item(exercicios["b"], pausa=3599)])]
+    )
+
+    treino_id = salvar_treino(conn, aluno_id, pedido)
+
+    assert _item_gravado(conn, treino_id, 0)["pausa"] == 1
+    assert len(_item_gravado(conn, treino_id, 0)["observacao"]) == 200
+    assert _item_gravado(conn, treino_id, 1)["pausa"] == 3599
+
+
+@pytest.mark.parametrize("pausa", [-1, 3600, 90.5, "90", True, [], {}])
+def test_recusa_intervalo_invalido(conn, aluno_id, exercicios, pausa):
+    pedido = _pedido([_ficha([_item(exercicios["a"], pausa=pausa)])])
+
+    problemas = _problemas(conn, aluno_id, pedido)
+
+    assert len(problemas) == 1 and "intervalo" in problemas[0]
+    assert _contagens(conn) == (0, 0, 0)
+
+
+def test_recusa_observacao_com_201_caracteres(conn, aluno_id, exercicios):
+    pedido = _pedido([_ficha([_item(exercicios["a"], observacao="x" * 201)])])
+
+    problemas = _problemas(conn, aluno_id, pedido)
+
+    assert len(problemas) == 1 and "observação" in problemas[0] and "200" in problemas[0]
+
+
+@pytest.mark.parametrize("valor", [123, ["a"], {"a": 1}, True])
+def test_recusa_observacao_que_nao_e_texto(conn, aluno_id, exercicios, valor):
+    problemas = _problemas(conn, aluno_id, _pedido([_ficha([_item(exercicios["a"], observacao=valor)])]))
+
+    assert len(problemas) == 1 and "observação" in problemas[0]
+
+
+@pytest.mark.parametrize("sujeira", ["a\x00b", "a\u202eb", "a\x07b"])
+def test_recusa_caracteres_de_controle_na_observacao(conn, aluno_id, exercicios, sujeira):
+    problemas = _problemas(conn, aluno_id, _pedido([_ficha([_item(exercicios["a"], observacao=sujeira)])]))
+
+    assert len(problemas) == 1 and "caracteres inválidos" in problemas[0]
+
+
+def test_observacao_perigosa_e_guardada_como_texto(conn, aluno_id, exercicios):
+    texto = "<script>alert(1)</script> ' OR 1=1 --"
+    treino_id = salvar_treino(conn, aluno_id, _pedido([_ficha([_item(exercicios["a"], observacao=texto)])]))
+
+    assert _item_gravado(conn, treino_id)["observacao"] == texto
+
+
+def test_mensagens_do_servidor_falam_ficha_e_peso(conn, aluno_id, exercicios):
+    # as mesmas palavras da tela (e do Data4U): "ficha" e "peso", não "treino 1" nem "carga"
+    problemas = _problemas(conn, aluno_id, _pedido([_ficha([_item(exercicios["a"], carga="c" * 12)], "")]))
+    assert any("nome da ficha 1" in p for p in problemas)
+
+    problemas = _problemas(conn, aluno_id, _pedido([_ficha([_item(exercicios["a"], carga="c" * 12)], "FICHA A")]))
+    assert len(problemas) == 1 and "peso" in problemas[0] and "carga" not in problemas[0]
+
+    problemas = _problemas(conn, aluno_id, _pedido([]))
+    assert "Treino A" not in problemas[0]
 
 
 # ------------------------------------------------------------------ aluno

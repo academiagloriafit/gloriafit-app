@@ -149,3 +149,33 @@ def test_o_cupom_so_usa_preto_no_papel():
     cores = set(re.findall(r"(?<![\w-])color:\s*([^;]+);", cupom))
 
     assert cores == {"#000"}
+
+
+def test_intervalo_e_observacao_aparecem_na_tela_de_impressao_e_texto_perigoso_nao_executa(caminho):
+    conn = conectar(caminho)
+    treinos.salvar_treino(
+        conn,
+        1,
+        {
+            "nome_treino": "TREINO COM DETALHE",
+            "montado_por": "Ana",
+            "fichas": [
+                {
+                    "nome": "TREINO A",
+                    "itens": [
+                        {"exercicio_id": 1, "series": "4", "repeticoes": "12", "carga": None, "bloco": None,
+                         "pausa": 75, "observacao": "<b>devagar</b>"},
+                    ],
+                }
+            ],
+        },
+    )
+    conn.close()
+    navegador = criar_app(caminho).test_client()
+    _autorizar(navegador, caminho)
+
+    html = _pagina(navegador, treino_id=3)
+
+    assert '<div class="cupom-linha cupom-detalhe">INTERVALO: 1 MIN 15 S</div>' in html
+    assert '<div class="cupom-linha cupom-detalhe">OBS: &lt;b&gt;devagar&lt;/b&gt;</div>' in html
+    assert "<b>devagar</b>" not in html

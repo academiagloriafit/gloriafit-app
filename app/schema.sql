@@ -134,9 +134,9 @@ CREATE TABLE IF NOT EXISTS ficha (
 -- bloco: itens da mesma ficha com o mesmo número de bloco formam um bi-set
 --        (2 itens) ou tri-set (3 itens). NULL = exercício sozinho.
 -- series, repeticoes, carga: texto de até 11 caracteres (limite do Data4U).
--- pausa: segundos. No Data4U é um horário "hh:mm:ss" (o histórico importado é convertido);
---        o app ainda não pede a pausa na tela de montar.
--- observacao: texto livre do Data4U (DS_PRESCRICAO_OBS); a tela de montar ainda não usa.
+-- pausa: o "Intervalo", em segundos. No Data4U é um horário "hh:mm:ss" (o histórico importado é
+--        convertido). Na tela de montar o professor digita minutos e segundos (desde 08/10/2026).
+-- observacao: texto livre do Data4U (DS_PRESCRICAO_OBS); a tela de montar pede e grava (até 200 letras).
 -- Exercício já usado numa ficha não pode ser apagado: desative (ativo = 0).
 CREATE TABLE IF NOT EXISTS ficha_item (
     id           INTEGER PRIMARY KEY,

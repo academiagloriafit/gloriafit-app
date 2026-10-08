@@ -275,13 +275,15 @@ button { font-family: inherit; }
 .erro-bloco:empty { display: none; }
 
 /* Mesmas colunas no título e em todas as linhas (soltas ou dentro de um bi-set):
-   caixa de seleção | etiqueta | nome | séries | repetições | peso | botões */
+   caixa de seleção | etiqueta | nome | séries | repetições | peso | intervalo.
+   Cada exercício tem uma segunda linha com a observação e os botões de mover e remover. */
 .titulos-colunas, .linha {
   display: grid;
-  grid-template-columns: 32px 34px minmax(0, 1fr) 72px 104px 120px 152px;
+  grid-template-columns: 32px 34px minmax(0, 1fr) 68px 100px 112px 104px;
   align-items: center;
   gap: 8px;
 }
+.linha { row-gap: 6px; }
 .titulos-colunas {
   padding: 8px 12px;
   background: #f1f0eb;
@@ -327,6 +329,26 @@ button { font-family: inherit; }
 }
 .campo-prescricao[aria-invalid="true"], .campo input[aria-invalid="true"] { border-color: #b00020; background: #fff1f1; }
 .celula-acoes { display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
+.celula-intervalo { display: flex; align-items: center; gap: 4px; }
+.celula-intervalo .campo-prescricao { padding: 0 2px; }
+.dois-pontos { font-weight: 700; color: var(--texto-suave); }
+.linha-segunda { grid-column: 3 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rotulo-obs { flex: none; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texto-suave); }
+.campo-observacao {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+  border: 1.5px solid #c4c3bb;
+  border-radius: 8px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 15px;
+  background: var(--branco);
+  color: var(--escuro);
+}
+.campo-observacao::placeholder { color: #8c8b83; }
+.campo-observacao:not(:placeholder-shown) { border-color: #8c8b83; }
+.campo-observacao[aria-invalid="true"] { border-color: #b00020; background: #fff1f1; }
 
 .cabecalho-bloco {
   background: var(--alerta-fundo);
@@ -397,6 +419,8 @@ button { font-family: inherit; }
   .linha { display: flex; flex-wrap: wrap; }
   .linha-nome { flex: 1 1 calc(100% - 120px); }
   .campo-prescricao { width: 84px; }
+  .celula-intervalo .campo-prescricao { width: 52px; }
+  .linha-segunda { flex: 1 1 100%; }
   .cabecalho-treino { grid-template-columns: minmax(0, 1fr); }
 }
 

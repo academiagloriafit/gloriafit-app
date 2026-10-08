@@ -33,9 +33,9 @@
         </div>
         {% endif %}
         {% for treino in ficha.treinos %}
-        {% set treino_recente = loop.first %}
-        {# O treino mais recente já vem aberto e destacado: é o que o professor quer ver primeiro. #}
-        <details class="linha-treino{% if loop.first %} treino-recente{% endif %}"{% if loop.first %} open{% endif %}>
+        {# Todos os treinos vêm fechados (pedido do Thiago, 08/10): o professor clica no que quer ver.
+           O mais recente só fica destacado, com o selo "Mais recente". #}
+        <details class="linha-treino{% if loop.first %} treino-recente{% endif %}">
           <summary class="resumo-treino">
             <span class="treino-nome">{{ treino.nome }}{% if loop.first %} <span class="selo-recente">Mais recente</span>{% endif %}{% if treino.do_data4u %} <span class="selo-origem" title="Treino antigo, copiado do Data4U">Data4U</span>{% endif %}</span>
             <span class="treino-data">{{ treino.criado_em }}</span>
@@ -45,7 +45,7 @@
           <div class="treino-conteudo">
             <p class="acoes-treino"><a class="botao-link" href="{{ url_for('pagina_imprimir_treino', treino_id=treino.id) }}">Visualizar e imprimir</a></p>
             {% for f in treino.fichas %}
-            <details class="ficha-detalhe"{% if treino_recente %} open{% endif %}>
+            <details class="ficha-detalhe">
               <summary><span class="ficha-nome">{{ f.nome }}</span><span class="ficha-resumo">{{ f.resumo }}</span></summary>
               <ol class="itens-ficha">
                 {% for item in f.itens %}

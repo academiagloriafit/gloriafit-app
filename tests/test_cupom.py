@@ -20,8 +20,8 @@ def conn():
     c.close()
 
 
-def _item(exercicio_id, series="4", repeticoes="12", carga="30 KG", bloco=None):
-    return {"exercicio_id": exercicio_id, "series": series, "repeticoes": repeticoes, "carga": carga, "bloco": bloco}
+def _item(exercicio_id, series="4", repeticoes="12", carga="30 KG", bloco=None, **extras):
+    return {"exercicio_id": exercicio_id, "series": series, "repeticoes": repeticoes, "carga": carga, "bloco": bloco, **extras}
 
 
 def _salvar(conn, fichas, nome="TREINO ABC", por="Ana Paula", quando="2026-10-07 15:00:00"):
@@ -233,3 +233,40 @@ def test_endereco_e_limpo_e_cortado_no_tamanho_maximo(conn):
 )
 def test_lista_com_e(etiquetas, esperado):
     assert _lista_com_e(etiquetas) == esperado
+
+
+# ------------------------------------------------------------------ intervalo e observação
+
+
+def test_intervalo_e_observacao_saem_logo_depois_da_dose(conn):
+    treino = _salvar(conn, [("TREINO A", [_item(1, pausa=90, observacao="Descer devagar")])])
+
+    assert _resumo(montar_cupom(conn, treino)) == [
+        ("exercicio", "1", "SUPINO RETO COM BARRA", ""),
+        ("dose", "", "4 X 12", "30 KG"),
+        ("detalhe", "", "INTERVALO: 1 MIN 30 S", ""),
+        ("detalhe", "", "OBS: Descer devagar", ""),
+    ]
+
+
+def test_sem_intervalo_e_sem_observacao_nao_ha_linha_de_detalhe(conn):
+    treino = _salvar(conn, [("TREINO A", [_item(1), _item(2, pausa=0, observacao="  ")])])
+
+    assert [l[0] for l in _resumo(montar_cupom(conn, treino))] == ["exercicio", "dose", "exercicio", "dose"]
+
+
+def test_so_o_intervalo_ou_so_a_observacao(conn):
+    treino = _salvar(conn, [("TREINO A", [_item(1, pausa=45), _item(2, observacao="Até a falha")])])
+
+    detalhes = [l[2] for l in _resumo(montar_cupom(conn, treino)) if l[0] == "detalhe"]
+    assert detalhes == ["INTERVALO: 45 S", "OBS: Até a falha"]
+
+
+def test_o_aviso_do_bi_set_vem_depois_do_intervalo_e_da_observacao_do_ultimo_exercicio(conn):
+    treino = _salvar(
+        conn,
+        [("TREINO A", [_item(1, bloco=1), _item(2, bloco=1, pausa=60, observacao="Sem pausa entre os dois")])],
+    )
+
+    tipos = [l[0] for l in _resumo(montar_cupom(conn, treino))]
+    assert tipos == ["exercicio", "dose", "exercicio", "dose", "detalhe", "detalhe", "aviso"]

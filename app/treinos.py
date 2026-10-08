@@ -19,6 +19,8 @@ LIMITE_NOME_FICHA = 15
 LIMITE_CAMPO = 11
 # Limites nossos
 LIMITE_QUEM_MONTOU = 60
+LIMITE_OBSERVACAO = 200  # a maior observação real do Data4U tem 131 letras (conferido em 08/10/2026)
+MAXIMO_PAUSA = 3599  # segundos: 59 min 59 s (o Data4U guarda "hh:mm:ss"; nenhuma pausa real passa de 1 hora)
 MAXIMO_FICHAS = 26
 MAXIMO_ITENS_POR_FICHA = 100
 MINIMO_NO_BLOCO = 2
@@ -79,6 +81,17 @@ def _inteiro(valor) -> bool:
 # ------------------------------------------------------------------ validação
 
 
+def _pausa(valor, rotulo: str, problemas: list[str]):
+    """Intervalo em segundos. Aceita vazio (None) e 0 (= sem intervalo, guardado como vazio).
+    Devolve o número (ou None quando não há intervalo); se o valor é inválido, anota o problema e devolve False."""
+    if valor is None:
+        return None
+    if not _inteiro(valor) or not 0 <= valor <= MAXIMO_PAUSA:
+        problemas.append(f"{rotulo}: intervalo inválido (de 0 a 59 min e 59 s).")
+        return False
+    return valor or None
+
+
 def _validar_itens(conn, itens, rotulo: str, problemas: list[str]) -> list[dict] | None:
     if not isinstance(itens, list) or not itens:
         problemas.append(f"{rotulo}: adicione pelo menos um exercício.")
@@ -99,16 +112,19 @@ def _validar_itens(conn, itens, rotulo: str, problemas: list[str]) -> list[dict]
             continue
         series = _texto(item.get("series"), f"{onde}: séries", LIMITE_CAMPO, True, problemas)
         repeticoes = _texto(item.get("repeticoes"), f"{onde}: repetições", LIMITE_CAMPO, True, problemas)
-        carga = _texto(item.get("carga"), f"{onde}: carga", LIMITE_CAMPO, False, problemas)
+        carga = _texto(item.get("carga"), f"{onde}: peso", LIMITE_CAMPO, False, problemas)
+        observacao = _texto(item.get("observacao"), f"{onde}: observação", LIMITE_OBSERVACAO, False, problemas)
+        pausa = _pausa(item.get("pausa"), onde, problemas)
         bloco = item.get("bloco")
         if bloco is not None and (not _inteiro(bloco) or bloco < 1):
             problemas.append(f"{onde}: bloco inválido.")
             continue
-        if None in (series, repeticoes, carga):
+        if None in (series, repeticoes, carga, observacao) or pausa is False:
             continue
         limpos.append(
             {"exercicio_id": exercicio_id, "series": series, "repeticoes": repeticoes,
-             "carga": carga or None, "bloco": bloco, "posicao": posicao}
+             "carga": carga or None, "pausa": pausa, "observacao": observacao or None,
+             "bloco": bloco, "posicao": posicao}
         )
     if len(limpos) != len(itens):
         return None  # já anotamos os problemas; não vale conferir o resto
@@ -162,15 +178,15 @@ def _renumerar_blocos(itens: list[dict], rotulo: str, problemas: list[str]) -> l
 
 def _validar_fichas(conn, fichas, problemas: list[str]) -> list[dict] | None:
     if not isinstance(fichas, list) or not 1 <= len(fichas) <= MAXIMO_FICHAS:
-        problemas.append(f"O treino precisa ter de 1 a {MAXIMO_FICHAS} fichas (Treino A, B, C...).")
+        problemas.append(f"O treino precisa ter de 1 a {MAXIMO_FICHAS} fichas (A, B, C...).")
         return None
     validas = []
     for numero, ficha in enumerate(fichas, start=1):
         if not isinstance(ficha, dict):
-            problemas.append(f"Treino {numero}: formato inválido.")
+            problemas.append(f"Ficha {numero}: formato inválido.")
             continue
-        nome = _texto(ficha.get("nome"), f"O nome do treino {numero}", LIMITE_NOME_FICHA, True, problemas)
-        itens = _validar_itens(conn, ficha.get("itens"), nome or f"Treino {numero}", problemas)
+        nome = _texto(ficha.get("nome"), f"O nome da ficha {numero}", LIMITE_NOME_FICHA, True, problemas)
+        itens = _validar_itens(conn, ficha.get("itens"), nome or f"Ficha {numero}", problemas)
         if nome is not None and itens is not None:
             validas.append({"nome": nome, "itens": itens})
     return validas if len(validas) == len(fichas) else None
@@ -184,7 +200,8 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados) -> int:
 
     `dados` = {"nome_treino": str, "montado_por": str,
                "fichas": [{"nome": str, "itens": [{"exercicio_id", "series",
-                           "repeticoes", "carga", "bloco"}]}]}
+                           "repeticoes", "carga" (o "Peso" da tela), "pausa" (intervalo, em
+                           segundos, opcional), "observacao" (opcional), "bloco"}]}]}
     A ordem das fichas e dos exercícios é a ordem das listas. Tudo ou nada: se
     qualquer coisa estiver errada, nada é gravado.
     """
@@ -221,10 +238,10 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados) -> int:
                 ).lastrowid
                 for ordem_item, item in enumerate(ficha["itens"], start=1):
                     conn.execute(
-                        "INSERT INTO ficha_item (ficha_id, ordem, bloco, exercicio_id, series, repeticoes, carga)"
-                        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO ficha_item (ficha_id, ordem, bloco, exercicio_id, series, repeticoes, carga,"
+                        " pausa, observacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (ficha_id, ordem_item, item["bloco"], item["exercicio_id"],
-                         item["series"], item["repeticoes"], item["carga"]),
+                         item["series"], item["repeticoes"], item["carga"], item["pausa"], item["observacao"]),
                     )
     except sqlite3.IntegrityError as erro:
         # Dois "salvar" ao mesmo tempo com o mesmo nome: o índice único do banco barra o segundo.

@@ -160,7 +160,7 @@ def test_pagina_da_ficha_marca_o_que_veio_do_data4u(cliente):
     assert 'class="selo-origem" title="Treino antigo, copiado do Data4U">Data4U</span>' in html
 
 
-def test_pagina_da_ficha_e_uma_tabela_de_treinos_com_o_mais_recente_aberto_e_destacado(cliente):
+def test_pagina_da_ficha_e_uma_tabela_de_treinos_todos_fechados_com_o_mais_recente_destacado(cliente):
     html = cliente.get("/alunos/2").get_data(as_text=True)
 
     # colunas como a aba Treinos do Data4U
@@ -168,9 +168,12 @@ def test_pagina_da_ficha_e_uma_tabela_de_treinos_com_o_mais_recente_aberto_e_des
         assert f"<span>{coluna}</span>" in html
     assert html.count('class="linha-treino') == 2
     assert html.count("Mais recente") == 1  # só o primeiro (o mais novo), nunca o histórico
-    assert re.search(r'<details class="linha-treino treino-recente" open>', html)
+    assert '<details class="linha-treino treino-recente">' in html
+    # pedido do Thiago (08/10): TODOS os treinos vêm fechados, inclusive o mais recente e as fichas dele;
+    # o professor clica no que quer ver
+    assert not re.search(r"<details[^>]*\sopen", html)
     antigo = html[html.index("TREINO ANTIGO") - 400 : html.index("TREINO ANTIGO")]
-    assert "treino-recente" not in antigo and " open" not in antigo.split("<details")[-1]
+    assert "treino-recente" not in antigo
     # o professor e a data do treino aparecem na linha, sem a palavra "Montado por"
     assert 'class="treino-professor">PROF ANA<' in html
     assert 'class="treino-data">01/10/2026<' in html
@@ -233,4 +236,11 @@ def test_cupom_de_item_sem_dose_nao_quebra(conn):
     conteudo = cupom.montar_cupom(conn, 2)
 
     linhas = conteudo["fichas"][0]["linhas"]
-    assert [linha["tipo"] for linha in linhas] == ["exercicio", "dose", "exercicio"]  # o item sem dose nem carga não ganha linha de dose
+    # o item sem dose nem carga não ganha linha de dose (mas a observação dele sai); o primeiro tem
+    # intervalo e observação do Data4U
+    assert [linha["tipo"] for linha in linhas] == ["exercicio", "dose", "detalhe", "detalhe", "exercicio", "detalhe"]
+    assert [linha["esquerda"] for linha in linhas if linha["tipo"] == "detalhe"] == [
+        "INTERVALO: 1 MIN 30 S",
+        "OBS: devagar na descida",
+        "OBS: <script>alert(1)</script>",  # texto puro: a tela escapa na hora de desenhar
+    ]

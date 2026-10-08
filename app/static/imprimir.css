@@ -112,8 +112,9 @@
   text-align: right;
 }
 
-.cupom-aviso {
-  padding-left: calc(1mm + 3ch);
+.cupom-aviso,
+.cupom-detalhe {
+  padding-left: calc(1mm + 3ch); /* intervalo e observação: alinhados com o nome do exercício */
 }
 
 @media print {

@@ -4,8 +4,10 @@
 //
 // Estado:
 //   { proximoUid, proximoBloco,
-//     fichas: [ { nome, itens: [ { uid, exercicioId, nome, series, repeticoes, carga, bloco } ] } ] }
-// ("carga" é o campo "Peso" da tela; o nome interno não muda porque é o do servidor e do banco.)
+//     fichas: [ { nome, itens: [ { uid, exercicioId, nome, series, repeticoes, carga,
+//                                  pausaMin, pausaSeg, observacao, bloco } ] } ] }
+// ("carga" é o campo "Peso" da tela; o nome interno não muda porque é o do servidor e do banco.
+//  O Intervalo é digitado em minutos e segundos, como no Data4U, e vai ao servidor em segundos.)
 // "bloco": itens vizinhos com o mesmo número formam um bi-set (2) ou tri-set (3);
 // null = exercício sozinho.
 
@@ -13,13 +15,17 @@ export const LIMITE_NOME_FICHA = 15; // NM_TREINO_FICHA no Data4U (corta sem avi
 export const LIMITE_CAMPO = 11; // NR_SERIE, DS_REPETICAO, DS_PESO no Data4U
 export const LIMITE_NOME_TREINO = 40; // NM_TREINO no Data4U
 export const LIMITE_QUEM_MONTOU = 60; // limite nosso (o nome de quem montou é digitado)
+export const LIMITE_OBSERVACAO = 200; // limite nosso (a maior observação real do Data4U tem 131 letras)
+export const MAXIMO_PAUSA = 59; // minutos e segundos do intervalo vão de 0 a 59 (máximo 59 min 59 s)
 export const MAXIMO_FICHAS = 26; // uma letra de A a Z para cada
 export const MAXIMO_ITENS_POR_FICHA = 100; // trava de segurança do rascunho, não é regra da academia
 export const MINIMO_NO_BLOCO = 2;
 export const MAXIMO_NO_BLOCO = 3;
 
 const LETRAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const CAMPOS_EDITAVEIS = ["series", "repeticoes", "carga"];
+const CAMPOS_EDITAVEIS = ["series", "repeticoes", "carga", "pausaMin", "pausaSeg", "observacao"];
+// Campos que o rascunho de uma versão anterior da tela não tem: entram vazios.
+const CAMPOS_NOVOS = ["pausaMin", "pausaSeg", "observacao"];
 
 function copiar(estado) {
   return structuredClone(estado);
@@ -79,6 +85,9 @@ export function adicionarItem(estado, f, exercicio) {
     series: "",
     repeticoes: "",
     carga: "",
+    pausaMin: "",
+    pausaSeg: "",
+    observacao: "",
     bloco: null,
   });
   return novo;
@@ -89,8 +98,13 @@ export function atualizarItem(estado, f, uid, campo, valor) {
   const ficha = estado.fichas[f];
   if (!ficha || !ficha.itens.some((i) => i.uid === uid)) return estado;
   const novo = copiar(estado);
-  novo.fichas[f].itens.find((i) => i.uid === uid)[campo] = String(valor);
+  novo.fichas[f].itens.find((i) => i.uid === uid)[campo] = campo.startsWith("pausa") ? soDigitos(valor) : String(valor);
   return novo;
+}
+
+// Minutos e segundos do intervalo: só números, no máximo 2 dígitos.
+function soDigitos(valor) {
+  return String(valor).replace(/\D/g, "").slice(0, 2);
 }
 
 export function removerItem(estado, f, uid) {
@@ -230,6 +244,25 @@ export function descreverFicha(ficha) {
 
 // ------------------------------------------------------------------ validação
 
+// Intervalo (minutos e segundos, de 0 a 59 cada) e observação (opcionais).
+function problemasDoIntervaloEDaObservacao(item, f, rotulo) {
+  const problemas = [];
+  const de = (campo, mensagem) => problemas.push({ ficha: f, uid: item.uid, campo, mensagem: `${rotulo}: ${mensagem}` });
+  for (const [campo, nomeDoCampo] of [["pausaMin", "minutos"], ["pausaSeg", "segundos"]]) {
+    const valor = item[campo].trim();
+    if (valor !== "" && (!/^\d{1,2}$/.test(valor) || Number(valor) > MAXIMO_PAUSA)) {
+      de(campo, `no intervalo de ${item.nome}, os ${nomeDoCampo} vão de 0 a ${MAXIMO_PAUSA}.`);
+    }
+  }
+  const observacao = limparEspacos(item.observacao);
+  if (CARACTERE_INVALIDO.test(observacao)) {
+    de("observacao", `a observação de ${item.nome} tem caracteres inválidos (invisíveis ou de controle).`);
+  } else if (tamanho(observacao) > LIMITE_OBSERVACAO) {
+    de("observacao", `a observação de ${item.nome} tem ${tamanho(observacao)} letras; o máximo é ${LIMITE_OBSERVACAO}.`);
+  }
+  return problemas;
+}
+
 // Lista o que impede de salvar. Cada problema: { ficha, uid, campo, mensagem }
 // (uid = null quando o problema é da ficha toda).
 export function validar(estado) {
@@ -251,6 +284,7 @@ export function validar(estado) {
       problemas.push({ ficha: f, uid: null, campo: "itens", mensagem: `${rotulo}: adicione pelo menos um exercício.` });
     }
     ficha.itens.forEach((item) => {
+      problemas.push(...problemasDoIntervaloEDaObservacao(item, f, rotulo));
       for (const [campo, nomeDoCampo, obrigatorio] of [
         ["series", "séries", true],
         ["repeticoes", "repetições", true],
@@ -280,6 +314,13 @@ export function validar(estado) {
 
 // ------------------------------------------------------------------ envio e rascunho
 
+// Intervalo do exercício em segundos (minutos e segundos digitados), ou null quando não há
+// intervalo (campos vazios ou 0:00). Só chame com valores já conferidos por validar().
+export function pausaEmSegundos(item) {
+  const total = Number(item.pausaMin || 0) * 60 + Number(item.pausaSeg || 0);
+  return total > 0 ? total : null;
+}
+
 // Formato que o servidor vai receber: textos aparados, ordem 1..n e os blocos
 // renumerados 1, 2, 3... em cada ficha.
 export function paraEnvio(estado) {
@@ -302,6 +343,8 @@ export function paraEnvio(estado) {
             series: item.series.trim(),
             repeticoes: item.repeticoes.trim(),
             carga: item.carga.trim(),
+            pausa: pausaEmSegundos(item),
+            observacao: limparEspacos(item.observacao),
           };
         }),
       };
@@ -423,7 +466,7 @@ export function lerRascunho(texto) {
         !uidsVistos.has(i.uid) &&
         ehInteiro(i.exercicioId) &&
         typeof i.nome === "string" &&
-        CAMPOS_EDITAVEIS.every((c) => typeof i[c] === "string") &&
+        CAMPOS_EDITAVEIS.every((c) => typeof i[c] === "string" || (CAMPOS_NOVOS.includes(c) && i[c] === undefined)) &&
         (i.bloco === null || ehInteiro(i.bloco));
       if (!valido) return null;
       uidsVistos.add(i.uid);
@@ -436,6 +479,9 @@ export function lerRascunho(texto) {
         series: i.series,
         repeticoes: i.repeticoes,
         carga: i.carga,
+        pausaMin: i.pausaMin ?? "",
+        pausaSeg: i.pausaSeg ?? "",
+        observacao: i.observacao ?? "",
         bloco: i.bloco,
       });
     }

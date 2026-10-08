@@ -34,6 +34,8 @@
       <div class="cupom-linha cupom-forte cupom-exercicio"><span class="cupom-etiqueta">{{ linha.etiqueta }}</span><span>{{ linha.esquerda }}</span></div>
       {% elif linha.tipo == "dose" %}
       <div class="cupom-linha cupom-dose"><span>{{ linha.esquerda }}</span><span class="cupom-carga">{{ linha.direita }}</span></div>
+      {% elif linha.tipo == "detalhe" %}
+      <div class="cupom-linha cupom-detalhe">{{ linha.esquerda }}</div>
       {% else %}
       <div class="cupom-linha cupom-aviso">{{ linha.esquerda }}</div>
       {% endif %}

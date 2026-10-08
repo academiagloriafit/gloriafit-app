@@ -1,7 +1,7 @@
 // Tela "Lançar treino" do professor. A lógica do treino está em treino_modelo.js
 // (testada à parte); aqui só desenhamos a tela e ligamos os botões.
 // Palavras do Data4U: o TREINO tem um nome e várias FICHAS (A, B, C...); cada ficha
-// tem exercícios com séries, repetições e peso.
+// tem exercícios com séries, repetições, peso, intervalo e observações.
 import { iniciarBiblioteca } from "./biblioteca.js";
 import { iniciarSalvar } from "./salvar.js";
 import * as M from "./treino_modelo.js";
@@ -314,6 +314,56 @@ function campoDePrescricao(item, campo, rotulo) {
   });
 }
 
+// Intervalo em minutos e segundos (como no Data4U). Só aceita números.
+function campoDeIntervalo(item) {
+  const campo = (nomeDoCampo, rotulo, dica) =>
+    el("input", {
+      type: "text",
+      inputmode: "numeric",
+      classe: "campo-prescricao campo-intervalo",
+      maxlength: 2,
+      value: item[nomeDoCampo],
+      placeholder: dica,
+      autocomplete: "off",
+      "aria-label": `Intervalo (${rotulo}) de ${item.nome}`,
+      "data-uid": item.uid,
+      "data-campo": nomeDoCampo,
+      aoDigitar: (evento) => {
+        estado = M.atualizarItem(estado, fichaAtual, item.uid, nomeDoCampo, evento.target.value);
+        // o modelo tira o que não é número: a caixa mostra o que ficou valendo
+        evento.target.value = fichaDaTela().itens.find((i) => i.uid === item.uid)[nomeDoCampo];
+        guardarRascunho();
+        atualizarProblemas();
+      },
+    });
+  return el(
+    "span",
+    { classe: "celula-intervalo", role: "group", "aria-label": `Intervalo de ${item.nome}` },
+    campo("pausaMin", "minutos", "min"),
+    el("span", { classe: "dois-pontos", texto: ":", "aria-hidden": "true" }),
+    campo("pausaSeg", "segundos", "seg"),
+  );
+}
+
+function campoDeObservacao(item) {
+  return el("input", {
+    type: "text",
+    classe: "campo-observacao",
+    maxlength: M.LIMITE_OBSERVACAO,
+    value: item.observacao,
+    placeholder: "Observação (opcional)",
+    autocomplete: "off",
+    "aria-label": `Observação de ${item.nome}`,
+    "data-uid": item.uid,
+    "data-campo": "observacao",
+    aoDigitar: (evento) => {
+      estado = M.atualizarItem(estado, fichaAtual, item.uid, "observacao", evento.target.value);
+      guardarRascunho();
+      atualizarProblemas();
+    },
+  });
+}
+
 function desenharLinha(item, etiqueta, dentroDeBloco) {
   const marcador = dentroDeBloco
     ? el("span", { classe: "celula-vazia" })
@@ -342,13 +392,21 @@ function desenharLinha(item, etiqueta, dentroDeBloco) {
     campoDePrescricao(item, "series", "Séries"),
     campoDePrescricao(item, "repeticoes", "Repetições"),
     campoDePrescricao(item, "carga", "Peso"),
-    el("span", { classe: "celula-acoes" }, [
-      botaoDeAcao("Remover", "Remover " + item.nome, "remover", () => {
-        selecionados.delete(item.uid);
-        mudar(M.removerItem(estado, fichaAtual, item.uid), { tipo: "lista" });
-        anunciar("Removido: " + item.nome);
-      }, false, "botao-texto"),
-    ]),
+    campoDeIntervalo(item),
+    // segunda linha do exercício: observação (opcional) e os botões de mover e remover
+    el(
+      "div",
+      { classe: "linha-segunda" },
+      el("span", { classe: "rotulo-obs", texto: "Obs.", "aria-hidden": "true" }),
+      campoDeObservacao(item),
+      el("span", { classe: "celula-acoes" }, [
+        botaoDeAcao("Remover", "Remover " + item.nome, "remover", () => {
+          selecionados.delete(item.uid);
+          mudar(M.removerItem(estado, fichaAtual, item.uid), { tipo: "lista" });
+          anunciar("Removido: " + item.nome);
+        }, false, "botao-texto"),
+      ]),
+    ),
   );
 }
 
@@ -458,6 +516,7 @@ function desenharMontagem() {
         el("span", { classe: "coluna-pequena", texto: "Séries" }),
         el("span", { classe: "coluna-pequena", texto: "Repetições" }),
         el("span", { classe: "coluna-pequena", texto: "Peso" }),
+        el("span", { classe: "coluna-pequena", texto: "Intervalo" }),
       ),
       ficha.itens.length
         ? desenharLista()

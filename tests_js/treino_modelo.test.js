@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LIMITE_CAMPO,
   LIMITE_NOME_FICHA,
+  LIMITE_OBSERVACAO,
   MAXIMO_FICHAS,
   MAXIMO_ITENS_POR_FICHA,
   adicionarFicha,
@@ -15,6 +16,7 @@ import {
   lerRascunho,
   moverUnidade,
   paraEnvio,
+  pausaEmSegundos,
   removerFicha,
   removerItem,
   renomearFicha,
@@ -128,9 +130,35 @@ describe("exercícios na ficha", () => {
       series: "",
       repeticoes: "",
       carga: "",
+      pausaMin: "",
+      pausaSeg: "",
+      observacao: "",
       bloco: null,
     });
     expect(uids(e)).toEqual([1, 2]);
+  });
+
+  it("o intervalo só aceita números, com no máximo 2 dígitos", () => {
+    let e = comItens(1);
+    e = atualizarItem(e, 0, 1, "pausaMin", "1a");
+    expect(e.fichas[0].itens[0].pausaMin).toBe("1");
+    e = atualizarItem(e, 0, 1, "pausaSeg", "123");
+    expect(e.fichas[0].itens[0].pausaSeg).toBe("12");
+    e = atualizarItem(e, 0, 1, "pausaSeg", "<b>");
+    expect(e.fichas[0].itens[0].pausaSeg).toBe("");
+  });
+
+  it("a observação guarda o texto como foi digitado (a limpeza é no envio)", () => {
+    const e = atualizarItem(comItens(1), 0, 1, "observacao", "  até  a falha ");
+    expect(e.fichas[0].itens[0].observacao).toBe("  até  a falha ");
+  });
+
+  it("pausaEmSegundos converte minutos e segundos", () => {
+    expect(pausaEmSegundos({ pausaMin: "1", pausaSeg: "30" })).toBe(90);
+    expect(pausaEmSegundos({ pausaMin: "", pausaSeg: "45" })).toBe(45);
+    expect(pausaEmSegundos({ pausaMin: "2", pausaSeg: "" })).toBe(120);
+    expect(pausaEmSegundos({ pausaMin: "0", pausaSeg: "0" })).toBeNull();
+    expect(pausaEmSegundos({ pausaMin: "", pausaSeg: "" })).toBeNull();
   });
 
   it("aceita o mesmo exercício duas vezes, com uids diferentes", () => {
@@ -429,6 +457,52 @@ describe("validar", () => {
     expect(problema.mensagem).not.toContain("carga");
   });
 
+  it("intervalo e observação são opcionais", () => {
+    let e = preencher(comItens(1));
+    expect(validar(e)).toEqual([]);
+    e = atualizarItem(e, 0, 1, "pausaMin", "1");
+    e = atualizarItem(e, 0, 1, "observacao", "  ");
+    expect(validar(e)).toEqual([]);
+  });
+
+  it("o intervalo vai de 0 a 59 minutos e de 0 a 59 segundos", () => {
+    expect(LIMITE_OBSERVACAO).toBe(200);
+    const base = preencher(comItens(1));
+    for (const [min, seg] of [["0", "0"], ["59", "59"], ["", "30"], ["2", ""]]) {
+      const ok = atualizarItem(atualizarItem(base, 0, 1, "pausaMin", min), 0, 1, "pausaSeg", seg);
+      expect(validar(ok)).toEqual([]);
+    }
+    const seg60 = validar(atualizarItem(base, 0, 1, "pausaSeg", "60"));
+    expect(seg60).toHaveLength(1);
+    expect(seg60[0]).toMatchObject({ campo: "pausaSeg", uid: 1 });
+    expect(seg60[0].mensagem).toMatch(/segundos vão de 0 a 59/);
+    const min60 = validar(atualizarItem(base, 0, 1, "pausaMin", "60"));
+    expect(min60).toHaveLength(1);
+    expect(min60[0]).toMatchObject({ campo: "pausaMin", uid: 1 });
+  });
+
+  it("intervalo que veio estragado de um rascunho é apontado (só números)", () => {
+    const e = preencher(comItens(1));
+    e.fichas[0].itens[0].pausaSeg = "1a";
+    expect(validar(e).map((p) => p.campo)).toEqual(["pausaSeg"]);
+  });
+
+  it("a observação aceita 200 letras e recusa 201", () => {
+    const base = preencher(comItens(1));
+    expect(validar(atualizarItem(base, 0, 1, "observacao", "x".repeat(LIMITE_OBSERVACAO)))).toEqual([]);
+    const p = validar(atualizarItem(base, 0, 1, "observacao", "x".repeat(LIMITE_OBSERVACAO + 1)));
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatchObject({ campo: "observacao", uid: 1 });
+    expect(p[0].mensagem).toMatch(/201 letras; o máximo é 200/);
+  });
+
+  it("a observação não pode ter caractere invisível ou de controle", () => {
+    const base = preencher(comItens(1));
+    const p = validar(atualizarItem(base, 0, 1, "observacao", "a\u202eb"));
+    expect(p).toHaveLength(1);
+    expect(p[0].campo).toBe("observacao");
+  });
+
   it("aponta o problema na ficha certa", () => {
     let e = preencher(comItens(1));
     e = adicionarFicha(e); // ficha B vazia
@@ -449,9 +523,28 @@ describe("paraEnvio", () => {
     const envio = paraEnvio(e);
     expect(envio.fichas[0]).toMatchObject({ nome: "TREINO A", ordem: 1 });
     expect(envio.fichas[0].itens).toEqual([
-      { exercicio_id: 1, ordem: 1, bloco: null, series: "3", repeticoes: "12", carga: "30 kg" },
-      { exercicio_id: 2, ordem: 2, bloco: null, series: "3", repeticoes: "12", carga: "" },
+      { exercicio_id: 1, ordem: 1, bloco: null, series: "3", repeticoes: "12", carga: "30 kg", pausa: null, observacao: "" },
+      { exercicio_id: 2, ordem: 2, bloco: null, series: "3", repeticoes: "12", carga: "", pausa: null, observacao: "" },
     ]);
+  });
+
+  it("manda o intervalo em segundos e a observação sem espaços sobrando", () => {
+    let e = preencher(comItens(3));
+    e = atualizarItem(e, 0, 1, "pausaMin", "1");
+    e = atualizarItem(e, 0, 1, "pausaSeg", "30");
+    e = atualizarItem(e, 0, 1, "observacao", "  descer   devagar ");
+    e = atualizarItem(e, 0, 2, "pausaSeg", "45"); // só segundos
+    e = atualizarItem(e, 0, 3, "pausaMin", "2"); // só minutos
+    const itens = paraEnvio(e).fichas[0].itens;
+    expect(itens.map((i) => i.pausa)).toEqual([90, 45, 120]);
+    expect(itens[0].observacao).toBe("descer devagar");
+  });
+
+  it("intervalo vazio ou 0:00 vira null (sem intervalo)", () => {
+    let e = preencher(comItens(2));
+    e = atualizarItem(e, 0, 2, "pausaMin", "0");
+    e = atualizarItem(e, 0, 2, "pausaSeg", "00");
+    expect(paraEnvio(e).fichas[0].itens.map((i) => i.pausa)).toEqual([null, null]);
   });
 
   it("renumera os blocos 1, 2, 3... na ordem em que aparecem em cada ficha", () => {
@@ -493,6 +586,23 @@ describe("rascunho", () => {
     expect(uids(depois)).toEqual([1, 2, 3, 4]);
   });
 
+  it("guarda e devolve o intervalo e a observação", () => {
+    let e = comItens(1);
+    e = atualizarItem(e, 0, 1, "pausaMin", "1");
+    e = atualizarItem(e, 0, 1, "pausaSeg", "30");
+    e = atualizarItem(e, 0, 1, "observacao", "descer devagar");
+    const item = lerRascunho(serializar(e)).fichas[0].itens[0];
+    expect([item.pausaMin, item.pausaSeg, item.observacao]).toEqual(["1", "30", "descer devagar"]);
+  });
+
+  it("rascunho de antes do intervalo e da observação ainda abre (os campos entram vazios)", () => {
+    const antigo = JSON.stringify({
+      fichas: [{ nome: "A", itens: [{ uid: 1, exercicioId: 1, nome: "X", series: "3", repeticoes: "10", carga: "", bloco: null }] }],
+    });
+    const item = lerRascunho(antigo).fichas[0].itens[0];
+    expect([item.series, item.pausaMin, item.pausaSeg, item.observacao]).toEqual(["3", "", "", ""]);
+  });
+
   it("desfaz bloco que veio com 1 exercício só", () => {
     const e = comItens(2);
     e.fichas[0].itens[0].bloco = 7;
@@ -518,6 +628,8 @@ describe("rascunho", () => {
     ["bloco zero", comItem({ bloco: 0 })],
     ["bloco texto", comItem({ bloco: "1" })],
     ["nome do exercício ausente", comItem({ nome: undefined })],
+    ["intervalo como número", comItem({ pausaSeg: 30 })],
+    ["observação como lista", comItem({ observacao: ["x"] })],
   ])("rejeita rascunho inválido: %s", (_descricao, texto) => {
     expect(lerRascunho(texto)).toBeNull();
   });

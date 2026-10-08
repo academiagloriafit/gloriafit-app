@@ -14,6 +14,8 @@ O desenho (tela "Impressão" do canvas) é um cupom em letras de máquina de esc
        4 X 12                30 KG
     A2 CRUCIFIXO COM HALTERES
        4 X 12                10 KG
+       INTERVALO: 1 MIN 30 S
+       OBS: DESCER DEVAGAR
        BI-SET: FAÇA A1 E A2 SEGUIDOS
     3  TRICEPS NA POLIA
        3 X 12                25 KG
@@ -26,7 +28,7 @@ app/templates/imprimir.html e app/static/imprimir.css. A conta das etiquetas (A1
 import sqlite3
 
 from app import treinos
-from app.alunos import data_local, etiquetas_dos_itens
+from app.alunos import data_local, etiquetas_dos_itens, texto_da_pausa
 
 NOME_DA_ACADEMIA = "Academia Glória Fit"
 TAMANHO_MAXIMO_DO_ENDERECO = 60  # cabe no cupom sem quebrar o aviso; endereço de app é curto
@@ -48,9 +50,11 @@ def _lista_com_e(etiquetas: list[str]) -> str:
 
 
 def _linhas_da_ficha(itens: list[dict]) -> list[dict]:
-    """Cada linha: {"tipo": "exercicio" | "dose" | "aviso", "etiqueta", "esquerda", "direita"}.
+    """Cada linha: {"tipo": "exercicio" | "dose" | "detalhe" | "aviso", "etiqueta", "esquerda", "direita"}.
 
     "exercicio" = etiqueta + nome; "dose" = séries X repetições à esquerda e carga à direita;
+    "detalhe" = o intervalo ("INTERVALO: 1 MIN 30 S") e a observação ("OBS: ...") do exercício, quando
+    existem (os professores usam os dois, pedido do Thiago em 08/10/2026);
     "aviso" = o lembrete depois do último exercício de um bi-set/tri-set.
     """
     etiquetas = etiquetas_dos_itens(itens)
@@ -60,6 +64,12 @@ def _linhas_da_ficha(itens: list[dict]) -> list[dict]:
         dose, carga = _dose(item), (item["carga"] or "").strip()
         if dose or carga:
             linhas.append({"tipo": "dose", "etiqueta": "", "esquerda": dose, "direita": carga})
+        pausa = texto_da_pausa(item["pausa"])
+        if pausa:
+            linhas.append({"tipo": "detalhe", "etiqueta": "", "esquerda": f"INTERVALO: {pausa.upper()}", "direita": ""})
+        observacao = (item["observacao"] or "").strip()
+        if observacao:
+            linhas.append({"tipo": "detalhe", "etiqueta": "", "esquerda": f"OBS: {observacao}", "direita": ""})
 
         bloco = item["bloco"]
         fim_do_bloco = bloco is not None and (posicao + 1 == len(itens) or itens[posicao + 1]["bloco"] != bloco)

@@ -8,8 +8,9 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 3. **Tela "Lançar treino"** (`/alunos/<id>/montar`), no jeito do Data4U (palavras e fluxo que os
    professores já conhecem, visual mais atual): o **Treino** tem nome e **Professor** no alto, as
    **fichas** (FICHA A, B, C... ou o nome que o professor der, até 15 letras) são abas, e cada ficha
-   é uma tabela de exercícios com séries, repetições e **Peso** (no banco e na API o campo continua
-   `carga`), bi-set e tri-set, conferência dos limites do Data4U. A lista de exercícios fica ao lado
+   é uma tabela de exercícios com séries, repetições, **Peso** (no banco e na API o campo continua
+   `carga`), **Intervalo** (minutos : segundos; vai ao servidor em segundos, campo `pausa`) e
+   **Observações** (texto, até 200 letras), bi-set e tri-set, conferência dos limites do Data4U. A lista de exercícios fica ao lado
    (busca por nome; "Parte do corpo" recolhido). O rascunho (fichas, nome e professor) fica no
    navegador até salvar.
 4. **Salvar treino**: um só botão, **Salvar treino**, sempre à vista no rodapé. O nome do treino vem
@@ -47,7 +48,8 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 7. **Imprimir o treino** (`/treinos/<id>/imprimir`): cupom para a impressora térmica (Bematech
    MP-4200 TH, papel de 80 mm) no formato do desenho: academia, aluno, treino, data, professor e,
    por ficha, os exercícios com etiqueta (A1, A2 de bi-set; 3, 4... dos soltos), séries X
-   repetições, carga e o aviso "BI-SET: FAÇA A1 E A2 SEGUIDOS". O botão **Imprimir na térmica**
+   repetições, carga, "INTERVALO: 1 MIN 30 S", "OBS: ..." (só quando existem) e o aviso
+   "BI-SET: FAÇA A1 E A2 SEGUIDOS". O botão **Imprimir na térmica**
    aparece depois de salvar o treino; em cada treino da ficha do aluno o link se chama **Visualizar e imprimir**. **Testado em 07/10/2026
    na impressora do PC dos professores: imprimiu certo** (segundo o Thiago; ver "Ainda em aberto").
 8. **Proteção da área do professor**: só **computadores autorizados** abrem as telas e a API
@@ -209,7 +211,7 @@ Número inválido em `grupo` ou `limite` devolve erro 400 em JSON.
 
 O servidor **confere tudo de novo** ao salvar (a tela também confere, mas o navegador não é
 confiável): limites do Data4U (nome do treino 40, nome da ficha 15, séries/repetições/carga 11),
-séries e repetições obrigatórias, exercício existente e ativo, bi-set de 2 e tri-set de 3
+séries e repetições obrigatórias, intervalo (`pausa`) de 0 a 3.599 s, observação até 200 letras, exercício existente e ativo, bi-set de 2 e tri-set de 3
 exercícios juntos, `montado_por` obrigatório (até 60), sem caracteres de controle. O nome do
 treino é único por aluno, sem diferenciar maiúscula nem acento (regra do Data4U).
 
@@ -230,7 +232,7 @@ treino é único por aluno, sem diferenciar maiúscula nem acento (regra do Data
 - **Pausa** vem como hora (`00:01:30`) e vira segundos; **observação** do exercício vem sem tags HTML.
 - **Nome repetido:** treino do histórico conta na regra "nome único por aluno" (sem diferenciar maiúscula/acento): se o aluno
   tem um treino antigo "TREINO ABC", o professor não consegue salvar outro novo com o mesmo nome (recebe o aviso 409 e escolhe outro).
-- **Impressão:** o cupom da térmica mostra séries × repetições e carga; **não imprime a observação** do exercício (a observação só aparece na ficha na tela; limite conhecido, não foi pedido).
+- **Impressão:** o cupom da térmica mostra séries × repetições, carga, intervalo e observação do exercício (desde 08/10/2026, a pedido do Thiago: os professores usam os dois).
 - **Tamanho e tempo:** pacote de ~8,7 MB; o servidor leva 2 a 2,5 s e fica com o banco travado para gravar nesse tempo
   (quem salva treino exatamente nesse momento espera um pouco; o tempo de espera é 5 s).
 - **Modo teste:** abrir `/alunos/atualizar?simular_treinos=1`: o servidor faz toda a importação e **desfaz**, devolvendo as contagens
