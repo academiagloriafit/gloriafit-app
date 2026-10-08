@@ -44,11 +44,12 @@ def exercicios(conn):
     ]
 
 
-def _treino(conn, aluno_id, nome, criado_em, montado_por="Ana", fichas=()):
-    """fichas: [(nome_da_ficha, [(exercicio_id, bloco, series, reps, carga)])]"""
+def _treino(conn, aluno_id, nome, criado_em, montado_por="Ana", fichas=(), ativo=0):
+    """fichas: [(nome_da_ficha, [(exercicio_id, bloco, series, reps, carga)])]
+    ativo=0 por padrão: só um treino por aluno pode ser ativo."""
     treino_id = conn.execute(
-        "INSERT INTO treino (aluno_id, nome, montado_por, criado_em) VALUES (?, ?, ?, ?)",
-        (aluno_id, nome, montado_por, criado_em),
+        "INSERT INTO treino (aluno_id, nome, montado_por, criado_em, ativo) VALUES (?, ?, ?, ?, ?)",
+        (aluno_id, nome, montado_por, criado_em, ativo),
     ).lastrowid
     for ordem, (nome_ficha, itens) in enumerate(fichas, start=1):
         ficha_id = conn.execute(

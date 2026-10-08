@@ -46,10 +46,16 @@ def caminho(tmp_path):
     conn.execute("INSERT INTO aluno (id, nome, data4u_id, situacao) VALUES (3, 'CARLA FICTICIA', 103, 'A')")  # sem treino
     conn.execute("INSERT INTO aluno (id, nome, provisorio) VALUES (4, 'DANI PROVISORIA', 1)")  # provisório, sem treino
     # histórico antigo da Ana (2 treinos) e do Bruno (1)
-    for treino_id, aluno, nome, data, data4u in [(1, 1, "TREINO 2021", "2021-03-02 17:00:00", 11), (2, 1, "TREINO 2022", "2022-05-10 12:00:00", 12), (3, 2, "TREINO ANTIGO", "2020-01-01 12:00:00", 13)]:
+    # (só o mais recente de cada aluno é ativo: regra do app desde a versão 6 do banco)
+    for treino_id, aluno, nome, data, data4u, ativo in [
+        (1, 1, "TREINO 2021", "2021-03-02 17:00:00", 11, 0),
+        (2, 1, "TREINO 2022", "2022-05-10 12:00:00", 12, 1),
+        (3, 2, "TREINO ANTIGO", "2020-01-01 12:00:00", 13, 0),
+    ]:
         conn.execute(
-            "INSERT INTO treino (id, aluno_id, nome, montado_por, origem, data4u_id, criado_em) VALUES (?, ?, ?, 'PROF ANA', 'data4u', ?, ?)",
-            (treino_id, aluno, nome, data4u, data),
+            "INSERT INTO treino (id, aluno_id, nome, montado_por, origem, data4u_id, criado_em, ativo)"
+            " VALUES (?, ?, ?, 'PROF ANA', 'data4u', ?, ?, ?)",
+            (treino_id, aluno, nome, data4u, data, ativo),
         )
     # treino do Bruno montado no app, mais recente que o histórico
     conn.execute(
@@ -160,31 +166,34 @@ def test_pagina_da_ficha_marca_o_que_veio_do_data4u(cliente):
     assert 'class="selo-origem" title="Treino antigo, copiado do Data4U">Data4U</span>' in html
 
 
-def test_pagina_da_ficha_e_uma_tabela_de_treinos_todos_fechados_com_o_mais_recente_destacado(cliente):
+def test_pagina_da_ficha_e_uma_tabela_de_treinos_todos_fechados_com_o_ativo_destacado(cliente):
     html = cliente.get("/alunos/2").get_data(as_text=True)
 
     # colunas como a aba Treinos do Data4U
-    for coluna in ("Treino", "Data", "Fichas", "Professor"):
+    for coluna in ("Treino", "Início", "Fim", "Sessões", "Situação", "Professor"):
         assert f"<span>{coluna}</span>" in html
     assert html.count('class="linha-treino') == 2
-    assert html.count("Mais recente") == 1  # só o primeiro (o mais novo), nunca o histórico
-    assert '<details class="linha-treino treino-recente">' in html
-    # pedido do Thiago (08/10): TODOS os treinos vêm fechados, inclusive o mais recente e as fichas dele;
+    assert html.count("Mais recente") == 0  # a marca agora é a Situação (Ativo/Inativo)
+    assert '<details class="linha-treino treino-ativo">' in html
+    assert '<details class="linha-treino treino-inativo">' in html
+    # pedido do Thiago (08/10): TODOS os treinos vêm fechados, inclusive o ativo e as fichas dele;
     # o professor clica no que quer ver
     assert not re.search(r"<details[^>]*\sopen", html)
     antigo = html[html.index("TREINO ANTIGO") - 400 : html.index("TREINO ANTIGO")]
-    assert "treino-recente" not in antigo
-    # o professor e a data do treino aparecem na linha, sem a palavra "Montado por"
+    assert "treino-ativo" not in antigo
+    # o professor, o início e a situação aparecem na linha, sem a palavra "Montado por" na tabela
     assert 'class="treino-professor">PROF ANA<' in html
-    assert 'class="treino-data">01/10/2026<' in html
+    assert 'class="treino-inicio">01/10/2026<' in html
     assert "Montado por" not in html
+    assert html.count("selo-treino-ativo") == 1 and html.count("selo-treino-inativo") == 1
 
 
-def test_pagina_da_ficha_so_com_historico_tambem_destaca_o_mais_recente(cliente):
+def test_pagina_da_ficha_so_com_historico_destaca_o_ativo_e_nao_avisa_troca(cliente):
     html = cliente.get("/alunos/1").get_data(as_text=True)
 
-    assert html.count("Mais recente") == 1
-    assert html.index("TREINO 2022") < html.index("Mais recente") < html.index("TREINO 2021")
+    assert html.count('class="linha-treino treino-ativo"') == 1
+    assert html.index("TREINO 2022") < html.index("selo-treino-ativo") < html.index("TREINO 2021")
+    assert "Hora de trocar" not in html
 
 
 def test_pagina_da_ficha_mostra_dose_carga_pausa_e_observacao(cliente):

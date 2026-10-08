@@ -17,6 +17,9 @@ export const LIMITE_NOME_TREINO = 40; // NM_TREINO no Data4U
 export const LIMITE_QUEM_MONTOU = 60; // limite nosso (o nome de quem montou é digitado)
 export const LIMITE_OBSERVACAO = 200; // limite nosso (a maior observação real do Data4U tem 131 letras)
 export const MAXIMO_PAUSA = 59; // minutos e segundos do intervalo vão de 0 a 59 (máximo 59 min 59 s)
+export const MAXIMO_SESSOES_POR_FICHA = 999; // "Treinos por ficha": quantas vezes o aluno faz CADA ficha
+export const ANO_MINIMO_DO_TREINO = 2020; // início/fim fora destes anos é erro de digitação
+export const ANO_MAXIMO_DO_TREINO = 2100;
 export const MAXIMO_FICHAS = 26; // uma letra de A a Z para cada
 export const MAXIMO_ITENS_POR_FICHA = 100; // trava de segurança do rascunho, não é regra da academia
 export const MINIMO_NO_BLOCO = 2;
@@ -397,9 +400,32 @@ export function sugerirNomeDoTreino(estado, dataTexto) {
   return (cortada + sufixo).trim();
 }
 
-// Confere os dois campos que o professor preenche ao salvar. Cada problema:
-// { campo: "nome-treino" | "quem-montou", mensagem }.
-export function validarDadosDoTreino({ nomeTreino, montadoPor }) {
+// 'AAAA-MM-DD' (o que o campo de data entrega) -> o texto de volta se for uma data de verdade nos anos
+// aceitos (2026-02-30 não é), senão null. Só algarismos comuns: é o mesmo rigor do servidor.
+export function lerDia(texto) {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof texto === "string" ? texto : "");
+  if (!partes) return null;
+  const [ano, mes, dia] = [Number(partes[1]), Number(partes[2]), Number(partes[3])];
+  if (ano < ANO_MINIMO_DO_TREINO || ano > ANO_MAXIMO_DO_TREINO) return null;
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  const confere = data.getUTCFullYear() === ano && data.getUTCMonth() === mes - 1 && data.getUTCDate() === dia;
+  return confere ? texto : null;
+}
+
+// "Treinos por ficha": vazio (sem meta) ou um inteiro de 1 a 999. Devolve o número, null (vazio) ou
+// undefined (inválido).
+export function lerSessoesPorFicha(texto) {
+  const limpo = limparEspacos(texto ?? "");
+  if (limpo === "") return null;
+  if (!/^\d{1,3}$/.test(limpo)) return undefined;
+  const n = Number(limpo);
+  return n >= 1 && n <= MAXIMO_SESSOES_POR_FICHA ? n : undefined;
+}
+
+// Confere os campos do alto que o professor preenche ao salvar. Cada problema:
+// { campo: "nome-treino" | "quem-montou" | "data-inicio" | "data-fim" | "sessoes-por-ficha", mensagem }.
+// `inicio` e `fim` são 'AAAA-MM-DD' (ou vazio); `sessoesPorFicha` é o texto do campo.
+export function validarDadosDoTreino({ nomeTreino, montadoPor, inicio = "", fim = "", sessoesPorFicha = "" }) {
   const problemas = [];
   const confere = (campo, valor, vazio, nomeDoCampo, maximo, aviso) => {
     const limpo = limparEspacos(valor);
@@ -413,14 +439,34 @@ export function validarDadosDoTreino({ nomeTreino, montadoPor }) {
   };
   confere("nome-treino", nomeTreino, "Dê um nome ao treino.", "O nome do treino", LIMITE_NOME_TREINO, " (limite do Data4U)");
   confere("quem-montou", montadoPor, "Informe o professor que montou o treino.", "O nome do professor", LIMITE_QUEM_MONTOU, "");
+
+  const anos = `de ${ANO_MINIMO_DO_TREINO} a ${ANO_MAXIMO_DO_TREINO}`;
+  const diaInicio = lerDia(inicio);
+  if (!inicio) problemas.push({ campo: "data-inicio", mensagem: "Informe a data de início do treino." });
+  else if (!diaInicio) problemas.push({ campo: "data-inicio", mensagem: `A data de início é inválida (anos ${anos}).` });
+  const diaFim = lerDia(fim);
+  if (fim && !diaFim) problemas.push({ campo: "data-fim", mensagem: `A data do fim é inválida (anos ${anos}).` });
+  else if (diaInicio && diaFim && diaFim < diaInicio) {
+    // 'AAAA-MM-DD' compara como texto
+    problemas.push({ campo: "data-fim", mensagem: "A data do fim não pode ser antes da data do início." });
+  }
+  if (lerSessoesPorFicha(sessoesPorFicha) === undefined) {
+    problemas.push({
+      campo: "sessoes-por-ficha",
+      mensagem: `Treinos por ficha: digite um número inteiro de 1 a ${MAXIMO_SESSOES_POR_FICHA}, ou deixe em branco.`,
+    });
+  }
   return problemas;
 }
 
 // O pedido completo que vai para o servidor ao salvar.
-export function montarPedido(estado, { nomeTreino, montadoPor }) {
+export function montarPedido(estado, { nomeTreino, montadoPor, inicio = "", fim = "", sessoesPorFicha = "" }) {
   return {
     nome_treino: limparEspacos(nomeTreino),
     montado_por: limparEspacos(montadoPor),
+    inicio: inicio || null,
+    fim: fim || null,
+    sessoes_por_ficha: lerSessoesPorFicha(sessoesPorFicha) ?? null,
     fichas: paraEnvio(estado).fichas,
   };
 }

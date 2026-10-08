@@ -16,6 +16,10 @@ const elProblemas = document.getElementById("problemas");
 const elAviso = document.getElementById("aviso");
 const campoNome = document.getElementById("nome-treino");
 const campoQuem = document.getElementById("quem-montou");
+const campoInicio = document.getElementById("data-inicio"); // o servidor já o preenche com a data de hoje
+const campoFim = document.getElementById("data-fim");
+const campoSessoes = document.getElementById("sessoes-por-ficha");
+const camposDoAlto = [campoNome, campoQuem, campoInicio, campoFim, campoSessoes];
 const dicaNome = document.getElementById("dica-nome-treino");
 const botaoSalvar = document.getElementById("salvar");
 const botaoCancelar = document.getElementById("cancelar");
@@ -55,7 +59,15 @@ function guardarRascunho() {
     sessionStorage.setItem(CHAVE_RASCUNHO, M.serializar(estado));
     sessionStorage.setItem(
       CHAVE_DADOS,
-      JSON.stringify({ nome: campoNome.value, editado: nomeEditadoPeloProfessor, professor: campoQuem.value }),
+      JSON.stringify({
+        nome: campoNome.value,
+        editado: nomeEditadoPeloProfessor,
+        professor: campoQuem.value,
+        // o início só é guardado se o professor mudou: senão, num rascunho de ontem, "hoje" ficaria velho
+        inicio: campoInicio.value !== campoInicio.defaultValue ? campoInicio.value : null,
+        fim: campoFim.value,
+        sessoes: campoSessoes.value,
+      }),
     );
   } catch {
     /* sem armazenamento: segue sem rascunho */
@@ -73,6 +85,10 @@ function lerDadosGuardados() {
       campoNome.value = dados.nome.slice(0, 40);
       nomeEditadoPeloProfessor = true;
     }
+    // datas: o próprio campo de data recusa um texto que não seja uma data (fica vazio)
+    if (typeof dados.inicio === "string") campoInicio.value = dados.inicio.slice(0, 10);
+    if (typeof dados.fim === "string") campoFim.value = dados.fim.slice(0, 10);
+    if (typeof dados.sessoes === "string") campoSessoes.value = dados.sessoes.slice(0, 3);
   } catch {
     /* sem rascunho dos dados: campos começam em branco */
   }
@@ -143,12 +159,19 @@ campoNome.addEventListener("input", () => {
   guardarRascunho();
   atualizarProblemas();
 });
-campoQuem.addEventListener("input", () => {
-  guardarRascunho();
-  atualizarProblemas();
+for (const campo of [campoQuem, campoInicio, campoFim, campoSessoes]) {
+  campo.addEventListener("input", () => {
+    guardarRascunho();
+    atualizarProblemas();
+  });
+}
+// Treinos por ficha: só algarismos (o servidor confere de novo)
+campoSessoes.addEventListener("input", () => {
+  const limpo = campoSessoes.value.replace(/[^0-9]/g, "").slice(0, 3);
+  if (limpo !== campoSessoes.value) campoSessoes.value = limpo;
 });
-for (const campo of [campoNome, campoQuem]) {
-  // Enter nestes dois campos salva, como no botão (os campos de uma linha só)
+for (const campo of [campoNome, campoQuem, campoSessoes]) {
+  // Enter nestes campos salva, como no botão (os campos de uma linha só)
   campo.addEventListener("keydown", (evento) => {
     if (evento.key === "Enter" && !evento.isComposing) {
       evento.preventDefault();
@@ -527,10 +550,21 @@ function desenharMontagem() {
 
 // ------------------------------------------------------------------ problemas (botão "Salvar treino")
 
+// O que está nos campos do alto, como o modelo (treino_modelo.js) espera.
+function dadosDoAlto() {
+  return {
+    nomeTreino: campoNome.value,
+    montadoPor: campoQuem.value,
+    inicio: campoInicio.value,
+    fim: campoFim.value,
+    sessoesPorFicha: campoSessoes.value,
+  };
+}
+
 // Tudo o que impede de salvar, na ordem da tela: nome do treino e professor (no alto),
 // depois as fichas, e por fim o que o servidor recusou.
 function listarProblemas() {
-  const dados = M.validarDadosDoTreino({ nomeTreino: campoNome.value, montadoPor: campoQuem.value });
+  const dados = M.validarDadosDoTreino(dadosDoAlto());
   return [
     ...dados.map((p) => ({ tipo: "dados", campo: p.campo, mensagem: p.mensagem })),
     ...M.validar(estado).map((p) => ({ tipo: "ficha", ...p })),
@@ -553,8 +587,8 @@ function atualizarProblemas() {
   const fichasComProblema = new Set(problemas.filter((p) => p.tipo === "ficha").map((p) => p.ficha));
   elAbas.querySelectorAll(".aba:not(.aba-nova)").forEach((aba, i) => aba.classList.toggle("aba-com-problema", fichasComProblema.has(i)));
 
-  // campos do alto (nome do treino e professor)
-  for (const campo of [campoNome, campoQuem]) {
+  // campos do alto (nome do treino, professor, início, fim, treinos por ficha)
+  for (const campo of camposDoAlto) {
     const ruim = problemas.some((p) => p.tipo !== "ficha" && p.campo === campo.id);
     if (ruim) campo.setAttribute("aria-invalid", "true");
     else campo.removeAttribute("aria-invalid");
@@ -577,7 +611,7 @@ const salvar = iniciarSalvar({
   alunoId: raiz.dataset.aluno,
   alunoNome: document.querySelector(".aluno-nome strong").textContent,
   obterEstado: () => estado,
-  obterDados: () => ({ nomeTreino: campoNome.value, montadoPor: campoQuem.value }),
+  obterDados: dadosDoAlto,
   aoSalvar: apagarRascunho,
   aoTravar: (travado) => {
     areaMontagem.inert = travado; // nada se edita enquanto o servidor responde
@@ -618,7 +652,14 @@ botaoSalvar.addEventListener("click", () => {
 });
 
 function temAlgoParaPerder() {
-  return estado.fichas.some((f) => f.itens.length > 0) || campoQuem.value.trim() !== "" || nomeEditadoPeloProfessor;
+  return (
+    estado.fichas.some((f) => f.itens.length > 0) ||
+    campoQuem.value.trim() !== "" ||
+    nomeEditadoPeloProfessor ||
+    campoFim.value !== "" ||
+    campoSessoes.value !== "" ||
+    campoInicio.value !== campoInicio.defaultValue
+  );
 }
 
 function voltarParaAFicha() {

@@ -189,3 +189,32 @@ def test_pedido_montado_pelo_navegador_com_intervalo_e_observacao_e_gravado_pelo
     itens = treinos.obter_treino(conn, treino_id)["fichas"][0]["itens"]
     assert [(i["pausa"], i["observacao"]) for i in itens] == [(90, "descer devagar"), (None, None)]
     conn.close()
+
+
+def test_pedido_com_inicio_fim_e_meta_montado_pelo_navegador_e_gravado_pelo_servidor():
+    """Início, fim e "treinos por ficha" que a tela manda são exatamente o que o servidor aceita e grava."""
+    pedido = _node(f"""
+        import * as M from "{MODELO_DO_TREINO}";
+        let e = M.criarEstado();
+        e = M.adicionarItem(e, 0, {{ id: 1, nome: "SUPINO" }});
+        e = M.atualizarItem(e, 0, 1, "series", "3");
+        e = M.atualizarItem(e, 0, 1, "repeticoes", "12");
+        const dados = {{ nomeTreino: "TREINO A", montadoPor: "Ana Paula", inicio: "2026-10-10", fim: "2026-12-31", sessoesPorFicha: " 15 " }};
+        if (M.validarDadosDoTreino(dados).length) throw new Error("a tela recusaria estes dados");
+        const vazio = {{ nomeTreino: "TREINO B", montadoPor: "Ana Paula", inicio: "2026-10-10", fim: "", sessoesPorFicha: "" }};
+        console.log(JSON.stringify([M.montarPedido(e, dados), M.montarPedido(e, vazio)]));
+    """)
+    conn = conectar()
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ALUNO')")
+    conn.execute("INSERT INTO exercicio (id, nome, origem, ativo) VALUES (1, 'SUPINO', 'app', 1)")
+
+    primeiro = treinos.salvar_treino(conn, 1, pedido[0])
+    segundo = treinos.salvar_treino(conn, 1, pedido[1])  # fim e meta vazios: o servidor aceita os null
+
+    linhas = conn.execute("SELECT id, inicio, fim, sessoes_por_ficha, ativo FROM treino ORDER BY id").fetchall()
+    assert [tuple(l) for l in linhas] == [
+        (primeiro, "2026-10-10", "2026-12-31", 15, 0),  # o segundo treino concluiu o primeiro
+        (segundo, "2026-10-10", None, None, 1),
+    ]
+    conn.close()

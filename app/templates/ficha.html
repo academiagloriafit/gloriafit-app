@@ -27,26 +27,58 @@
           <a class="botao-link botao-link-forte" href="{{ url_for('pagina_montar', aluno_id=ficha.id) }}">Lançar treino</a>
         </div>
 
+        {% if ficha.aviso_de_troca %}
+        <p class="aviso-troca aviso-troca-ficha" role="alert">
+          <strong>{{ ficha.aviso_de_troca }}</strong>
+          Clique em "Lançar treino" para montar o próximo (o atual será concluído) ou em "Concluído" dentro do treino.
+        </p>
+        {% endif %}
+
         {% if ficha.treinos %}
         <div class="titulos-treinos" aria-hidden="true">
-          <span>Treino</span><span>Data</span><span>Fichas</span><span>Professor</span>
+          <span>Treino</span><span>Início</span><span>Fim</span><span>Sessões</span><span>Situação</span><span>Professor</span>
         </div>
         {% endif %}
         {% for treino in ficha.treinos %}
         {# Todos os treinos vêm fechados (pedido do Thiago, 08/10): o professor clica no que quer ver.
-           O mais recente só fica destacado, com o selo "Mais recente". #}
-        <details class="linha-treino{% if loop.first %} treino-recente{% endif %}">
+           O treino ATIVO (só um por aluno) fica destacado; os inativos são o histórico, que o aluno não vê. #}
+        <details class="linha-treino {{ 'treino-ativo' if treino.ativo else 'treino-inativo' }}">
           <summary class="resumo-treino">
-            <span class="treino-nome">{{ treino.nome }}{% if loop.first %} <span class="selo-recente">Mais recente</span>{% endif %}{% if treino.do_data4u %} <span class="selo-origem" title="Treino antigo, copiado do Data4U">Data4U</span>{% endif %}</span>
-            <span class="treino-data">{{ treino.criado_em }}</span>
-            <span class="treino-fichas">{{ treino.fichas | length }}</span>
+            <span class="treino-nome"><span class="treino-titulo">{{ treino.nome }}</span>{% if treino.do_data4u %}<span class="selo-origem" title="Treino antigo, copiado do Data4U">Data4U</span>{% endif %}</span>
+            <span class="treino-inicio">{{ treino.inicio or "–" }}</span>
+            <span class="treino-fim">{{ treino.fim or "–" }}</span>
+            <span class="treino-sessoes">{{ treino.sessoes_texto }}</span>
+            <span class="treino-situacao">
+              <span class="selo-treino {{ 'selo-treino-ativo' if treino.ativo else 'selo-treino-inativo' }}">{{ "Ativo" if treino.ativo else "Inativo" }}</span>
+              {% if treino.trocar %}<span class="selo-treino selo-treino-trocar">Trocar</span>{% endif %}
+            </span>
             <span class="treino-professor">{{ treino.montado_por }}</span>
           </summary>
           <div class="treino-conteudo">
-            <p class="acoes-treino"><a class="botao-link" href="{{ url_for('pagina_imprimir_treino', treino_id=treino.id) }}">Visualizar e imprimir</a></p>
+            <p class="acoes-treino">
+              <a class="botao-link" href="{{ url_for('pagina_imprimir_treino', treino_id=treino.id) }}">Visualizar e imprimir</a>
+              {% if treino.ativo %}
+              <button type="button" class="botao-link botao-concluir" data-treino="{{ treino.id }}">Concluído</button>
+              {% elif not ficha.tem_treino_ativo %}
+              <button type="button" class="botao-link botao-reativar" data-treino="{{ treino.id }}">Reativar</button>
+              {% endif %}
+              <span class="confirmacao confirmar-concluir" hidden>
+                <span>Concluir este treino? Ele vai para o histórico e o aluno deixa de vê-lo.</span>
+                <button type="button" class="botao-perigo sim-concluir" data-treino="{{ treino.id }}">Sim, concluir</button>
+                <button type="button" class="botao-discreto nao-concluir">Não</button>
+              </span>
+              <span class="aviso-acao" role="status"></span>
+            </p>
+            <p class="dados-do-treino">
+              Montado em {{ treino.criado_em }}{% if treino.concluido_em %} · Concluído em {{ treino.concluido_em }}{% endif %}
+              {% if treino.sessoes_por_ficha %} · Meta: {{ treino.sessoes_por_ficha }} treinos por ficha{% endif %}
+            </p>
             {% for f in treino.fichas %}
             <details class="ficha-detalhe">
-              <summary><span class="ficha-nome">{{ f.nome }}</span><span class="ficha-resumo">{{ f.resumo }}</span></summary>
+              <summary>
+                <span class="ficha-nome">{{ f.nome }}</span><span class="ficha-resumo">{{ f.resumo }}</span>
+                {% if f.meta %}<span class="ficha-sessoes">{{ f.feitas }} / {{ f.meta }} treinos</span>{% endif %}
+              </summary>
               <ol class="itens-ficha">
                 {% for item in f.itens %}
                 <li>
@@ -95,5 +127,6 @@
   </main>
 
   <script type="module" src="{{ url_for('static', filename='ficha.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='ciclo_ficha.js') }}"></script>
 </body>
 </html>

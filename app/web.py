@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app import acesso, alunos, cupom, db, exercicios, importar_alunos, importar_treinos, provisorios, treinos
+from app import acesso, alunos, ciclo, cupom, datas, db, exercicios, importar_alunos, importar_treinos, provisorios, treinos
 
 
 # Um treino enorme (26 fichas x 100 exercícios) tem poucas dezenas de KB. Acima disto o
@@ -295,6 +295,8 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         return render_template(
             "montar.html",
             aluno=aluno,
+            treino_ativo=ciclo.treino_ativo(conn, aluno_id),  # o aviso "será concluído ao salvar"
+            hoje=datas.hoje(),
             grupos=exercicios.listar_grupos(conn),
             total_exercicios=exercicios.contar_exercicios(conn),
         )
@@ -402,15 +404,44 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.post("/api/alunos/<int:aluno_id>/treinos")
     def api_salvar_treino(aluno_id: int):
-        """Grava um treino novo para o aluno. Corpo: JSON (ver treinos.salvar_treino)."""
+        """Grava um treino novo para o aluno. Corpo: JSON (ver treinos.salvar_treino).
+
+        Se o aluno já tinha um treino ativo, ele é concluído na mesma gravação; a resposta traz o nome
+        dele em `concluido_anterior` (ou null) para a tela avisar o professor."""
         dados = corpo_json()
+        conn = conexao()
+        anterior = ciclo.treino_ativo(conn, aluno_id)  # só para o aviso: quem decide é o salvar_treino
         try:
-            treino_id = treinos.salvar_treino(conexao(), aluno_id, dados)
+            treino_id = treinos.salvar_treino(conn, aluno_id, dados)
         except treinos.AlunoNaoEncontrado:
             return jsonify(erro="Aluno não encontrado."), 404
         except treinos.TreinoInvalido as erro:
             return jsonify(erros=erro.problemas), erro.status
-        return jsonify(id=treino_id), 201
+        return jsonify(id=treino_id, concluido_anterior=anterior["nome"] if anterior else None), 201
+
+    @app.post("/api/treinos/<int:treino_id>/concluir")
+    def api_concluir_treino(treino_id: int):
+        """Botão "Concluído": o treino vira inativo e entra no histórico do aluno."""
+        corpo_json()  # o corpo é vazio ({}), mas o pedido precisa ser JSON como os outros
+        try:
+            ciclo.concluir_treino(conexao(), treino_id)
+        except ciclo.TreinoNaoEncontrado:
+            return jsonify(erro="Treino não encontrado."), 404
+        except ciclo.CicloInvalido as erro:
+            return jsonify(erro=erro.mensagem), 409
+        return jsonify(ok=True)
+
+    @app.post("/api/treinos/<int:treino_id>/reativar")
+    def api_reativar_treino(treino_id: int):
+        """Desfaz o "Concluído": o treino volta a ser o ativo (só se o aluno não tem outro ativo)."""
+        corpo_json()
+        try:
+            ciclo.reativar_treino(conexao(), treino_id)
+        except ciclo.TreinoNaoEncontrado:
+            return jsonify(erro="Treino não encontrado."), 404
+        except ciclo.CicloInvalido as erro:
+            return jsonify(erro=erro.mensagem), 409
+        return jsonify(ok=True)
 
     @app.post("/api/alunos/<int:aluno_id>/whatsapp")
     def api_corrigir_whatsapp(aluno_id: int):

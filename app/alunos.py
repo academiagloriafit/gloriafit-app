@@ -8,9 +8,9 @@ WhatsApp, corrigimos o número.
 import re
 import sqlite3
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
-from app import treinos
+from app import ciclo, treinos
+from app.datas import FUSO_DA_ACADEMIA, formatar_dia, hoje  # noqa: F401 - outros módulos importam FUSO_DA_ACADEMIA daqui
 from app.exercicios import _escapar_like
 from app.texto import normalizar
 from app.treinos import AlunoNaoEncontrado
@@ -31,10 +31,6 @@ SITUACOES = {
     "I": "Inativo",
     "C": "Cancelado",
 }
-
-# O banco guarda as datas em UTC (datetime('now')). Na tela, hora de Brasília:
-# uma ficha montada às 23h30 de 06/10 não pode aparecer como 07/10.
-FUSO_DA_ACADEMIA = ZoneInfo("America/Sao_Paulo")
 
 # Só estes caracteres são aceitos ao digitar um WhatsApp: números e os enfeites comuns.
 # [0-9] e não \d: \d também aceita algarismos de outros alfabetos (como "２７" em largura
@@ -230,8 +226,19 @@ def _resumo_da_ficha(itens: list[dict]) -> str:
     return ", ".join(partes)
 
 
+def texto_das_sessoes(feitas: int, meta_total: int | None) -> str:
+    """A coluna "Sessões" da lista de treinos: '3 / 45' (feitas / meta de todas as fichas); sem meta, só o que foi feito."""
+    if meta_total:
+        return f"{feitas} / {meta_total}"
+    return str(feitas) if feitas else "–"
+
+
 def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
-    """O aluno com seus treinos salvos (mais novo primeiro), ou None se não existe."""
+    """O aluno com seus treinos salvos (mais novo primeiro), ou None se não existe.
+
+    Cada treino leva o andamento do ciclo (início, fim, sessões feitas, se está na hora de trocar); a ficha
+    leva `aviso_de_troca` (frase pronta, vazia se não for hora) e `tem_treino_ativo`.
+    """
     aluno = conn.execute(
         "SELECT id, nome, cpf, whatsapp, whatsapp_corrigido_no_app, data4u_id, situacao, provisorio"
         " FROM aluno WHERE id = ?",
@@ -247,16 +254,32 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
         )
     ]
     lista_de_treinos = []
+    sessoes_do_aluno = ciclo.sessoes_feitas_do_aluno(conn, aluno_id)
+    hoje_texto = hoje()
+    aviso_de_troca = ""
     for treino_id in ids:
         treino = treinos.obter_treino(conn, treino_id)
+        meta = treino["sessoes_por_ficha"]
+        avaliacao = ciclo.avaliar_ciclo(
+            ativo=bool(treino["ativo"]),
+            quantidade_de_fichas=len(treino["fichas"]),
+            sessoes_por_ficha=meta,
+            fim=treino["fim"],
+            feitas_por_ficha=sessoes_do_aluno.get(treino_id, {}),
+            hoje_texto=hoje_texto,
+        )
+        if avaliacao["trocar"]:
+            aviso_de_troca = ciclo.texto_do_aviso_de_troca(treino["nome"], avaliacao, meta, treino["fim"])
         fichas = []
-        for ficha in treino["fichas"]:
+        for ficha, andamento in zip(treino["fichas"], avaliacao["por_ficha"]):
             itens = ficha["itens"]
             etiquetas = etiquetas_dos_itens(itens)
             fichas.append(
                 {
                     "nome": ficha["nome"],
                     "resumo": _resumo_da_ficha(itens),
+                    "feitas": andamento["feitas"],
+                    "meta": meta,
                     "itens": [
                         {
                             **item,
@@ -275,6 +298,14 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
                 "montado_por": treino["montado_por"],
                 "do_data4u": treino["origem"] == "data4u",
                 "criado_em": data_local(treino["criado_em"]),
+                "ativo": bool(treino["ativo"]),
+                # sem início gravado (não acontece pelo app), vale o dia do lançamento, como na migração
+                "inicio": formatar_dia(treino["inicio"]) or data_local(treino["criado_em"]),
+                "fim": formatar_dia(treino["fim"]),
+                "concluido_em": data_local(treino["concluido_em"]),
+                "sessoes_por_ficha": meta,
+                "sessoes_texto": texto_das_sessoes(avaliacao["feitas"], avaliacao["meta_total"]),
+                "trocar": avaliacao["trocar"],
                 "fichas": fichas,
             }
         )
@@ -290,6 +321,8 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
         "situacao_nome": SITUACOES.get(aluno["situacao"]),
         "provisorio": bool(aluno["provisorio"]),
         "treinos": lista_de_treinos,
+        "tem_treino_ativo": any(t["ativo"] for t in lista_de_treinos),
+        "aviso_de_troca": aviso_de_troca,
     }
 
 

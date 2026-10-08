@@ -215,6 +215,20 @@ button { font-family: inherit; }
 .cartao { background: var(--branco); border: 1px solid var(--borda); border-radius: 12px; padding: 12px 16px; }
 .cabecalho-treino { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px 24px; align-items: start; }
 .tela-treino .campo input { height: 44px; font-size: 18px; }
+/* início, fim e treinos por ficha: uma segunda linha no cartão do alto, e o aviso do treino ativo embaixo */
+.campos-do-ciclo { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; align-items: start; }
+.opcional { font-weight: 400; color: var(--texto-suave); }
+.aviso-troca {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border-left: 4px solid var(--laranja);
+  background: var(--alerta-fundo);
+  color: var(--alerta-texto);
+  font-size: 16px;
+  line-height: 1.4;
+}
 .tela-treino .dica { font-size: 14px; }
 .obrigatorio { font-weight: 700; color: var(--alerta-texto); }
 
@@ -421,7 +435,7 @@ button { font-family: inherit; }
   .campo-prescricao { width: 84px; }
   .celula-intervalo .campo-prescricao { width: 52px; }
   .linha-segunda { flex: 1 1 100%; }
-  .cabecalho-treino { grid-template-columns: minmax(0, 1fr); }
+  .cabecalho-treino, .campos-do-ciclo { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---- treino salvo ---- */
@@ -485,6 +499,7 @@ button { font-family: inherit; }
   font-weight: 600;
   text-decoration: none;
 }
+button.botao-link { font-family: inherit; cursor: pointer; }
 .botao-link-forte { min-height: 48px; padding: 0 22px; border: 0; background: var(--laranja); color: #111111; font-size: 17px; font-weight: 700; }
 .botao-largo { width: 100%; }
 a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
@@ -551,7 +566,7 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 /* tabela de treinos (como a aba Treinos do Data4U): uma linha por treino, abre para mostrar as fichas */
 .titulos-treinos, .resumo-treino {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px 60px minmax(0, 0.7fr);
+  grid-template-columns: minmax(0, 1.2fr) 92px 92px 76px minmax(0, 0.9fr) minmax(0, 0.8fr);
   align-items: center;
   gap: 12px;
 }
@@ -571,26 +586,38 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .resumo-treino::-webkit-details-marker { display: none; }
 .resumo-treino:hover { background: #f7f6f2; }
 .resumo-treino:focus-visible { outline: 3px solid var(--foco); outline-offset: -3px; }
-.treino-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 700; overflow-wrap: anywhere; }
+.treino-nome { display: flex; align-items: center; gap: 4px 8px; font-weight: 700; }
+.treino-titulo { min-width: 0; overflow-wrap: anywhere; }
+.treino-nome .selo-origem { flex: none; }
 .treino-nome::before { content: "▸"; flex: none; width: 16px; color: var(--texto-suave); transition: transform 0.1s; }
 .linha-treino[open] > .resumo-treino .treino-nome::before { transform: rotate(90deg); }
-.treino-data, .treino-fichas, .treino-professor { font-size: 15px; color: var(--texto-suave); overflow-wrap: anywhere; }
-.treino-recente { background: #fff8f4; border-left-color: var(--laranja); }
-.treino-recente > .resumo-treino:hover { background: #fff1e8; }
-.selo-recente {
+.treino-inicio, .treino-fim, .treino-sessoes, .treino-professor { font-size: 15px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.treino-situacao { display: flex; flex-wrap: wrap; gap: 4px; }
+/* o treino ativo (só um por aluno) é o destacado; os inativos são o histórico */
+.treino-ativo { background: #fff8f4; border-left-color: var(--laranja); }
+.treino-ativo > .resumo-treino:hover { background: #fff1e8; }
+.treino-inativo .treino-nome { font-weight: 600; }
+.selo-treino {
   padding: 2px 10px;
   border-radius: 12px;
-  background: var(--laranja);
-  color: #111111;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
 }
+.selo-treino-ativo { background: #e4f1e4; color: #1f5a2b; }
+.selo-treino-inativo { background: #e8e7e1; color: var(--texto-suave); }
+.selo-treino-trocar { background: var(--laranja); color: #111111; }
+.aviso-troca-ficha { margin: 0; border-radius: 0; border-left-width: 6px; }
 .treino-conteudo { padding: 4px 16px 16px 40px; display: flex; flex-direction: column; gap: 8px; }
-.acoes-treino { margin: 0 0 4px; }
+.acoes-treino { margin: 0 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.acoes-treino .aviso-acao { font-size: 15px; font-weight: 600; color: #1f5a2b; }
+.acoes-treino .aviso-acao.aviso-erro { color: #7a0016; }
+.dados-do-treino { margin: 0; font-size: 15px; color: var(--texto-suave); }
+.ficha-sessoes { margin-left: auto; font-size: 15px; font-weight: 700; }
 @media (max-width: 700px) {
   .titulos-treinos { display: none; }
   .resumo-treino { grid-template-columns: minmax(0, 1fr) auto; }
-  .treino-fichas, .treino-professor { display: none; }
+  .treino-inicio, .treino-fim, .treino-sessoes, .treino-professor { display: none; }
   .treino-conteudo { padding-left: 16px; }
 }
 .ficha-detalhe { border: 1px solid var(--borda); border-radius: 10px; background: #fbfaf7; }

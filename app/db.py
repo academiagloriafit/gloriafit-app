@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from app.backup import fazer_backup
+from app.datas import dia_local
 from app.texto import normalizar
 
 ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
@@ -11,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 5
+VERSAO_DO_BANCO = 6
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -89,8 +90,52 @@ def _de_4_para_5(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE UNIQUE INDEX ux_treino_data4u ON treino(data4u_id)")
 
 
+_PADRAO_DE_DIA = "'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
+
+
+def _de_5_para_6(conn: sqlite3.Connection) -> None:
+    """Ciclo do treino: início/fim, "Concluído", meta de sessões por ficha e um treino ativo por aluno.
+
+    - `inicio` dos treinos que já existem = o dia (em Brasília) em que foram lançados.
+    - Decisão do Thiago (08/10/2026): dos treinos antigos, SÓ O MAIS RECENTE de cada aluno continua
+      ativo; os outros viram inativos (histórico). `concluido_em` fica vazio neles: não se sabe quando acabaram.
+    - Depois disso é possível criar o índice que garante UM treino ativo por aluno.
+    """
+    conn.execute(f"ALTER TABLE treino ADD COLUMN inicio TEXT CHECK (inicio IS NULL OR inicio GLOB {_PADRAO_DE_DIA})")
+    conn.execute(f"ALTER TABLE treino ADD COLUMN fim TEXT CHECK (fim IS NULL OR fim GLOB {_PADRAO_DE_DIA})")
+    conn.execute("ALTER TABLE treino ADD COLUMN concluido_em TEXT")
+    conn.execute(
+        "ALTER TABLE treino ADD COLUMN sessoes_por_ficha INTEGER "
+        "CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999)"
+    )
+    # Em Python (e não com date(criado_em, '-3 hours')) porque o horário de verão de antes de 2019 muda o dia.
+    conn.executemany(
+        "UPDATE treino SET inicio = ? WHERE id = ?",
+        [(dia_local(criado_em), treino_id) for treino_id, criado_em in conn.execute("SELECT id, criado_em FROM treino")],
+    )
+    conn.execute(
+        """
+        UPDATE treino SET ativo = 0
+        WHERE id <> (SELECT t2.id FROM treino t2 WHERE t2.aluno_id = treino.aluno_id
+                     ORDER BY t2.criado_em DESC, t2.id DESC LIMIT 1)
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX ux_treino_ativo_por_aluno ON treino(aluno_id) WHERE ativo = 1")
+    conn.execute(
+        """
+        CREATE TABLE sessao (
+            id          INTEGER PRIMARY KEY,
+            treino_id   INTEGER NOT NULL REFERENCES treino(id) ON DELETE CASCADE,
+            ficha_ordem INTEGER NOT NULL CHECK (ficha_ordem >= 1),
+            feita_em    TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute("CREATE INDEX ix_sessao_treino ON sessao(treino_id)")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
-MIGRACOES = {4: _de_4_para_5}
+MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6}
 
 
 def _arquivo_do_banco(conn: sqlite3.Connection) -> Path | None:
@@ -103,12 +148,14 @@ def migrar(conn: sqlite3.Connection) -> list[int]:
     """Leva um banco antigo até a versão atual. Devolve as versões de partida aplicadas ([] = nada a fazer).
 
     Segurança, porque aqui já há dados de verdade:
-    - Antes de mexer, tira uma cópia consistente em `<pasta do banco>/antes-da-migracao/`.
+    - Antes de mexer, tira uma cópia consistente em `<pasta do banco>/antes-da-migracao/` (uma só por
+      chamada, mesmo que haja vários passos: ela guarda o banco COMO ERA antes de qualquer um).
     - Cada passo roda numa transação: ou muda tudo, ou nada (o DDL do SQLite é transacional).
     - Dois processos subindo juntos (o servidor tem 2): o segundo espera a vez e, ao entrar,
       vê que a versão já subiu e não faz nada (`BEGIN IMMEDIATE` + conferência de novo).
     """
     aplicadas: list[int] = []
+    copia_tirada = False
     while True:
         versao = conn.execute("PRAGMA user_version").fetchone()[0]
         tem_tabelas = conn.execute(
@@ -122,8 +169,9 @@ def migrar(conn: sqlite3.Connection) -> list[int]:
                 conn.rollback()  # outro processo migrou enquanto esperávamos a trava
                 continue
             arquivo = _arquivo_do_banco(conn)
-            if arquivo is not None:
+            if arquivo is not None and not copia_tirada:
                 fazer_backup(arquivo, arquivo.parent / PASTA_ANTES_DA_MIGRACAO, COPIAS_ANTES_DA_MIGRACAO)
+                copia_tirada = True
             MIGRACOES[versao](conn)
             conn.execute(f"PRAGMA user_version = {versao + 1}")  # número do código, nunca de fora
             conn.commit()

@@ -45,7 +45,12 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
     }
 
     if (resposta.status === 201) {
-      sucesso(M.limparEspacos(dados.nomeTreino), M.limparEspacos(dados.montadoPor), M.enderecoDeImpressao(resposta.corpo));
+      sucesso(
+        M.limparEspacos(dados.nomeTreino),
+        M.limparEspacos(dados.montadoPor),
+        M.enderecoDeImpressao(resposta.corpo),
+        resposta.corpo?.concluido_anterior,
+      );
       return [];
     }
 
@@ -63,7 +68,8 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
     return [];
   }
 
-  function sucesso(nomeTreino, montadoPor, enderecoDeImpressao) {
+  // concluidoAnterior: o nome do treino que estava ativo e foi concluído junto (ou nada, se não havia).
+  function sucesso(nomeTreino, montadoPor, enderecoDeImpressao, concluidoAnterior) {
     aoSalvar();
     areaMontagem.hidden = true;
     const linkImprimir = pegar("imprimir-treino");
@@ -71,6 +77,12 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
     linkImprimir.hidden = !enderecoDeImpressao;
     pegar("texto-salvo").textContent =
       `O treino "${nomeTreino}" foi salvo para ${alunoNome}. Professor: ${montadoPor}.`;
+    const textoConcluido = pegar("texto-concluido");
+    const houveConclusao = typeof concluidoAnterior === "string" && concluidoAnterior !== "";
+    textoConcluido.textContent = houveConclusao
+      ? `O treino anterior, "${concluidoAnterior}", foi concluído e está no histórico (inativo).`
+      : "";
+    textoConcluido.hidden = !houveConclusao;
     painelSalvo.hidden = false;
     window.scrollTo(0, 0);
     pegar("titulo-salvo").focus();

@@ -1,9 +1,5 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 6 (08/10/2026): exercícios, alunos (vindos do Data4U), treinos e computadores autorizados.
--- Mudança da versão 5 para a 6 (ciclo do treino): o treino ganhou `inicio`, `fim`,
--- `concluido_em` e `sessoes_por_ficha`; só UM treino por aluno pode ficar ativo (índice
--- `ux_treino_ativo_por_aluno`); nasceu a tabela `sessao` (cada vez que o aluno treinou uma ficha).
--- Bancos da versão 5 são atualizados sozinhos na subida do app (ver app/db.py, função `migrar`).
+-- Versão 5 (08/10/2026): exercícios, alunos (vindos do Data4U), treinos e computadores autorizados.
 -- Mudança da versão 4 para a 5 (histórico de treinos do Data4U): o treino ganhou `origem`
 -- ('app' ou 'data4u') e `data4u_id`, e o índice de nome repetido passou a valer só para os
 -- treinos feitos no app (o histórico do Data4U tem nomes repetidos). Bancos da versão 4 são
@@ -19,7 +15,7 @@
 -- Fora desta versão, de propósito: login do aluno, pendências da recepção e
 -- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 6;
+PRAGMA user_version = 5;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -104,13 +100,6 @@ CREATE INDEX IF NOT EXISTS ix_aluno_cpf ON aluno(cpf);
 -- data4u_id: ID_TREINO no Data4U (histórico importado; no futuro, também o treino do app
 --   depois de enviado ao Data4U). Único; vazio nos treinos que ainda não existem lá.
 -- criado_em: UTC. No histórico é o DT_LANCAMENTO do Data4U (horário de Brasília) convertido.
--- ativo: 1 = o treino que o aluno está fazendo; 0 = inativo (concluído ou substituído), fica no
---   histórico e o aluno não vê. Só um por aluno pode ser ativo (índice ux_treino_ativo_por_aluno).
--- inicio, fim: dias 'AAAA-MM-DD' do calendário de Brasília. `fim` é opcional (sem fim = vazio) e,
---   passando dele, o app avisa que está na hora de trocar o treino.
--- concluido_em: UTC; quando o professor clicou em "Concluído" (ou o treino foi substituído por um novo).
---   Vazio nos treinos inativados pela migração (não se sabe quando acabaram).
--- sessoes_por_ficha: quantas vezes o aluno deve treinar CADA ficha neste ciclo (ex.: 15). Vazio = sem meta.
 -- Apagar um aluno que tem treino é recusado (não perde histórico sem querer).
 CREATE TABLE IF NOT EXISTS treino (
     id           INTEGER PRIMARY KEY,
@@ -120,16 +109,9 @@ CREATE TABLE IF NOT EXISTS treino (
     ativo        INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
     origem       TEXT    NOT NULL DEFAULT 'app' CHECK (origem IN ('app', 'data4u')),
     data4u_id    INTEGER,
-    criado_em    TEXT    NOT NULL DEFAULT (datetime('now')),
-    inicio       TEXT    CHECK (inicio IS NULL OR inicio GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-    fim          TEXT    CHECK (fim IS NULL OR fim GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-    concluido_em TEXT,
-    sessoes_por_ficha INTEGER CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999)
+    criado_em    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_treino_aluno ON treino(aluno_id);
--- Só um treino ativo por aluno: é a trava final da regra "um ativo por vez" (quem ativa um treino
--- precisa inativar o outro ANTES; ver app/treinos.py e app/ciclo.py).
-CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_ativo_por_aluno ON treino(aluno_id) WHERE ativo = 1;
 -- Um aluno não pode ter dois treinos do app com o mesmo nome (o Data4U também recusa). O índice
 -- só vale para os treinos do app: no histórico do Data4U há nomes repetidos, e o app precisa
 -- guardá-los como estão. A conferência contra TODOS os treinos do aluno (inclusive os do
@@ -170,17 +152,6 @@ CREATE TABLE IF NOT EXISTS ficha_item (
     UNIQUE (ficha_id, ordem)
 );
 CREATE INDEX IF NOT EXISTS ix_ficha_item_exercicio ON ficha_item(exercicio_id);
-
--- Cada vez que o aluno treinou uma ficha do treino (quando o app do aluno existir, é ele quem
--- registra). `ficha_ordem` (1 = A, 2 = B...) e não o id da ficha: a importação do Data4U
--- apaga e recria as fichas dos treinos copiados, e a contagem não pode se perder.
-CREATE TABLE IF NOT EXISTS sessao (
-    id          INTEGER PRIMARY KEY,
-    treino_id   INTEGER NOT NULL REFERENCES treino(id) ON DELETE CASCADE,
-    ficha_ordem INTEGER NOT NULL CHECK (ficha_ordem >= 1),
-    feita_em    TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS ix_sessao_treino ON sessao(treino_id);
 
 -- ------------------------------------------------------------ acesso do professor
 -- A área do professor só abre em computadores AUTORIZADOS (hoje: o dos professores e o

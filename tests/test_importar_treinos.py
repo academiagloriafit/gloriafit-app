@@ -865,6 +865,145 @@ def test_treino_move_de_aluno_se_o_data4u_mudar_o_dono(conn):
     assert _linhas(conn, "SELECT aluno_id FROM treino WHERE data4u_id = 1") == [(2,)]
 
 
+# ------------------------------------------------------------------ ativo e inativo (versão 6 do banco)
+
+
+def _mais_um(mundo, id_treino, matricula, quando, nome="TREINO EXTRA"):
+    """Acrescenta ao mundo um treino do Data4U (sem fichas) lançado em `quando` (horário de Brasília)."""
+    mundo["LANCAMENTO_OBJ"].append([6000 + id_treino, matricula, -510, quando])
+    mundo["TREINO"].append([id_treino, 6000 + id_treino, 900, nome, "F"])
+
+
+def _situacao(conn, aluno_id):
+    """{data4u_id ou nome: ativo} dos treinos do aluno."""
+    return {
+        (linha[0] or linha[1]): linha[2]
+        for linha in conn.execute("SELECT data4u_id, nome, ativo FROM treino WHERE aluno_id = ?", (aluno_id,))
+    }
+
+
+def test_so_o_treino_mais_recente_de_cada_aluno_entra_ativo(conn):
+    mundo = mundo_basico()  # aluna 1: treino 1 (02/03/2026)
+    _mais_um(mundo, 3, 101, "2026-01-10 10:00:00")  # mais antigo que o 1
+    _mais_um(mundo, 4, 101, "2026-06-01 10:00:00")  # o mais novo da aluna 1
+    _mais_um(mundo, 5, 101, "2025-12-01 10:00:00")
+
+    importar(conn, copia(mundo))
+
+    assert _situacao(conn, 1) == {1: 0, 3: 0, 4: 1, 5: 0}
+    assert _situacao(conn, 2) == {2: 1}  # o único treino do aluno 2
+    assert conn.execute("SELECT COUNT(*) FROM treino WHERE ativo = 1 AND aluno_id = 1").fetchone()[0] == 1
+
+
+def test_treinos_do_mesmo_instante_desempatam_pelo_id(conn):
+    mundo = mundo_basico()
+    _mais_um(mundo, 3, 101, "2026-03-02 14:03:24")  # mesmo instante do treino 1
+
+    importar(conn, copia(mundo))
+
+    assert _situacao(conn, 1) == {1: 0, 3: 1}  # o de maior id (entra depois) é o mais recente
+
+
+def test_inicio_e_o_dia_do_lancamento_em_brasilia(conn):
+    mundo = mundo_basico()
+    mundo["LANCAMENTO_OBJ"][0][3] = "2026-03-02 23:30:00"  # 23h30 em Brasília = 02:30 UTC do dia 3
+
+    importar(conn, copia(mundo))
+
+    assert _linhas(conn, "SELECT inicio, criado_em FROM treino WHERE data4u_id = 1") == [("2026-03-02", "2026-03-03 02:30:00")]
+    assert _linhas(conn, "SELECT fim, concluido_em, sessoes_por_ficha FROM treino WHERE data4u_id = 1") == [(None, None, None)]
+
+
+def test_treino_novo_do_data4u_mais_antigo_que_o_ativo_do_app_fica_inativo(conn):
+    conn.execute(
+        "INSERT INTO treino (aluno_id, nome, montado_por, criado_em, inicio) VALUES (1, 'MEU TREINO', 'CARLA', '2026-10-01 12:00:00', '2026-10-01')"
+    )
+    conn.commit()
+
+    importar(conn, copia(mundo_basico()))  # o treino 1 do Data4U é de março
+
+    assert _situacao(conn, 1) == {"MEU TREINO": 1, 1: 0}
+    assert _linhas(conn, "SELECT concluido_em FROM treino WHERE nome = 'MEU TREINO'") == [(None,)]
+
+
+def test_treino_novo_do_data4u_mais_recente_que_o_ativo_do_app_conclui_o_do_app(conn):
+    conn.execute(
+        "INSERT INTO treino (aluno_id, nome, montado_por, criado_em, inicio) VALUES (1, 'MEU TREINO', 'CARLA', '2026-01-01 12:00:00', '2026-01-01')"
+    )
+    conn.commit()
+
+    importar(conn, copia(mundo_basico()))  # o treino 1 do Data4U é de 02/03/2026, depois do treino do app
+
+    assert _situacao(conn, 1) == {"MEU TREINO": 0, 1: 1}
+    assert conn.execute("SELECT concluido_em FROM treino WHERE nome = 'MEU TREINO'").fetchone()[0] is not None
+
+
+def test_rodar_de_novo_nao_mexe_em_ativo_fim_meta_nem_sessoes(conn):
+    importar(conn, copia(mundo_basico()))
+    treino = conn.execute("SELECT id FROM treino WHERE data4u_id = 2").fetchone()[0]  # a aluna 2 tem só ele
+    conn.execute("UPDATE treino SET ativo = 0, concluido_em = '2026-10-01 10:00:00' WHERE id = ?", (treino,))
+    treino1 = conn.execute("SELECT id FROM treino WHERE data4u_id = 1").fetchone()[0]
+    conn.execute("UPDATE treino SET fim = '2026-12-31', sessoes_por_ficha = 15 WHERE id = ?", (treino1,))
+    conn.execute("INSERT INTO sessao (treino_id, ficha_ordem) VALUES (?, 2), (?, 2), (?, 1)", (treino1, treino1, treino1))
+    conn.commit()
+
+    importar(conn, copia(mundo_basico()))  # as fichas são apagadas e recriadas (ids novos)
+
+    assert _linhas(conn, "SELECT ativo, concluido_em FROM treino WHERE id = ?", treino) == [(0, "2026-10-01 10:00:00")]
+    assert _linhas(conn, "SELECT ativo, fim, sessoes_por_ficha FROM treino WHERE id = ?", treino1) == [(1, "2026-12-31", 15)]
+    assert _linhas(conn, "SELECT ficha_ordem, COUNT(*) FROM sessao WHERE treino_id = ? GROUP BY 1 ORDER BY 1", treino1) == [(1, 1), (2, 2)]
+
+
+def test_treino_que_chega_depois_e_mais_recente_vira_o_ativo(conn):
+    importar(conn, copia(mundo_basico()))
+    mundo = mundo_basico()
+    _mais_um(mundo, 3, 101, "2026-09-01 09:00:00", nome="TREINO DE SETEMBRO")
+
+    importar(conn, copia(mundo))
+
+    assert _situacao(conn, 1) == {1: 0, 3: 1}
+    assert _linhas(conn, "SELECT concluido_em IS NOT NULL FROM treino WHERE data4u_id = 1") == [(1,)]  # o antigo foi concluído
+
+
+def test_treino_que_chega_depois_mas_e_mais_antigo_nao_toma_o_lugar(conn):
+    importar(conn, copia(mundo_basico()))
+    mundo = mundo_basico()
+    _mais_um(mundo, 3, 101, "2025-01-01 09:00:00")  # esquecido no Data4U, de antes do treino 1
+
+    importar(conn, copia(mundo))
+
+    assert _situacao(conn, 1) == {1: 1, 3: 0}
+
+
+def test_treino_movido_para_aluno_que_ja_tem_ativo_chega_inativo(conn):
+    importar(conn, copia(mundo_basico()))  # o treino 2 é o ativo da aluna 2
+    mundo = mundo_basico()
+    mundo["LANCAMENTO_OBJ"][0][1] = 102  # o treino 1 (ativo da aluna 1) passa para a aluna 2
+
+    importar(conn, copia(mundo))  # não pode quebrar o "um ativo por aluno"
+
+    assert _situacao(conn, 2) == {1: 0, 2: 1}
+    assert _situacao(conn, 1) == {}
+
+
+def test_se_o_treino_ativo_sumiu_do_data4u_o_aluno_fica_sem_ativo(conn):
+    mundo = mundo_basico()
+    _mais_um(mundo, 3, 101, "2026-09-01 09:00:00")
+    importar(conn, copia(mundo))
+    assert _situacao(conn, 1) == {1: 0, 3: 1}
+    mundo["TREINO"].pop()  # o treino 3 (ativo) sumiu
+
+    importar(conn, copia(mundo))
+
+    assert _situacao(conn, 1) == {1: 0}  # não adivinhamos outro: o professor reativa se quiser
+
+
+def test_simulacao_nao_grava_treino_nenhum_nem_ativa_nada(conn):
+    importar(conn, copia(mundo_basico()), simular=True)
+
+    assert _linhas(conn, "SELECT COUNT(*) FROM treino") == [(0,)]
+
+
 # ------------------------------------------------------------------ tudo ou nada, simulação
 
 

@@ -27,6 +27,9 @@ Regras (as decisões são do Thiago, de 08/10/2026, salvo onde dito o contrário
 - É um ESPELHO do Data4U: rodar de novo atualiza os treinos que já vieram (mesmo `data4u_id`,
   mesmo id no app), acrescenta os novos e remove os que sumiram do Data4U. Os treinos montados
   no app (`origem = 'app'`) nunca são tocados.
+- Ativo/inativo (desde a versão 6 do banco; só UM treino por aluno é ativo): treino que já veio NÃO muda de
+  situação, nem de início, fim, meta e sessões (isso é do app). Treino NOVO entra inativo, e só vira o ativo do
+  aluno se for o mais recente dele (o ativo que havia é concluído). `inicio` do histórico = o dia do lançamento.
 - Exercícios: o que já está na biblioteca (pela tabela `exercicio_data4u`) é reaproveitado.
   O que não está (o quadro do app só tem os usados no último ano) entra como exercício
   INATIVO: aparece no histórico, mas não na lista da tela de montar. Tags HTML do nome
@@ -51,6 +54,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from app.alunos import FUSO_DA_ACADEMIA
+from app.datas import agora_utc, dia_local, momento_para_texto
 from app.importar_alunos import (
     LIMITE_DE_LINHAS_POR_TABELA,
     CopiaInvalida,
@@ -391,9 +395,11 @@ def importar(conn: sqlite3.Connection, copia: CopiaDeTreinos, simular: bool = Fa
         do_app = {
             linha[0] for linha in conn.execute("SELECT data4u_id FROM treino WHERE origem = 'app' AND data4u_id IS NOT NULL")
         }
-        do_data4u = {
-            linha[0]: linha[1] for linha in conn.execute("SELECT data4u_id, id FROM treino WHERE origem = 'data4u'")
+        do_data4u = {  # data4u_id -> (id no app, aluno)
+            linha[0]: (linha[1], linha[2])
+            for linha in conn.execute("SELECT data4u_id, id, aluno_id FROM treino WHERE origem = 'data4u'")
         }
+        novos_por_aluno: dict[int, set[int]] = defaultdict(set)  # treinos que entraram agora, por aluno
 
         # ---- quais treinos entram
         escolhidos = []  # (linha do treino, id do aluno no app, criado_em em UTC)
@@ -451,18 +457,22 @@ def importar(conn: sqlite3.Connection, copia: CopiaDeTreinos, simular: bool = Fa
             professor, cortado = _cortar(professor, LIMITE_QUEM_MONTOU)
             relatorio.nomes_cortados += cortado
 
-            treino_id = do_data4u.get(data4u_id)
-            if treino_id is None:
+            existente = do_data4u.get(data4u_id)
+            if existente is None:
                 treino_id = conn.execute(
-                    "INSERT INTO treino (aluno_id, nome, montado_por, origem, data4u_id, criado_em)"
-                    " VALUES (?, ?, ?, 'data4u', ?, ?)",
-                    (aluno_id, nome, professor, data4u_id, criado_em),
+                    "INSERT INTO treino (aluno_id, nome, montado_por, origem, data4u_id, criado_em, ativo, inicio)"
+                    " VALUES (?, ?, ?, 'data4u', ?, ?, 0, ?)",
+                    (aluno_id, nome, professor, data4u_id, criado_em, dia_local(criado_em)),
                 ).lastrowid
+                novos_por_aluno[aluno_id].add(treino_id)
                 relatorio.treinos_novos += 1
             else:
+                treino_id, aluno_anterior = existente
+                # Se o Data4U passou o treino para outro aluno, ele chega inativo lá: o outro aluno pode já ter um ativo.
                 conn.execute(
-                    "UPDATE treino SET aluno_id = ?, nome = ?, montado_por = ?, criado_em = ? WHERE id = ?",
-                    (aluno_id, nome, professor, criado_em, treino_id),
+                    "UPDATE treino SET aluno_id = ?, nome = ?, montado_por = ?, criado_em = ?, inicio = ?,"
+                    " ativo = CASE WHEN ? THEN 0 ELSE ativo END WHERE id = ?",
+                    (aluno_id, nome, professor, criado_em, dia_local(criado_em), aluno_anterior != aluno_id, treino_id),
                 )
                 conn.execute("DELETE FROM ficha WHERE treino_id = ?", (treino_id,))  # apaga os itens junto
                 relatorio.treinos_atualizados += 1
@@ -521,8 +531,21 @@ def importar(conn: sqlite3.Connection, copia: CopiaDeTreinos, simular: bool = Fa
                 relatorio.exercicios_prescritos += len(linhas_dos_itens)
 
         # ---- o que sumiu do Data4U sai do app (o histórico é um espelho)
-        conn.executemany("DELETE FROM treino WHERE id = ?", [(treino_id,) for treino_id in do_data4u.values()])
+        conn.executemany("DELETE FROM treino WHERE id = ?", [(id_no_app,) for id_no_app, _ in do_data4u.values()])
         relatorio.treinos_removidos = len(do_data4u)
+
+        # ---- treino novo que é o mais recente do aluno vira o ativo dele (o ativo de antes é concluído)
+        agora = momento_para_texto(agora_utc())
+        for aluno_id, novos in novos_por_aluno.items():
+            mais_recente = conn.execute(
+                "SELECT id FROM treino WHERE aluno_id = ? ORDER BY criado_em DESC, id DESC LIMIT 1", (aluno_id,)
+            ).fetchone()[0]
+            if mais_recente in novos:
+                conn.execute(
+                    "UPDATE treino SET ativo = 0, concluido_em = ? WHERE aluno_id = ? AND ativo = 1 AND id <> ?",
+                    (agora, aluno_id, mais_recente),
+                )
+                conn.execute("UPDATE treino SET ativo = 1 WHERE id = ?", (mais_recente,))
 
         if simular:
             raise _Desfazer

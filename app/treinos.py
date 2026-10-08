@@ -7,7 +7,9 @@ confiável (qualquer um pode mandar um pedido direto ao servidor), então tudo
 
 import sqlite3
 import unicodedata
+from datetime import datetime
 
+from app.datas import agora_utc, hoje, ler_dia, momento_para_texto
 from app.texto import normalizar
 
 # Quando o Claude ou um robô montar treinos sozinhos (no futuro), este é o autor.
@@ -25,6 +27,10 @@ MAXIMO_FICHAS = 26
 MAXIMO_ITENS_POR_FICHA = 100
 MINIMO_NO_BLOCO = 2
 MAXIMO_NO_BLOCO = 3
+MAXIMO_SESSOES_POR_FICHA = 999  # "treinos por ficha": quantas vezes o aluno deve fazer CADA ficha no ciclo
+# As datas de início/fim só valem dentro destes anos: pega o erro de digitação (ano 0202, 2206...).
+ANO_MINIMO_DO_TREINO = 2020
+ANO_MAXIMO_DO_TREINO = 2100
 
 
 class AlunoNaoEncontrado(Exception):
@@ -79,6 +85,29 @@ def _inteiro(valor) -> bool:
 
 
 # ------------------------------------------------------------------ validação
+
+
+def _dia(valor, rotulo: str, problemas: list[str]):
+    """Data 'AAAA-MM-DD' (dia do calendário de Brasília). Vazio (None ou "") = sem data.
+    Devolve o texto, ou None; se é inválida, anota o problema e devolve False."""
+    if valor is None or valor == "":
+        return None
+    dia = ler_dia(valor)
+    if dia is None or not ANO_MINIMO_DO_TREINO <= dia.year <= ANO_MAXIMO_DO_TREINO:
+        problemas.append(f"{rotulo}: data inválida (use o calendário da tela; anos de {ANO_MINIMO_DO_TREINO} a {ANO_MAXIMO_DO_TREINO}).")
+        return False
+    return valor
+
+
+def _sessoes_por_ficha(valor, problemas: list[str]):
+    """Quantas vezes o aluno faz cada ficha no ciclo. Vazio (None ou "") = sem meta.
+    Devolve o número, ou None; se é inválido, anota o problema e devolve False."""
+    if valor is None or valor == "":
+        return None
+    if not _inteiro(valor) or not 1 <= valor <= MAXIMO_SESSOES_POR_FICHA:
+        problemas.append(f"Treinos por ficha: use um número inteiro de 1 a {MAXIMO_SESSOES_POR_FICHA}.")
+        return False
+    return valor
 
 
 def _pausa(valor, rotulo: str, problemas: list[str]):
@@ -195,15 +224,21 @@ def _validar_fichas(conn, fichas, problemas: list[str]) -> list[dict] | None:
 # ------------------------------------------------------------------ salvar e ler
 
 
-def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados) -> int:
+def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetime | None = None) -> int:
     """Grava um treino novo para o aluno. Devolve o id do treino.
 
     `dados` = {"nome_treino": str, "montado_por": str,
+               "inicio": "AAAA-MM-DD" (opcional; vazio = hoje), "fim": "AAAA-MM-DD" (opcional),
+               "sessoes_por_ficha": int (opcional; quantas vezes o aluno faz CADA ficha),
                "fichas": [{"nome": str, "itens": [{"exercicio_id", "series",
                            "repeticoes", "carga" (o "Peso" da tela), "pausa" (intervalo, em
                            segundos, opcional), "observacao" (opcional), "bloco"}]}]}
     A ordem das fichas e dos exercícios é a ordem das listas. Tudo ou nada: se
     qualquer coisa estiver errada, nada é gravado.
+
+    O treino novo nasce ATIVO. Só um treino por aluno pode ser ativo (regra do Thiago, 08/10/2026):
+    se o aluno já tem um ativo, ele é concluído (vai para o histórico) na mesma gravação.
+    `agora` existe para os testes.
     """
     if conn.execute("SELECT 1 FROM aluno WHERE id = ?", (aluno_id,)).fetchone() is None:
         raise AlunoNaoEncontrado(aluno_id)
@@ -213,6 +248,14 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados) -> int:
     problemas: list[str] = []
     nome_treino = _texto(dados.get("nome_treino"), "O nome do treino", LIMITE_NOME_TREINO, True, problemas)
     montado_por = _texto(dados.get("montado_por"), "O nome de quem montou", LIMITE_QUEM_MONTOU, True, problemas)
+    agora = agora or agora_utc()
+    inicio = _dia(dados.get("inicio"), "Início", problemas)
+    fim = _dia(dados.get("fim"), "Fim", problemas)
+    sessoes = _sessoes_por_ficha(dados.get("sessoes_por_ficha"), problemas)
+    if inicio is None:
+        inicio = hoje(agora)  # sem data de início = começa hoje (como no Data4U)
+    if inicio is not False and fim not in (None, False) and fim < inicio:  # 'AAAA-MM-DD' compara como texto
+        problemas.append("A data do fim não pode ser antes da data do início.")
     fichas = _validar_fichas(conn, dados.get("fichas"), problemas)
     if problemas:
         raise TreinoInvalido(problemas)
@@ -227,9 +270,15 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados) -> int:
 
     try:
         with conn:  # uma transação: ou grava tudo, ou nada
+            # O ativo de hoje (se houver) é concluído ANTES de entrar o novo: o banco só aceita um ativo por aluno.
+            conn.execute(
+                "UPDATE treino SET ativo = 0, concluido_em = ? WHERE aluno_id = ? AND ativo = 1",
+                (momento_para_texto(agora), aluno_id),
+            )
             treino_id = conn.execute(
-                "INSERT INTO treino (aluno_id, nome, montado_por) VALUES (?, ?, ?)",
-                (aluno_id, nome_treino, montado_por),
+                "INSERT INTO treino (aluno_id, nome, montado_por, inicio, fim, sessoes_por_ficha)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (aluno_id, nome_treino, montado_por, inicio, fim, sessoes),
             ).lastrowid
             for ordem_ficha, ficha in enumerate(fichas, start=1):
                 ficha_id = conn.execute(
@@ -259,12 +308,16 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados) -> int:
 def obter_treino(conn: sqlite3.Connection, treino_id: int) -> dict | None:
     """O treino completo (com nomes dos exercícios), ou None se não existir.
 
-    `origem` é 'app' (montado aqui) ou 'data4u' (histórico copiado do Data4U). Nos itens, `series`,
+    `origem` é 'app' (montado aqui) ou 'data4u' (histórico copiado do Data4U). `ativo` é 1 ou 0; `inicio` e
+    `fim` são dias 'AAAA-MM-DD' (`fim` pode ser None); `concluido_em` é um momento em UTC (None se ativo ou se
+    não se sabe); `sessoes_por_ficha` é a meta do ciclo (None = sem meta). Nos itens, `series`,
     `repeticoes`, `carga`, `pausa` (segundos) e `observacao` podem ser None: o histórico do Data4U
     tem prescrições sem esses campos.
     """
     treino = conn.execute(
-        "SELECT id, aluno_id, nome, montado_por, ativo, origem, criado_em FROM treino WHERE id = ?", (treino_id,)
+        "SELECT id, aluno_id, nome, montado_por, ativo, origem, criado_em, inicio, fim, concluido_em, sessoes_por_ficha"
+        " FROM treino WHERE id = ?",
+        (treino_id,),
     ).fetchone()
     if treino is None:
         return None

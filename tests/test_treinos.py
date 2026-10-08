@@ -569,10 +569,11 @@ def test_indice_unico_do_banco_barra_nome_repetido_mesmo_sem_a_conferencia_previ
     # Dois "salvar" ao mesmo tempo passariam pela conferência prévia; o índice único é a última barreira.
     import sqlite3
 
-    conn.execute("INSERT INTO treino (aluno_id, nome, montado_por) VALUES (?, 'Treino X', 'Ana')", (aluno_id,))
+    # ativo = 0 nos dois: o que está em teste é o índice do NOME, não o do "um ativo por aluno"
+    conn.execute("INSERT INTO treino (aluno_id, nome, montado_por, ativo) VALUES (?, 'Treino X', 'Ana', 0)", (aluno_id,))
 
-    with pytest.raises(sqlite3.IntegrityError):
-        conn.execute("INSERT INTO treino (aluno_id, nome, montado_por) VALUES (?, 'TREINO x', 'Bia')", (aluno_id,))
+    with pytest.raises(sqlite3.IntegrityError, match="treino"):
+        conn.execute("INSERT INTO treino (aluno_id, nome, montado_por, ativo) VALUES (?, 'TREINO x', 'Bia', 0)", (aluno_id,))
 
 
 def test_corrida_entre_dois_salvar_vira_409_e_nao_erro_500(conn, aluno_id, exercicios, monkeypatch):
@@ -628,3 +629,163 @@ def test_obter_treino_que_nao_existe_devolve_none(conn):
 
 def test_autor_automatico_tem_o_nome_combinado():
     assert AUTOR_AUTOMATICO == "Academia Glória Fit"
+
+
+# ------------------------------------------------------------------ ciclo: início, fim, meta e "um ativo por aluno"
+
+from datetime import datetime, timezone  # noqa: E402
+
+AGORA = datetime(2026, 10, 8, 14, 30, 0, tzinfo=timezone.utc)  # 08/10/2026 11:30 em Brasília
+
+
+def _com(fichas_exercicio, **extras):
+    return {**_pedido([_ficha([_item(fichas_exercicio)])]), **extras}
+
+
+def _ciclo(conn, treino_id):
+    return tuple(
+        conn.execute(
+            "SELECT inicio, fim, sessoes_por_ficha, ativo, concluido_em FROM treino WHERE id = ?", (treino_id,)
+        ).fetchone()
+    )
+
+
+def test_treino_novo_sem_datas_comeca_hoje_ativo_e_sem_meta(conn, aluno_id, exercicios):
+    treino_id = salvar_treino(conn, aluno_id, _com(exercicios["a"]), agora=AGORA)
+
+    assert _ciclo(conn, treino_id) == ("2026-10-08", None, None, 1, None)
+
+
+def test_inicio_de_hoje_usa_o_dia_de_brasilia_e_nao_o_de_utc(conn, aluno_id, exercicios):
+    de_madrugada = datetime(2026, 10, 9, 1, 30, 0, tzinfo=timezone.utc)  # ainda é 08/10, 22h30, em Brasília
+
+    treino_id = salvar_treino(conn, aluno_id, _com(exercicios["a"]), agora=de_madrugada)
+
+    assert _ciclo(conn, treino_id)[0] == "2026-10-08"
+
+
+def test_grava_inicio_fim_e_treinos_por_ficha(conn, aluno_id, exercicios):
+    dados = _com(exercicios["a"], inicio="2026-10-10", fim="2026-12-31", sessoes_por_ficha=15)
+
+    treino_id = salvar_treino(conn, aluno_id, dados, agora=AGORA)
+
+    assert _ciclo(conn, treino_id) == ("2026-10-10", "2026-12-31", 15, 1, None)
+    treino = obter_treino(conn, treino_id)
+    assert (treino["inicio"], treino["fim"], treino["sessoes_por_ficha"], treino["ativo"]) == ("2026-10-10", "2026-12-31", 15, 1)
+
+
+@pytest.mark.parametrize("vazio", [None, ""])
+def test_inicio_fim_e_meta_vazios_valem_como_nao_informados(conn, aluno_id, exercicios, vazio):
+    dados = _com(exercicios["a"], inicio=vazio, fim=vazio, sessoes_por_ficha=vazio)
+
+    treino_id = salvar_treino(conn, aluno_id, dados, agora=AGORA)
+
+    assert _ciclo(conn, treino_id) == ("2026-10-08", None, None, 1, None)
+
+
+def test_fim_no_mesmo_dia_do_inicio_vale(conn, aluno_id, exercicios):
+    treino_id = salvar_treino(conn, aluno_id, _com(exercicios["a"], inicio="2026-10-08", fim="2026-10-08"))
+
+    assert _ciclo(conn, treino_id)[:2] == ("2026-10-08", "2026-10-08")
+
+
+def test_fim_antes_do_inicio_e_recusado(conn, aluno_id, exercicios):
+    problemas = _problemas(conn, aluno_id, _com(exercicios["a"], inicio="2026-10-10", fim="2026-10-09"))
+
+    assert problemas == ["A data do fim não pode ser antes da data do início."]
+    assert _contagens(conn) == (0, 0, 0)
+
+
+def test_fim_antes_de_hoje_sem_inicio_informado_tambem_e_recusado(conn, aluno_id, exercicios):
+    # sem início, vale hoje: um fim ontem não faz sentido
+    problemas = _problemas(conn, aluno_id, _com(exercicios["a"], fim="2020-01-01"))
+
+    assert "A data do fim não pode ser antes da data do início." in problemas
+
+
+@pytest.mark.parametrize(
+    "valor",
+    ["2026-02-30", "2026-13-01", "2026-1-5", "08/10/2026", "2026-10-081", "ontem", " 2026-10-08", "２０２６-10-08",
+     "0202-10-08", "2206-10-08", "2019-12-31", 20261008, True, ["2026-10-08"]],
+)
+def test_data_invalida_e_recusada_no_inicio_e_no_fim(conn, aluno_id, exercicios, valor):
+    assert "Início: data inválida" in _problemas(conn, aluno_id, _com(exercicios["a"], inicio=valor))[0]
+    assert "Fim: data inválida" in _problemas(conn, aluno_id, _com(exercicios["a"], fim=valor))[0]
+    assert _contagens(conn) == (0, 0, 0)
+
+
+@pytest.mark.parametrize("valor", [1, 15, 999])
+def test_meta_valida(conn, aluno_id, exercicios, valor):
+    treino_id = salvar_treino(conn, aluno_id, _com(exercicios["a"], sessoes_por_ficha=valor))
+
+    assert _ciclo(conn, treino_id)[2] == valor
+
+
+@pytest.mark.parametrize("valor", [0, -1, 1000, 1.5, "15", "abc", True, [15]])
+def test_meta_invalida_e_recusada(conn, aluno_id, exercicios, valor):
+    problemas = _problemas(conn, aluno_id, _com(exercicios["a"], sessoes_por_ficha=valor))
+
+    assert problemas == ["Treinos por ficha: use um número inteiro de 1 a 999."]
+    assert _contagens(conn) == (0, 0, 0)
+
+
+def test_varios_problemas_de_ciclo_aparecem_juntos_com_os_do_resto(conn, aluno_id, exercicios):
+    pedido = _com(exercicios["a"], inicio="ontem", sessoes_por_ficha=0, nome_treino="")
+
+    problemas = _problemas(conn, aluno_id, pedido)
+
+    assert len(problemas) == 3
+
+
+def test_treino_novo_conclui_o_ativo_anterior_na_mesma_gravacao(conn, aluno_id, exercicios):
+    primeiro = salvar_treino(conn, aluno_id, _com(exercicios["a"], nome_treino="PRIMEIRO"), agora=AGORA)
+
+    segundo = salvar_treino(conn, aluno_id, _com(exercicios["b"], nome_treino="SEGUNDO"), agora=AGORA)
+
+    assert _ciclo(conn, primeiro)[3:] == (0, "2026-10-08 14:30:00")  # inativo, com o momento (UTC) em que acabou
+    assert _ciclo(conn, segundo)[3:] == (1, None)
+    assert conn.execute("SELECT COUNT(*) FROM treino WHERE aluno_id = ? AND ativo = 1", (aluno_id,)).fetchone()[0] == 1
+
+
+def test_treino_recusado_nao_conclui_o_ativo(conn, aluno_id, exercicios):
+    primeiro = salvar_treino(conn, aluno_id, _com(exercicios["a"], nome_treino="PRIMEIRO"))
+
+    _problemas(conn, aluno_id, _com(exercicios["a"], nome_treino="primeiro"), status=409)  # nome repetido
+    _problemas(conn, aluno_id, _com(exercicios["a"], nome_treino="OUTRO", sessoes_por_ficha=0))
+
+    assert _ciclo(conn, primeiro)[3:] == (1, None)
+
+
+def test_falha_na_gravacao_nao_conclui_o_ativo(conn, aluno_id, exercicios):
+    primeiro = salvar_treino(conn, aluno_id, _com(exercicios["a"], nome_treino="PRIMEIRO"))
+    conn.execute(
+        "CREATE TRIGGER falha_no_item BEFORE INSERT ON ficha_item BEGIN SELECT RAISE(ABORT, 'falha de teste'); END"
+    )
+    import sqlite3
+
+    with pytest.raises(sqlite3.DatabaseError):
+        salvar_treino(conn, aluno_id, _com(exercicios["b"], nome_treino="SEGUNDO"))
+
+    assert _ciclo(conn, primeiro)[3:] == (1, None)  # a conclusão volta junto com o resto
+
+
+def test_concluir_o_ativo_de_um_aluno_nao_mexe_nos_outros(conn, aluno_id, exercicios):
+    outro = conn.execute("INSERT INTO aluno (nome) VALUES ('OUTRA ALUNA')").lastrowid
+    do_outro = salvar_treino(conn, outro, _com(exercicios["a"], nome_treino="DA OUTRA"))
+
+    salvar_treino(conn, aluno_id, _com(exercicios["a"], nome_treino="X1"))
+    salvar_treino(conn, aluno_id, _com(exercicios["a"], nome_treino="X2"))
+
+    assert _ciclo(conn, do_outro)[3:] == (1, None)
+
+
+def test_treino_do_historico_inativo_continua_inativo_ao_salvar_novo(conn, aluno_id, exercicios):
+    antigo = conn.execute(
+        "INSERT INTO treino (aluno_id, nome, montado_por, origem, data4u_id, ativo) VALUES (?, 'ANTIGO', 'X', 'data4u', 9, 0)",
+        (aluno_id,),
+    ).lastrowid
+
+    novo = salvar_treino(conn, aluno_id, _com(exercicios["a"]), agora=AGORA)
+
+    assert _ciclo(conn, antigo)[3:] == (0, None)  # não ganha "concluído em" que não aconteceu agora
+    assert _ciclo(conn, novo)[3] == 1

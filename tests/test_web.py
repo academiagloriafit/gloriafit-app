@@ -361,7 +361,7 @@ def test_salvar_treino_devolve_201_e_grava_com_quem_montou(cliente_treinos, banc
     resposta = cliente_treinos.post("/api/alunos/1/treinos", json=_pedido_web())
 
     assert resposta.status_code == 201
-    assert resposta.get_json() == {"id": 1}
+    assert resposta.get_json() == {"id": 1, "concluido_anterior": None}
     conn = conectar(banco_treinos)
     linha = conn.execute("SELECT aluno_id, nome, montado_por FROM treino").fetchone()
     conn.close()

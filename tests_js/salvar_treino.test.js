@@ -14,6 +14,8 @@ import {
   tamanho,
   unirEmBloco,
   validarDadosDoTreino,
+  lerDia,
+  lerSessoesPorFicha,
 } from "../app/static/treino_modelo.js";
 
 const DATA = "07/10/26";
@@ -145,7 +147,7 @@ describe("sugerirNomeDoTreino", () => {
 });
 
 describe("validarDadosDoTreino", () => {
-  const bons = { nomeTreino: "TREINO ABC 07/10/26", montadoPor: "Ana Paula" };
+  const bons = { nomeTreino: "TREINO ABC 07/10/26", montadoPor: "Ana Paula", inicio: "2026-10-08" };
   const campos = (dados) => validarDadosDoTreino(dados).map((p) => p.campo);
 
   it("dados bons não têm problema", () => {
@@ -167,15 +169,15 @@ describe("validarDadosDoTreino", () => {
   });
 
   it("os dois vazios dão dois problemas, um por campo", () => {
-    expect(campos({ nomeTreino: "", montadoPor: "" })).toEqual(["nome-treino", "quem-montou"]);
+    expect(campos({ ...bons, nomeTreino: "", montadoPor: "" })).toEqual(["nome-treino", "quem-montou"]);
   });
 
   it("aceita exatamente 40 no nome do treino e 60 em quem montou", () => {
-    expect(validarDadosDoTreino({ nomeTreino: "T".repeat(40), montadoPor: "P".repeat(60) })).toEqual([]);
+    expect(validarDadosDoTreino({ ...bons, nomeTreino: "T".repeat(40), montadoPor: "P".repeat(60) })).toEqual([]);
   });
 
   it("recusa 41 e 61, dizendo quantas letras tem e o máximo", () => {
-    const problemas = validarDadosDoTreino({ nomeTreino: "T".repeat(41), montadoPor: "P".repeat(61) });
+    const problemas = validarDadosDoTreino({ ...bons, nomeTreino: "T".repeat(41), montadoPor: "P".repeat(61) });
     expect(problemas.map((p) => p.campo)).toEqual(["nome-treino", "quem-montou"]);
     expect(problemas[0].mensagem).toContain("41");
     expect(problemas[0].mensagem).toContain("40");
@@ -185,7 +187,7 @@ describe("validarDadosDoTreino", () => {
   });
 
   it("os espaços a mais não contam (o servidor também os junta)", () => {
-    const dados = { nomeTreino: "  " + "T".repeat(40) + "   ", montadoPor: "Ana     Paula" };
+    const dados = { ...bons, nomeTreino: "  " + "T".repeat(40) + "   ", montadoPor: "Ana     Paula" };
     expect(validarDadosDoTreino(dados)).toEqual([]);
   });
 
@@ -204,6 +206,75 @@ describe("validarDadosDoTreino", () => {
 
   it("aceita acentos, apóstrofo, hífen e ponto", () => {
     expect(validarDadosDoTreino({ ...bons, montadoPor: "João D'Ávila-Souza Jr." })).toEqual([]);
+  });
+
+  describe("início, fim e treinos por ficha", () => {
+    it("fim e treinos por ficha são opcionais", () => {
+      expect(validarDadosDoTreino({ ...bons, fim: "", sessoesPorFicha: "" })).toEqual([]);
+      expect(validarDadosDoTreino({ ...bons, fim: "2026-12-31", sessoesPorFicha: "15" })).toEqual([]);
+    });
+
+    it("o início é obrigatório", () => {
+      expect(validarDadosDoTreino({ ...bons, inicio: "" })).toEqual([
+        { campo: "data-inicio", mensagem: "Informe a data de início do treino." },
+      ]);
+    });
+
+    it("o fim pode ser o mesmo dia do início", () => {
+      expect(validarDadosDoTreino({ ...bons, inicio: "2026-10-08", fim: "2026-10-08" })).toEqual([]);
+    });
+
+    it("o fim não pode ser antes do início", () => {
+      const problemas = validarDadosDoTreino({ ...bons, inicio: "2026-10-08", fim: "2026-10-07" });
+      expect(problemas.map((p) => p.campo)).toEqual(["data-fim"]);
+      expect(problemas[0].mensagem).toContain("antes");
+    });
+
+    it.each(["2026-02-30", "2026-13-01", "2026-1-5", "08/10/2026", "2026-10-081", "ontem", "２０２６-10-08"])(
+      "recusa a data inválida %s",
+      (texto) => {
+        expect(campos({ ...bons, inicio: texto })).toEqual(["data-inicio"]);
+        expect(campos({ ...bons, fim: texto })).toEqual(["data-fim"]);
+      },
+    );
+
+    it("recusa ano fora de 2020 a 2100 (erro de digitação)", () => {
+      expect(campos({ ...bons, inicio: "0202-10-08" })).toEqual(["data-inicio"]);
+      expect(campos({ ...bons, fim: "2206-10-08" })).toEqual(["data-fim"]);
+      expect(campos({ ...bons, inicio: "2019-12-31" })).toEqual(["data-inicio"]);
+      expect(campos({ ...bons, inicio: "2100-12-31", fim: "2100-12-31" })).toEqual([]);
+    });
+
+    it("aceita 29/02 só em ano bissexto", () => {
+      expect(campos({ ...bons, inicio: "2028-02-29" })).toEqual([]);
+      expect(campos({ ...bons, inicio: "2027-02-29" })).toEqual(["data-inicio"]);
+    });
+
+    it.each(["1", "15", " 15 ", "999", "007"])("aceita %j treinos por ficha", (texto) => {
+      expect(campos({ ...bons, sessoesPorFicha: texto })).toEqual([]);
+    });
+
+    it.each(["0", "1000", "-1", "1.5", "1,5", "quinze", "15x", "1e2", "０５"])("recusa %j treinos por ficha", (texto) => {
+      expect(campos({ ...bons, sessoesPorFicha: texto })).toEqual(["sessoes-por-ficha"]);
+    });
+  });
+});
+
+describe("lerDia e lerSessoesPorFicha", () => {
+  it("lerDia devolve o próprio texto quando a data existe", () => {
+    expect(lerDia("2026-10-08")).toBe("2026-10-08");
+    expect(lerDia("2026-02-30")).toBeNull();
+    expect(lerDia(null)).toBeNull();
+    expect(lerDia(20261008)).toBeNull();
+  });
+
+  it("lerSessoesPorFicha: vazio é null, número é número, o resto é undefined", () => {
+    expect(lerSessoesPorFicha("")).toBeNull();
+    expect(lerSessoesPorFicha("   ")).toBeNull();
+    expect(lerSessoesPorFicha(undefined)).toBeNull();
+    expect(lerSessoesPorFicha("15")).toBe(15);
+    expect(lerSessoesPorFicha("0")).toBeUndefined();
+    expect(lerSessoesPorFicha("abc")).toBeUndefined();
   });
 });
 
@@ -228,7 +299,9 @@ describe("montarPedido", () => {
   it("monta exatamente o que o servidor espera", () => {
     const pedido = montarPedido(treinoPronto(), { nomeTreino: "TREINO A 07/10/26", montadoPor: "Ana Paula" });
 
-    expect(Object.keys(pedido).sort()).toEqual(["fichas", "montado_por", "nome_treino"]);
+    expect(Object.keys(pedido).sort()).toEqual([
+      "fichas", "fim", "inicio", "montado_por", "nome_treino", "sessoes_por_ficha",
+    ]);
     expect(pedido.nome_treino).toBe("TREINO A 07/10/26");
     expect(pedido.montado_por).toBe("Ana Paula");
     expect(pedido.fichas).toHaveLength(1);
@@ -238,6 +311,16 @@ describe("montarPedido", () => {
       [22, "3", "12", "", 1],
       [33, "4", "10", "15 kg", null],
     ]);
+  });
+
+  it("leva início, fim e treinos por ficha; vazio vira null", () => {
+    const completo = montarPedido(treinoPronto(), {
+      nomeTreino: "x", montadoPor: "y", inicio: "2026-10-08", fim: "2026-12-31", sessoesPorFicha: " 15 ",
+    });
+    expect([completo.inicio, completo.fim, completo.sessoes_por_ficha]).toEqual(["2026-10-08", "2026-12-31", 15]);
+
+    const simples = montarPedido(treinoPronto(), { nomeTreino: "x", montadoPor: "y", inicio: "2026-10-08", fim: "", sessoesPorFicha: "" });
+    expect([simples.inicio, simples.fim, simples.sessoes_por_ficha]).toEqual(["2026-10-08", null, null]);
   });
 
   it("limpa os espaços dos dois textos digitados", () => {

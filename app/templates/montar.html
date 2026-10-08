@@ -30,6 +30,30 @@
           <input id="quem-montou" type="text" maxlength="60" autocomplete="off" aria-required="true" aria-describedby="dica-quem-montou" placeholder="Digite o seu nome">
           <p id="dica-quem-montou" class="dica">Fica gravado no treino.</p>
         </div>
+
+        {# Ciclo do treino: quando começa, quando termina e quantas vezes o aluno faz cada ficha. #}
+        <div class="campos-do-ciclo">
+          <div class="campo">
+            <label for="data-inicio">Início <span class="obrigatorio">(obrigatório)</span></label>
+            <input id="data-inicio" type="date" value="{{ hoje }}" min="2020-01-01" max="2100-12-31" aria-required="true">
+          </div>
+          <div class="campo">
+            <label for="data-fim">Fim <span class="opcional">(opcional)</span></label>
+            <input id="data-fim" type="date" min="2020-01-01" max="2100-12-31" aria-describedby="dica-data-fim">
+            <p id="dica-data-fim" class="dica">Passando desta data, o app avisa para trocar o treino.</p>
+          </div>
+          <div class="campo">
+            <label for="sessoes-por-ficha">Treinos por ficha <span class="opcional">(opcional)</span></label>
+            <input id="sessoes-por-ficha" type="text" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="Ex.: 15" aria-describedby="dica-sessoes">
+            <p id="dica-sessoes" class="dica">Quantas vezes o aluno faz cada ficha (A, B, C...). Ao chegar lá, o app avisa para trocar o treino.</p>
+          </div>
+        </div>
+        {% if treino_ativo %}
+        <p class="aviso-troca" id="aviso-treino-ativo" role="note">
+          Este aluno já tem um treino ativo: <strong>{{ treino_ativo.nome }}</strong>.
+          Ao salvar o treino novo, o treino atual será <strong>concluído</strong> e irá para o histórico (o aluno só vê o treino ativo).
+        </p>
+        {% endif %}
       </section>
 
       <div class="fichas-e-lista">
@@ -63,6 +87,7 @@
     <section class="painel painel-salvo" id="treino-salvo" aria-labelledby="titulo-salvo" hidden>
       <h1 id="titulo-salvo" tabindex="-1">Treino salvo</h1>
       <p id="texto-salvo" class="texto-salvo"></p>
+      <p id="texto-concluido" class="texto-salvo" hidden></p>
       <div class="barra-salvar">
         <a id="imprimir-treino" class="botao-link botao-link-forte" href="#" hidden>Imprimir na térmica</a>
         <button type="button" id="montar-outro" class="botao-principal">Lançar outro treino</button>
