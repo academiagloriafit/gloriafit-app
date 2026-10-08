@@ -84,9 +84,11 @@ def buscar_alunos(conn: sqlite3.Connection, texto: str = "", limite: int = LIMIT
     - Com texto: matrícula igual ao número digitado primeiro; depois quem está
       em uso (ativo, trancado, pendente ou provisório), depois os demais; dentro de
       cada grupo, ordem alfabética.
-    - Sem texto: quem tem treino salvo (o mais recente primeiro), depois os
+    - Sem texto: quem tem treino montado no app (o mais recente primeiro), depois os
       provisórios sem treino (o mais recente primeiro), depois os demais (em uso
-      antes), em ordem alfabética.
+      antes), em ordem alfabética. O histórico copiado do Data4U NÃO entra nessa
+      conta (senão os 3 mil alunos com treinos antigos empurrariam para o fim o aluno
+      que acabou de se matricular), mas aparece na coluna "Último treino".
 
     Devolve {"total": quantos existem, "alunos": até `limite` deles}. Não devolve
     o CPF (a lista não precisa dele; ele aparece só na ficha).
@@ -127,8 +129,8 @@ def buscar_alunos(conn: sqlite3.Connection, texto: str = "", limite: int = LIMIT
         partes_da_ordem += [em_uso, "sem_acento(a.nome)", "a.id"]
     else:
         partes_da_ordem = [
-            "CASE WHEN t.id IS NOT NULL THEN 0 WHEN a.provisorio = 1 THEN 1 ELSE 2 END",
-            "CASE WHEN t.id IS NOT NULL THEN t.criado_em WHEN a.provisorio = 1 THEN a.criado_em END DESC",
+            "CASE WHEN ta.id IS NOT NULL THEN 0 WHEN a.provisorio = 1 THEN 1 ELSE 2 END",
+            "CASE WHEN ta.id IS NOT NULL THEN ta.criado_em WHEN a.provisorio = 1 THEN a.criado_em END DESC",
             em_uso,
             "sem_acento(a.nome)",
             "a.id",
@@ -143,6 +145,9 @@ def buscar_alunos(conn: sqlite3.Connection, texto: str = "", limite: int = LIMIT
         FROM aluno a
         LEFT JOIN treino t ON t.id = (
             SELECT id FROM treino WHERE aluno_id = a.id ORDER BY criado_em DESC, id DESC LIMIT 1
+        )
+        LEFT JOIN treino ta ON ta.id = (
+            SELECT id FROM treino WHERE aluno_id = a.id AND origem = 'app' ORDER BY criado_em DESC, id DESC LIMIT 1
         )
         WHERE {onde}
         ORDER BY {ordem}
@@ -187,6 +192,22 @@ def etiquetas_dos_itens(itens: list[dict]) -> list[str]:
         posicao_no_bloco[bloco] = posicao_no_bloco.get(bloco, 0) + 1
         etiquetas.append(f"{letras_por_bloco[bloco]}{posicao_no_bloco[bloco]}")
     return etiquetas
+
+
+def dose_do_item(item: dict) -> str:
+    """'4 × 12' (séries × repetições). Se faltar um dos dois, mostra só o que existe; se faltar tudo, ''."""
+    partes = [str(valor).strip() for valor in (item["series"], item["repeticoes"]) if valor and str(valor).strip()]
+    return " × ".join(partes)
+
+
+def texto_da_pausa(segundos: int | None) -> str:
+    """90 -> '1 min 30 s'; 60 -> '1 min'; 30 -> '30 s'; 0 ou vazio -> '' (sem pausa informada)."""
+    if not segundos:
+        return ""
+    horas, resto = divmod(segundos, 3600)
+    minutos, segs = divmod(resto, 60)
+    partes = [f"{horas} h" if horas else "", f"{minutos} min" if minutos else "", f"{segs} s" if segs else ""]
+    return " ".join(p for p in partes if p)
 
 
 def _plural(n: int, singular: str, plural: str) -> str:
@@ -236,7 +257,15 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
                 {
                     "nome": ficha["nome"],
                     "resumo": _resumo_da_ficha(itens),
-                    "itens": [{**item, "etiqueta": etiquetas[i]} for i, item in enumerate(itens)],
+                    "itens": [
+                        {
+                            **item,
+                            "etiqueta": etiquetas[i],
+                            "dose": dose_do_item(item),
+                            "pausa_texto": texto_da_pausa(item["pausa"]),
+                        }
+                        for i, item in enumerate(itens)
+                    ],
                 }
             )
         lista_de_treinos.append(
@@ -244,6 +273,7 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
                 "id": treino["id"],
                 "nome": treino["nome"],
                 "montado_por": treino["montado_por"],
+                "do_data4u": treino["origem"] == "data4u",
                 "criado_em": data_local(treino["criado_em"]),
                 "fichas": fichas,
             }

@@ -13,15 +13,16 @@ from urllib.parse import urlsplit
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app import acesso, alunos, cupom, db, exercicios, importar_alunos, provisorios, treinos
+from app import acesso, alunos, cupom, db, exercicios, importar_alunos, importar_treinos, provisorios, treinos
 
 
 # Um treino enorme (26 fichas x 100 exercícios) tem poucas dezenas de KB. Acima disto o
 # pedido é recusado antes de ser lido inteiro: ninguém precisa mandar megabytes para salvar.
 TAMANHO_MAXIMO_DO_PEDIDO = 512 * 1024
 
-# Só a rota de "Atualizar alunos" recebe um pedido grande: as 3 tabelas do Data4U, com só as
-# colunas usadas, dão alguns MB (51 mil linhas de situação). O teto vale só para ela.
+# Só as rotas de "Atualizar alunos" recebem um pedido grande: as 3 tabelas dos alunos, com só as
+# colunas usadas, dão alguns MB (51 mil linhas de situação), e o histórico de treinos uns 8 MB
+# (129 mil exercícios prescritos). O teto vale só para elas.
 TAMANHO_MAXIMO_DA_IMPORTACAO = 25 * 1024 * 1024
 
 
@@ -68,9 +69,12 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             "python -m app.importar_exercicios dados/quadro_exercicios_v2.xlsx app.db"
         )
 
-    # Banco de versão antiga: falha já na subida (com a explicação), não na hora de salvar.
+    # Banco de versão antiga que sabemos atualizar: é atualizado agora, na subida, com uma cópia
+    # de segurança antes (ver db.migrar). Banco que não sabemos atualizar: falha já aqui (com a
+    # explicação), não na hora de salvar.
     conn_inicial = db.conectar(caminho)
     try:
+        db.migrar(conn_inicial)
         db.verificar_versao(conn_inicial)
     finally:
         conn_inicial.close()
@@ -327,6 +331,22 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         except importar_alunos.CopiaInvalida as erro:
             return jsonify(erro=str(erro)), 400
         relatorio = importar_alunos.importar(conexao(), copia)
+        return jsonify(relatorio.como_dicionario())
+
+    @app.post("/api/treinos/importar")
+    def api_importar_treinos():
+        """Importa o histórico de treinos do Data4U a partir do pacote que o navegador montou
+        (ver importar_treinos.copia_de_pacote). Com `"simular": true` no pacote, roda tudo e desfaz.
+
+        200 com o relatório (só contagens); 400 {"erro"} se o pacote não serve (nada é gravado).
+        """
+        request.max_content_length = TAMANHO_MAXIMO_DA_IMPORTACAO  # só nesta rota, antes de ler o corpo
+        pacote = corpo_json()
+        try:
+            copia = importar_treinos.copia_de_pacote(pacote)
+        except importar_alunos.CopiaInvalida as erro:
+            return jsonify(erro=str(erro)), 400
+        relatorio = importar_treinos.importar(conexao(), copia, simular=pacote.get("simular") is True)
         return jsonify(relatorio.como_dicionario())
 
     @app.get("/alunos/novo")

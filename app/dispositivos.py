@@ -35,6 +35,7 @@ def _abrir_banco(caminho: Path):
         )
     conn = db.conectar(caminho)
     try:
+        db.migrar(conn)
         db.verificar_versao(conn)
         tem_tabela = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dispositivo'"

@@ -499,6 +499,18 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 }
 .item-ficha-nome { font-weight: 600; overflow-wrap: anywhere; }
 .item-ficha-dose { font-size: 15px; color: var(--texto-suave); white-space: nowrap; }
+.item-ficha-obs { grid-column: 2 / -1; font-size: 15px; color: var(--texto-suave); font-style: italic; overflow-wrap: anywhere; }
+.selo-origem {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: #e8e7e1;
+  color: var(--texto-suave);
+  font-size: 13px;
+  font-weight: 700;
+  vertical-align: middle;
+}
 
 @media (max-width: 900px) {
   .titulos-alunos { display: none; }

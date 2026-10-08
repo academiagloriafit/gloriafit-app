@@ -1,35 +1,51 @@
-// Tela "Atualizar alunos": o computador escolhe o base_total.zip, o navegador separa as 3
-// tabelas e as colunas de que o app precisa e envia só isso ao servidor.
+// Tela "Atualizar alunos": o computador escolhe o base_total.zip, o navegador separa as tabelas
+// e as colunas de que o app precisa (alunos e histórico de treinos) e envia só isso ao servidor.
 import { enviarJson, MENSAGEM_NAO_AUTORIZADO } from "./api.js";
 import {
+  ARQUIVOS_DOS_TREINOS,
   ARQUIVOS_NECESSARIOS,
   CopiaInvalida,
-  MENSAGEM_SEM_REDE,
   TAMANHO_MAXIMO_DA_TABELA,
+  criarEtapas,
   descreverCopia,
-  interpretarResposta,
+  descreverTreinos,
+  enviarEtapas,
+  juntarRelatorios,
   montarPacote,
+  montarPacoteDeTreinos,
 } from "./copia_modelo.js";
 import { ZipInvalido, lerEntrada, listarEntradas } from "./zip_leitor.js";
 
 const TEMPO_MAXIMO_DO_ENVIO_MS = 120000; // pacote de alguns MB, numa internet que pode estar lenta
+// Modo de teste (para quem administra): /alunos/atualizar?simular_treinos=1 faz o servidor
+// contar o que faria com o histórico de treinos, sem gravar nada. Os alunos são atualizados normalmente.
+const SIMULAR_TREINOS = new URLSearchParams(location.search).get("simular_treinos") === "1";
 
 const campoArquivo = document.getElementById("arquivo");
 const botao = document.getElementById("botao-enviar");
 const resumo = document.getElementById("resumo");
 const erroGeral = document.getElementById("erro-geral");
 const relatorio = document.getElementById("relatorio");
+const modoTeste = document.getElementById("modo-teste");
 
-let pacote = null;
+let etapas = null; // [alunos, treinos], criadas quando o arquivo é lido
 let ocupado = false;
 
+if (SIMULAR_TREINOS) modoTeste.hidden = false;
+
 function limpar() {
-  pacote = null;
+  etapas = null;
   botao.disabled = true;
   resumo.textContent = ""; // textContent: o texto nunca é interpretado como HTML
   erroGeral.textContent = "";
   relatorio.hidden = true;
   relatorio.textContent = "";
+}
+
+function mostrarRelatorio() {
+  const texto = juntarRelatorios(etapas);
+  relatorio.textContent = texto;
+  relatorio.hidden = texto === "";
 }
 
 campoArquivo.addEventListener("change", async () => {
@@ -42,14 +58,16 @@ campoArquivo.addEventListener("change", async () => {
     const bytes = new Uint8Array(await arquivo.arrayBuffer());
     const entradas = listarEntradas(bytes);
     const arquivos = {};
-    for (const nome of ARQUIVOS_NECESSARIOS) {
+    for (const nome of [...ARQUIVOS_NECESSARIOS, ...ARQUIVOS_DOS_TREINOS]) {
       arquivos[nome] = await lerEntrada(bytes, entradas, nome, TAMANHO_MAXIMO_DA_TABELA);
     }
-    const preparado = montarPacote(arquivos);
-    const { texto, aviso } = descreverCopia(preparado.resumo);
-    resumo.textContent = texto;
+    const alunos = montarPacote(arquivos);
+    const treinos = montarPacoteDeTreinos(arquivos);
+    if (SIMULAR_TREINOS) treinos.pacote.simular = true;
+    const { texto, aviso } = descreverCopia(alunos.resumo);
+    resumo.textContent = `${texto} ${descreverTreinos(treinos.resumo)}`;
     if (aviso) erroGeral.textContent = aviso;
-    pacote = preparado.pacote;
+    etapas = criarEtapas(alunos.pacote, treinos.pacote);
     botao.disabled = false;
   } catch (erro) {
     resumo.textContent = "";
@@ -64,28 +82,35 @@ campoArquivo.addEventListener("change", async () => {
 });
 
 botao.addEventListener("click", async () => {
-  if (ocupado || pacote === null) return; // clique duplo não manda duas vezes
+  if (ocupado || etapas === null) return; // clique duplo não manda duas vezes
   ocupado = true;
   botao.disabled = true;
   erroGeral.textContent = "";
-  resumo.textContent = "Enviando e atualizando... pode levar alguns segundos.";
+  const lista = etapas; // a tela pode ser limpa (outro arquivo) enquanto o envio anda
   try {
-    const { status, corpo } = await enviarJson("/api/alunos/importar", pacote, TEMPO_MAXIMO_DO_ENVIO_MS);
-    const resultado = interpretarResposta(status, corpo);
-    if (resultado.tipo === "ok") {
-      resumo.textContent = "Pronto: os alunos foram atualizados.";
-      relatorio.textContent = resultado.texto;
-      relatorio.hidden = false;
-      pacote = null; // enviado: para enviar de novo, escolha o arquivo outra vez
+    const resultado = await enviarEtapas(
+      lista,
+      (rota, pacote) => enviarJson(rota, pacote, TEMPO_MAXIMO_DO_ENVIO_MS),
+      (etapa) => {
+        resumo.textContent =
+          etapa.chave === "alunos"
+            ? "Enviando e atualizando os alunos... pode levar alguns segundos."
+            : "Enviando o histórico de treinos... isto leva alguns segundos a mais.";
+      },
+    );
+    mostrarRelatorio();
+    if (resultado.completo) {
+      resumo.textContent = SIMULAR_TREINOS
+        ? "Pronto: os alunos foram atualizados. O histórico de treinos foi só simulado (nada foi gravado)."
+        : "Pronto: os alunos e o histórico de treinos foram atualizados.";
+      etapas = null; // enviado: para enviar de novo, escolha o arquivo outra vez
       return;
     }
-    resumo.textContent = "";
-    erroGeral.textContent = resultado.tipo === "nao_autorizado" ? MENSAGEM_NAO_AUTORIZADO : resultado.mensagem;
-    botao.disabled = false;
-  } catch {
-    resumo.textContent = "";
-    erroGeral.textContent = MENSAGEM_SEM_REDE;
-    botao.disabled = false;
+    const alunosJaForam = lista[0].enviado;
+    resumo.textContent = alunosJaForam ? "Os alunos foram atualizados, mas o histórico de treinos ainda não." : "";
+    erroGeral.textContent =
+      resultado.resultado.tipo === "nao_autorizado" ? MENSAGEM_NAO_AUTORIZADO : resultado.resultado.mensagem;
+    botao.disabled = false; // tentar de novo manda só o que faltou
   } finally {
     ocupado = false;
   }

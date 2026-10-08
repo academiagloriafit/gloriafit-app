@@ -190,14 +190,18 @@ _TIPOS_DAS_COLUNAS = {
 }
 
 
-def _valor_serve(valor, tipo, aceita_vazio: bool) -> bool:
+def valor_serve(valor, tipo, aceita_vazio: bool) -> bool:
     if valor is None:
         return aceita_vazio
     return isinstance(valor, tipo) and not isinstance(valor, bool)
 
 
-def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
-    """Valida o pacote enviado pelo navegador e o transforma em `Copia`. Nada é gravado aqui."""
+def conferir_data_do_pacote(pacote, agora: datetime | None = None) -> datetime:
+    """Confere o formato do pacote e a data da cópia (não pode ser do futuro nem velha demais).
+
+    Devolve quando o PC da recepção tirou a cópia (horário de Vila Velha, sem fuso). Também é
+    usada pela importação dos treinos (app/importar_treinos.py), que recebe o mesmo tipo de pacote.
+    """
     agora = agora or datetime.now(timezone.utc)
     if not isinstance(pacote, dict) or not isinstance(pacote.get("tabelas"), dict):
         raise CopiaInvalida("O pacote enviado não está no formato esperado.")
@@ -213,6 +217,12 @@ def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
             f"A cópia é de {extraido_em:%d/%m/%Y %H:%M}, velha demais "
             f"(mais de {IDADE_MAXIMA_DA_COPIA.days} dias). Gere uma cópia nova no PC da recepção."
         )
+    return extraido_em
+
+
+def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
+    """Valida o pacote enviado pelo navegador e o transforma em `Copia`. Nada é gravado aqui."""
+    extraido_em = conferir_data_do_pacote(pacote, agora)
     if set(pacote["tabelas"]) != set(TABELAS_USADAS):
         raise CopiaInvalida("O pacote precisa ter exatamente as tabelas " + ", ".join(TABELAS_USADAS) + ".")
 
@@ -235,7 +245,7 @@ def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
                 raise CopiaInvalida(f"{nome}, linha {numero}: formato inesperado.")
             registro = dict(zip(colunas, linha))
             for coluna, (tipo, aceita_vazio) in tipos.items():
-                if not _valor_serve(registro[coluna], tipo, aceita_vazio):
+                if not valor_serve(registro[coluna], tipo, aceita_vazio):
                     raise CopiaInvalida(f"{nome}, linha {numero}: a coluna {coluna} está num formato inesperado.")
             convertidas.append(registro)
         tabelas[nome] = convertidas

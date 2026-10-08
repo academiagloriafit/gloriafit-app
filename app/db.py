@@ -3,6 +3,7 @@
 import sqlite3
 from pathlib import Path
 
+from app.backup import fazer_backup
 from app.texto import normalizar
 
 ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
@@ -10,7 +11,11 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 4
+VERSAO_DO_BANCO = 5
+
+# Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
+PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
+COPIAS_ANTES_DA_MIGRACAO = 5
 
 
 class BancoDesatualizado(Exception):
@@ -39,24 +44,97 @@ def conectar(caminho: str | Path = ":memory:") -> sqlite3.Connection:
 
 
 def verificar_versao(conn: sqlite3.Connection) -> None:
-    """Recusa um banco que já tem tabelas mas é de uma versão antiga do desenho.
+    """Recusa um banco que já tem tabelas mas não é da versão que o app espera.
 
     Sem isso, o app subiria e só falharia na hora de salvar, com um erro
-    confuso ("no such column"). Um banco novo (sem tabelas) passa.
+    confuso ("no such column"). Um banco novo (sem tabelas) passa. Bancos de uma
+    versão que sabemos atualizar (ver `migrar`) devem passar por `migrar` antes.
     """
     tem_tabelas = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'treino'"
     ).fetchone()
     versao = conn.execute("PRAGMA user_version").fetchone()[0]
     if tem_tabelas and versao != VERSAO_DO_BANCO:
+        if versao > VERSAO_DO_BANCO:
+            raise BancoDesatualizado(
+                f"Este banco é da versão {versao} do desenho, mais nova que a {VERSAO_DO_BANCO} que este app "
+                "conhece. NÃO apague o arquivo: use a versão mais nova do app, ou restaure uma cópia de segurança."
+            )
         raise BancoDesatualizado(
             f"Este banco é da versão {versao} do desenho e o app espera a {VERSAO_DO_BANCO}. "
-            "Ainda não há dados de alunos para migrar: apague o arquivo e crie de novo com "
+            f"O app só atualiza sozinho bancos a partir da versão {min(MIGRACOES)}. "
+            "As versões anteriores nunca tiveram dados reais: apague o arquivo e crie de novo com "
             "python -m app.importar_exercicios dados/quadro_exercicios_v2.xlsx app.db"
         )
 
 
+# ------------------------------------------------------------------ migrações
+
+
+def _de_4_para_5(conn: sqlite3.Connection) -> None:
+    """Histórico de treinos do Data4U: o treino ganha `origem` e `data4u_id`.
+
+    O índice de nome repetido passa a valer só para treinos do app (`origem = 'app'`): o
+    histórico do Data4U tem nomes repetidos para o mesmo aluno. Treinos que já existem são
+    todos do app (ainda não havia importação de treinos): o DEFAULT cuida deles.
+    """
+    conn.execute(
+        "ALTER TABLE treino ADD COLUMN origem TEXT NOT NULL DEFAULT 'app' CHECK (origem IN ('app', 'data4u'))"
+    )
+    conn.execute("ALTER TABLE treino ADD COLUMN data4u_id INTEGER")
+    conn.execute("DROP INDEX IF EXISTS ux_treino_nome_por_aluno")
+    conn.execute(
+        "CREATE UNIQUE INDEX ux_treino_nome_por_aluno ON treino(aluno_id, nome COLLATE NOCASE) WHERE origem = 'app'"
+    )
+    conn.execute("CREATE UNIQUE INDEX ux_treino_data4u ON treino(data4u_id)")
+
+
+# versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
+MIGRACOES = {4: _de_4_para_5}
+
+
+def _arquivo_do_banco(conn: sqlite3.Connection) -> Path | None:
+    """O arquivo da conexão, ou None se o banco está na memória."""
+    arquivo = conn.execute("PRAGMA database_list").fetchone()[2]  # colunas: seq, name, file
+    return Path(arquivo) if arquivo else None
+
+
+def migrar(conn: sqlite3.Connection) -> list[int]:
+    """Leva um banco antigo até a versão atual. Devolve as versões de partida aplicadas ([] = nada a fazer).
+
+    Segurança, porque aqui já há dados de verdade:
+    - Antes de mexer, tira uma cópia consistente em `<pasta do banco>/antes-da-migracao/`.
+    - Cada passo roda numa transação: ou muda tudo, ou nada (o DDL do SQLite é transacional).
+    - Dois processos subindo juntos (o servidor tem 2): o segundo espera a vez e, ao entrar,
+      vê que a versão já subiu e não faz nada (`BEGIN IMMEDIATE` + conferência de novo).
+    """
+    aplicadas: list[int] = []
+    while True:
+        versao = conn.execute("PRAGMA user_version").fetchone()[0]
+        tem_tabelas = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'treino'"
+        ).fetchone()
+        if not tem_tabelas or versao not in MIGRACOES:
+            return aplicadas
+        conn.execute("BEGIN IMMEDIATE")  # pega a trava de escrita já: ninguém muda o banco daqui até o COMMIT
+        try:
+            if conn.execute("PRAGMA user_version").fetchone()[0] != versao:
+                conn.rollback()  # outro processo migrou enquanto esperávamos a trava
+                continue
+            arquivo = _arquivo_do_banco(conn)
+            if arquivo is not None:
+                fazer_backup(arquivo, arquivo.parent / PASTA_ANTES_DA_MIGRACAO, COPIAS_ANTES_DA_MIGRACAO)
+            MIGRACOES[versao](conn)
+            conn.execute(f"PRAGMA user_version = {versao + 1}")  # número do código, nunca de fora
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        aplicadas.append(versao)
+
+
 def criar_tabelas(conn: sqlite3.Connection) -> None:
-    """Cria as tabelas que ainda não existem. Pode rodar mais de uma vez."""
+    """Cria as tabelas que ainda não existem (e atualiza um banco antigo). Pode rodar mais de uma vez."""
+    migrar(conn)
     verificar_versao(conn)
     conn.executescript(ARQUIVO_SCHEMA.read_text(encoding="utf-8"))

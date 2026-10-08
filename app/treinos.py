@@ -201,6 +201,7 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados) -> int:
         raise TreinoInvalido(problemas)
 
     # O Data4U recusa dois treinos com o mesmo nome para o mesmo aluno; o app segue a mesma regra.
+    # Vale contra TODOS os treinos do aluno, inclusive o histórico copiado do Data4U.
     usados = {normalizar(r[0]) for r in conn.execute("SELECT nome FROM treino WHERE aluno_id = ?", (aluno_id,))}
     if normalizar(nome_treino) in usados:
         raise TreinoInvalido(
@@ -239,9 +240,14 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados) -> int:
 
 
 def obter_treino(conn: sqlite3.Connection, treino_id: int) -> dict | None:
-    """O treino completo (com nomes dos exercícios), ou None se não existir."""
+    """O treino completo (com nomes dos exercícios), ou None se não existir.
+
+    `origem` é 'app' (montado aqui) ou 'data4u' (histórico copiado do Data4U). Nos itens, `series`,
+    `repeticoes`, `carga`, `pausa` (segundos) e `observacao` podem ser None: o histórico do Data4U
+    tem prescrições sem esses campos.
+    """
     treino = conn.execute(
-        "SELECT id, aluno_id, nome, montado_por, ativo, criado_em FROM treino WHERE id = ?", (treino_id,)
+        "SELECT id, aluno_id, nome, montado_por, ativo, origem, criado_em FROM treino WHERE id = ?", (treino_id,)
     ).fetchone()
     if treino is None:
         return None
@@ -251,7 +257,7 @@ def obter_treino(conn: sqlite3.Connection, treino_id: int) -> dict | None:
         itens = conn.execute(
             """
             SELECT i.ordem, i.bloco, i.exercicio_id, e.nome AS exercicio,
-                   i.series, i.repeticoes, i.carga
+                   i.series, i.repeticoes, i.carga, i.pausa, i.observacao
             FROM ficha_item i JOIN exercicio e ON e.id = i.exercicio_id
             WHERE i.ficha_id = ? ORDER BY i.ordem
             """,

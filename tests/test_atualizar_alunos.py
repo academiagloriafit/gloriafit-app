@@ -351,6 +351,22 @@ def test_pagina_autorizada_tem_campo_botao_e_script_externo(cliente):
     assert resposta.headers["Cache-Control"] == "no-store"
 
 
+def test_pagina_fala_do_historico_e_o_aviso_do_modo_teste_comeca_escondido(cliente):
+    html = cliente.get("/alunos/atualizar").get_data(as_text=True)
+
+    assert "histórico de treinos" in html
+    assert '<p id="modo-teste"' in html and 'hidden>MODO TESTE' in html  # só o script o mostra, com ?simular_treinos=1
+
+
+def test_o_script_da_tela_le_o_modo_teste_so_do_endereco():
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parent.parent / "app" / "static" / "atualizar_alunos.js").read_text(encoding="utf-8")
+
+    assert 'get("simular_treinos") === "1"' in script
+    assert "innerHTML" not in script  # texto do servidor só entra na tela por textContent
+
+
 def test_menu_do_app_leva_para_a_tela(cliente):
     html = cliente.get("/alunos").get_data(as_text=True)
 

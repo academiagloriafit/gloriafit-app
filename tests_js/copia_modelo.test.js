@@ -1,16 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  ARQUIVOS_DOS_TREINOS,
   ARQUIVOS_NECESSARIOS,
+  COLUNAS_DOS_TREINOS,
   COLUNAS_ENVIADAS,
   CopiaInvalida,
   HORAS_ATE_AVISAR,
   MENSAGEM_SEM_REDE,
+  MENSAGEM_SEM_REDE_TREINOS,
   TIPO_CONTATO_CELULAR,
+  criarEtapas,
   dataDaExtracao,
   descreverCopia,
+  descreverTreinos,
+  enviarEtapas,
   idadeEmHoras,
   interpretarResposta,
+  juntarRelatorios,
   montarPacote,
+  montarPacoteDeTreinos,
 } from "../app/static/copia_modelo.js";
 
 // ---- cópia de teste (dados inventados) ----
@@ -333,5 +341,376 @@ describe("interpretarResposta: o que fazer com a resposta do servidor", () => {
   it("a mensagem de rede caída avisa que enviar de novo não duplica", () => {
     expect(MENSAGEM_SEM_REDE).toMatch(/não duplica/);
     expect(MENSAGEM_SEM_REDE).toMatch(/Não sei se/);
+  });
+});
+
+
+describe("interpretarResposta: o assunto entra na mensagem de erro", () => {
+  it("por padrão fala dos alunos", () => {
+    expect(interpretarResposta(500, null).mensagem).toMatch(/atualizar os alunos/);
+  });
+
+  it("para o histórico de treinos fala do histórico", () => {
+    const r = interpretarResposta(502, null, "o histórico de treinos");
+
+    expect(r.mensagem).toMatch(/atualizar o histórico de treinos\. Nada foi confirmado/);
+  });
+
+  it("200 do histórico devolve o número de treinos para a tela", () => {
+    expect(interpretarResposta(200, { texto: "R", treinos: 6196 }, "o histórico de treinos")).toMatchObject({
+      tipo: "ok",
+      texto: "R",
+      treinos: 6196,
+    });
+  });
+
+  it("400 do histórico mostra o motivo e diz que nada foi alterado", () => {
+    expect(interpretarResposta(400, { erro: "TREINO, linha 1: formato." }, "o histórico de treinos").mensagem).toBe(
+      "TREINO, linha 1: formato. Nada foi alterado.",
+    );
+  });
+
+  it("a mensagem de rede caída do histórico também avisa que enviar de novo não duplica", () => {
+    expect(MENSAGEM_SEM_REDE_TREINOS).toMatch(/histórico de treinos/);
+    expect(MENSAGEM_SEM_REDE_TREINOS).toMatch(/não duplica/);
+  });
+});
+
+// ---- histórico de treinos ----
+
+// Colunas "de verdade" do Data4U (mais do que o app usa): o teste confere que o resto não sai.
+const COLUNAS_REAIS_DOS_TREINOS = {
+  TREINO: ["ID_TREINO", "ID_LANCAMENTO", "ID_PROFESSOR", "NM_TREINO", "DT_INICIO", "DT_FIM", "DS_OBS", "ST_ATIVO", "ST_DELETED"],
+  TREINO_FICHA: ["ID_TREINO_FICHA", "ID_TREINO", "NR_FICHA", "NM_TREINO_FICHA", "DT_ULTIMA_SESSAO"],
+  TREINO_PRESCRICAO: [
+    "ID_TREINO_PRESCRICAO", "ID_TREINO_FICHA", "ID_TREINO_EXERCICIO", "NR_ORDEM", "NR_SERIE",
+    "DS_REPETICAO", "DS_PESO", "TM_PAUSA", "DS_PRESCRICAO_OBS",
+  ],
+  TREINO_EXERCICIO: ["ID_TREINO_EXERCICIO", "NM_EXERCICIO", "DS_ANIMACAO", "ST_DELETED"],
+  LANCAMENTO_OBJ: ["ID_LANCAMENTO", "ID_OBJ", "TP_LANCAMENTO", "DT_LANCAMENTO", "ID_PESSOA", "VL_LANCAMENTO"],
+};
+
+function copiaComTreinos({ treinos, fichas, prescricoes, exercicios, lancamentos, pessoas, manifesto } = {}) {
+  treinos ??= [
+    { ID_TREINO: 1, ID_LANCAMENTO: 5001, ID_PROFESSOR: 900, NM_TREINO: "TREINO ABC", DT_INICIO: "2026-03-02", DT_FIM: null, DS_OBS: "obs particular do treino", ST_ATIVO: "T", ST_DELETED: "F" },
+    { ID_TREINO: 2, ID_LANCAMENTO: null, ID_PROFESSOR: null, NM_TREINO: "MODELO", DT_INICIO: null, DT_FIM: null, DS_OBS: null, ST_ATIVO: "T", ST_DELETED: "F" },
+  ];
+  fichas ??= [
+    { ID_TREINO_FICHA: 11, ID_TREINO: 1, NR_FICHA: 1, NM_TREINO_FICHA: "A", DT_ULTIMA_SESSAO: "2026-04-01" },
+    { ID_TREINO_FICHA: 21, ID_TREINO: 2, NR_FICHA: 1, NM_TREINO_FICHA: "A", DT_ULTIMA_SESSAO: null },
+  ];
+  prescricoes ??= [
+    { ID_TREINO_PRESCRICAO: 101, ID_TREINO_FICHA: 11, ID_TREINO_EXERCICIO: -5, NR_ORDEM: 1, NR_SERIE: "3", DS_REPETICAO: "12", DS_PESO: 20, TM_PAUSA: "00:01:00", DS_PRESCRICAO_OBS: null },
+    { ID_TREINO_PRESCRICAO: 201, ID_TREINO_FICHA: 21, ID_TREINO_EXERCICIO: 7, NR_ORDEM: 1, NR_SERIE: null, DS_REPETICAO: "10", DS_PESO: null, TM_PAUSA: null, DS_PRESCRICAO_OBS: null },
+  ];
+  exercicios ??= [
+    { ID_TREINO_EXERCICIO: -5, NM_EXERCICIO: "SUPINO RETO", DS_ANIMACAO: "supino.gif", ST_DELETED: "F" },
+    { ID_TREINO_EXERCICIO: 7, NM_EXERCICIO: "REMADA BAIXA", DS_ANIMACAO: null, ST_DELETED: "F" },
+    { ID_TREINO_EXERCICIO: 8, NM_EXERCICIO: "NUNCA USADO NO TREINO", DS_ANIMACAO: null, ST_DELETED: "F" },
+  ];
+  lancamentos ??= [
+    { ID_LANCAMENTO: 5001, ID_OBJ: 101, TP_LANCAMENTO: -510, DT_LANCAMENTO: "2026-03-02 14:03:24", ID_PESSOA: 900, VL_LANCAMENTO: 0 },
+    { ID_LANCAMENTO: 5002, ID_OBJ: 101, TP_LANCAMENTO: -300, DT_LANCAMENTO: "2026-03-02 14:04:00", ID_PESSOA: 900, VL_LANCAMENTO: 99.9 },
+    { ID_LANCAMENTO: 5003, ID_OBJ: 555, TP_LANCAMENTO: -300, DT_LANCAMENTO: "2026-03-03 10:00:00", ID_PESSOA: 1, VL_LANCAMENTO: 150 },
+  ];
+  pessoas ??= [pessoa(101, "ANA FICTICIA"), pessoa(900, "PROF ANA"), pessoa(901, "PROF QUE NAO MONTOU TREINO")];
+
+  const arquivos = copia({ pessoas });
+  const tabelas = { TREINO: treinos, TREINO_FICHA: fichas, TREINO_PRESCRICAO: prescricoes, TREINO_EXERCICIO: exercicios, LANCAMENTO_OBJ: lancamentos };
+  const manifestoBase = JSON.parse(new TextDecoder().decode(arquivos["_manifesto.json"]));
+  for (const [nome, linhas] of Object.entries(tabelas)) {
+    manifestoBase.tabelas[nome] = { linhas: linhas.length, colunas: COLUNAS_REAIS_DOS_TREINOS[nome] };
+    arquivos[nome + ".jsonl"] = jsonl(linhas);
+  }
+  arquivos["_manifesto.json"] = json(manifesto ?? manifestoBase);
+  return arquivos;
+}
+
+describe("o que a tela precisa abrir do .zip para o histórico de treinos", () => {
+  it("as 5 tabelas de treino (a PESSOA já é lida para os alunos)", () => {
+    expect(ARQUIVOS_DOS_TREINOS).toEqual([
+      "TREINO.jsonl", "TREINO_FICHA.jsonl", "TREINO_PRESCRICAO.jsonl", "TREINO_EXERCICIO.jsonl", "LANCAMENTO_OBJ.jsonl",
+    ]);
+    expect(ARQUIVOS_NECESSARIOS).toContain("PESSOA.jsonl");
+  });
+});
+
+describe("montarPacoteDeTreinos: o que sai do computador", () => {
+  it("monta o pacote com a data da cópia e as 6 tabelas", () => {
+    const { pacote, resumo } = montarPacoteDeTreinos(copiaComTreinos());
+
+    expect(pacote.extracao).toBe("07/10/2026 05:00:17");
+    expect(Object.keys(pacote.tabelas).sort()).toEqual(Object.keys(COLUNAS_DOS_TREINOS).sort());
+    expect(resumo).toEqual({ treinos: 2, fichas: 2, prescricoes: 2 });
+  });
+
+  it("envia SÓ as colunas que o app usa (nada de observação do treino, datas de início, valores, animações)", () => {
+    const { pacote } = montarPacoteDeTreinos(copiaComTreinos());
+
+    for (const tabela of Object.keys(COLUNAS_DOS_TREINOS)) {
+      expect(pacote.tabelas[tabela].colunas).toEqual(COLUNAS_DOS_TREINOS[tabela]);
+      for (const linha of pacote.tabelas[tabela].linhas) expect(linha).toHaveLength(COLUNAS_DOS_TREINOS[tabela].length);
+    }
+    const enviado = JSON.stringify(pacote);
+    for (const proibido of ["obs particular do treino", "supino.gif", "99.9", "150", "DT_INICIO", "VL_LANCAMENTO", "2026-04-01"]) {
+      expect(enviado).not.toContain(proibido);
+    }
+  });
+
+  it("de PESSOA vão só os professores dos treinos, só id e nome (nada de CPF, nascimento, e-mail)", () => {
+    const { pacote } = montarPacoteDeTreinos(copiaComTreinos());
+
+    expect(pacote.tabelas.PESSOA.linhas).toEqual([[900, "PROF ANA"]]);
+    const enviado = JSON.stringify(pacote);
+    for (const proibido of ["ANA FICTICIA", "PROF QUE NAO MONTOU TREINO", "11144477735", "segredo@exemplo.test", "1990-01-01"]) {
+      expect(enviado).not.toContain(proibido);
+    }
+  });
+
+  it("de LANCAMENTO_OBJ vão só os lançamentos dos treinos (os de pagamento e outros ficam)", () => {
+    const { pacote } = montarPacoteDeTreinos(copiaComTreinos());
+
+    expect(pacote.tabelas.LANCAMENTO_OBJ.linhas).toEqual([[5001, 101, -510, "2026-03-02 14:03:24"]]);
+  });
+
+  it("dos exercícios vão só os que alguma prescrição usa", () => {
+    const { pacote } = montarPacoteDeTreinos(copiaComTreinos());
+
+    expect(pacote.tabelas.TREINO_EXERCICIO.linhas).toEqual([[-5, "SUPINO RETO"], [7, "REMADA BAIXA"]]);
+  });
+
+  it("treinos, fichas e prescrições vão inteiros (quem entra no app o servidor decide)", () => {
+    const { pacote } = montarPacoteDeTreinos(copiaComTreinos());
+
+    expect(pacote.tabelas.TREINO.linhas).toEqual([
+      [1, 5001, 900, "TREINO ABC", "F"],
+      [2, null, null, "MODELO", "F"],
+    ]);
+    expect(pacote.tabelas.TREINO_FICHA.linhas).toHaveLength(2);
+    expect(pacote.tabelas.TREINO_PRESCRICAO.linhas).toHaveLength(2);
+  });
+
+  it("peso guardado como número no Data4U vira texto; os ids continuam números; vazio continua vazio", () => {
+    const { pacote } = montarPacoteDeTreinos(copiaComTreinos());
+    const prescricoes = pacote.tabelas.TREINO_PRESCRICAO.linhas;
+
+    expect(prescricoes[0]).toEqual([101, 11, -5, 1, "3", "12", "20", "00:01:00", null]);
+    expect(prescricoes[1][4]).toBeNull(); // NR_SERIE vazio não vira o texto "null"
+    expect(typeof prescricoes[0][0]).toBe("number");
+    expect(typeof prescricoes[0][2]).toBe("number");
+  });
+
+  it("treino sem lançamento ou sem professor não quebra o filtro", () => {
+    const { pacote } = montarPacoteDeTreinos(
+      copiaComTreinos({
+        treinos: [{ ID_TREINO: 2, ID_LANCAMENTO: null, ID_PROFESSOR: null, NM_TREINO: "MODELO", ST_DELETED: "F" }],
+        fichas: [],
+        prescricoes: [],
+        exercicios: [],
+      }),
+    );
+
+    expect(pacote.tabelas.LANCAMENTO_OBJ.linhas).toEqual([]);
+    expect(pacote.tabelas.PESSOA.linhas).toEqual([]);
+  });
+
+  it("não mexe nos arquivos dos alunos: montarPacote continua devolvendo só as 3 tabelas", () => {
+    const arquivos = copiaComTreinos();
+
+    expect(Object.keys(montarPacote(arquivos).pacote.tabelas)).toEqual(["PESSOA", "PESSOA_STATUS", "CONTATO_PESSOA"]);
+  });
+});
+
+describe("montarPacoteDeTreinos: cópia com defeito é recusada antes de enviar qualquer coisa", () => {
+  it.each(Object.keys(COLUNAS_DOS_TREINOS).filter((t) => t !== "PESSOA"))("%s cortada: o manifesto diz mais linhas do que o arquivo", (tabela) => {
+    const arquivos = copiaComTreinos();
+    const manifesto = JSON.parse(new TextDecoder().decode(arquivos["_manifesto.json"]));
+    manifesto.tabelas[tabela].linhas += 10;
+    arquivos["_manifesto.json"] = json(manifesto);
+
+    expect(() => montarPacoteDeTreinos(arquivos)).toThrow(new RegExp(`${tabela}: o manifesto diz`));
+  });
+
+  it.each([
+    ["TREINO", "NM_TREINO"],
+    ["TREINO_FICHA", "NR_FICHA"],
+    ["TREINO_PRESCRICAO", "TM_PAUSA"],
+    ["TREINO_EXERCICIO", "NM_EXERCICIO"],
+    ["LANCAMENTO_OBJ", "DT_LANCAMENTO"],
+  ])("coluna %s.%s que o Data4U tirou do manifesto", (tabela, coluna) => {
+    const arquivos = copiaComTreinos();
+    const manifesto = JSON.parse(new TextDecoder().decode(arquivos["_manifesto.json"]));
+    manifesto.tabelas[tabela].colunas = manifesto.tabelas[tabela].colunas.filter((c) => c !== coluna);
+    arquivos["_manifesto.json"] = json(manifesto);
+
+    expect(() => montarPacoteDeTreinos(arquivos)).toThrow(new RegExp(`${tabela} da cópia não tem a\\(s\\) coluna\\(s\\) ${coluna}`));
+  });
+
+  it("manifesto sem uma das tabelas de treino", () => {
+    const arquivos = copiaComTreinos();
+    const manifesto = JSON.parse(new TextDecoder().decode(arquivos["_manifesto.json"]));
+    delete manifesto.tabelas.TREINO_PRESCRICAO;
+    arquivos["_manifesto.json"] = json(manifesto);
+
+    expect(() => montarPacoteDeTreinos(arquivos)).toThrow(/não descreve a tabela TREINO_PRESCRICAO/);
+  });
+
+  it("linha quebrada diz a tabela e o número da linha", () => {
+    const arquivos = copiaComTreinos();
+    arquivos["TREINO_FICHA.jsonl"] = new TextEncoder().encode('{"ID_TREINO_FICHA":1}\n{quebrada\n');
+
+    expect(() => montarPacoteDeTreinos(arquivos)).toThrow(/TREINO_FICHA\.jsonl, linha 2: não é JSON válido/);
+  });
+
+  it("a mesma exceção dos alunos (CopiaInvalida), para a tela mostrar a mensagem", () => {
+    const arquivos = copiaComTreinos();
+    arquivos["TREINO.jsonl"] = new Uint8Array([0x7b, 0xff, 0xfe, 0x7d]);
+
+    expect(() => montarPacoteDeTreinos(arquivos)).toThrow(CopiaInvalida);
+  });
+});
+
+describe("descreverTreinos", () => {
+  it("mostra os números com ponto de milhar", () => {
+    const texto = descreverTreinos({ treinos: 6206, fichas: 15566, prescricoes: 129471 });
+
+    expect(texto).toContain((6206).toLocaleString("pt-BR"));
+    expect(texto).toContain("fichas");
+    expect(texto).toContain((129471).toLocaleString("pt-BR"));
+  });
+});
+
+
+describe("enviar em etapas: alunos primeiro, depois o histórico", () => {
+  const ok = (texto, extra = {}) => ({ status: 200, corpo: { texto, ...extra } });
+
+  // Servidor de mentira que anota o que recebeu. `respostas`: rota -> lista de respostas (uma por tentativa).
+  function servidor(respostas) {
+    const chamadas = [];
+    const enviar = async (rota, pacote) => {
+      chamadas.push({ rota, pacote });
+      const fila = respostas[rota];
+      const resposta = fila.length > 1 ? fila.shift() : fila[0];
+      if (resposta instanceof Error) throw resposta;
+      return resposta;
+    };
+    return { chamadas, enviar };
+  }
+
+  it("manda os alunos e só depois o histórico, cada um para a sua rota", async () => {
+    const etapas = criarEtapas({ id: "A" }, { id: "T" });
+    const { chamadas, enviar } = servidor({
+      "/api/alunos/importar": [ok("relatório dos alunos")],
+      "/api/treinos/importar": [ok("relatório dos treinos")],
+    });
+
+    const resultado = await enviarEtapas(etapas, enviar);
+
+    expect(resultado).toEqual({ completo: true });
+    expect(chamadas).toEqual([
+      { rota: "/api/alunos/importar", pacote: { id: "A" } },
+      { rota: "/api/treinos/importar", pacote: { id: "T" } },
+    ]);
+    expect(juntarRelatorios(etapas)).toBe("relatório dos alunos\n\nrelatório dos treinos");
+  });
+
+  it("avisa a tela antes de cada etapa", async () => {
+    const etapas = criarEtapas({}, {});
+    const { enviar } = servidor({ "/api/alunos/importar": [ok("a")], "/api/treinos/importar": [ok("t")] });
+    const avisos = [];
+
+    await enviarEtapas(etapas, enviar, (etapa) => avisos.push(etapa.chave));
+
+    expect(avisos).toEqual(["alunos", "treinos"]);
+  });
+
+  it("se os alunos falham, o histórico NÃO é enviado", async () => {
+    const etapas = criarEtapas({}, {});
+    const { chamadas, enviar } = servidor({
+      "/api/alunos/importar": [{ status: 400, corpo: { erro: "A cópia é velha demais." } }],
+      "/api/treinos/importar": [ok("t")],
+    });
+
+    const resultado = await enviarEtapas(etapas, enviar);
+
+    expect(resultado.completo).toBe(false);
+    expect(resultado.etapa.chave).toBe("alunos");
+    expect(resultado.resultado.mensagem).toBe("A cópia é velha demais. Nada foi alterado.");
+    expect(chamadas.map((c) => c.rota)).toEqual(["/api/alunos/importar"]);
+    expect(juntarRelatorios(etapas)).toBe("");
+  });
+
+  it("se o histórico falha, os alunos ficam marcados como enviados e a mensagem fala do histórico", async () => {
+    const etapas = criarEtapas({}, {});
+    const { enviar } = servidor({
+      "/api/alunos/importar": [ok("relatório dos alunos")],
+      "/api/treinos/importar": [{ status: 502, corpo: null }],
+    });
+
+    const resultado = await enviarEtapas(etapas, enviar);
+
+    expect(resultado.completo).toBe(false);
+    expect(resultado.etapa.chave).toBe("treinos");
+    expect(resultado.resultado.mensagem).toMatch(/atualizar o histórico de treinos/);
+    expect(etapas[0].enviado).toBe(true);
+    expect(etapas[1].enviado).toBe(false);
+    expect(juntarRelatorios(etapas)).toBe("relatório dos alunos");
+  });
+
+  it("tentar de novo manda só o que faltou", async () => {
+    const etapas = criarEtapas({ id: "A" }, { id: "T" });
+    const { chamadas, enviar } = servidor({
+      "/api/alunos/importar": [ok("a")],
+      "/api/treinos/importar": [{ status: 500, corpo: null }, ok("t")],
+    });
+
+    await enviarEtapas(etapas, enviar);
+    const segunda = await enviarEtapas(etapas, enviar);
+
+    expect(segunda).toEqual({ completo: true });
+    expect(chamadas.map((c) => c.rota)).toEqual(["/api/alunos/importar", "/api/treinos/importar", "/api/treinos/importar"]);
+    expect(juntarRelatorios(etapas)).toBe("a\n\nt");
+  });
+
+  it("sem rede: a mensagem é a da etapa que estava indo (e a seguinte não sai)", async () => {
+    const etapas = criarEtapas({}, {});
+    const { chamadas, enviar } = servidor({
+      "/api/alunos/importar": [ok("a")],
+      "/api/treinos/importar": [new TypeError("Failed to fetch")],
+    });
+
+    const resultado = await enviarEtapas(etapas, enviar);
+
+    expect(resultado.resultado.mensagem).toBe(MENSAGEM_SEM_REDE_TREINOS);
+    expect(chamadas).toHaveLength(2);
+
+    const outras = criarEtapas({}, {});
+    const semRede = servidor({ "/api/alunos/importar": [new TypeError("Failed to fetch")], "/api/treinos/importar": [ok("t")] });
+    const primeira = await enviarEtapas(outras, semRede.enviar);
+    expect(primeira.resultado.mensagem).toBe(MENSAGEM_SEM_REDE);
+    expect(semRede.chamadas).toHaveLength(1);
+  });
+
+  it("401 numa etapa para tudo e pede para autorizar o computador", async () => {
+    const etapas = criarEtapas({}, {});
+    const { chamadas, enviar } = servidor({
+      "/api/alunos/importar": [{ status: 401, corpo: { erro: "x" } }],
+      "/api/treinos/importar": [ok("t")],
+    });
+
+    const resultado = await enviarEtapas(etapas, enviar);
+
+    expect(resultado.resultado).toEqual({ tipo: "nao_autorizado" });
+    expect(chamadas).toHaveLength(1);
+  });
+
+  it("200 sem relatório (página de erro do proxy) não conta como enviado", async () => {
+    const etapas = criarEtapas({}, {});
+    const { enviar } = servidor({ "/api/alunos/importar": [{ status: 200, corpo: null }], "/api/treinos/importar": [ok("t")] });
+
+    const resultado = await enviarEtapas(etapas, enviar);
+
+    expect(resultado.completo).toBe(false);
+    expect(etapas[0].enviado).toBe(false);
   });
 });

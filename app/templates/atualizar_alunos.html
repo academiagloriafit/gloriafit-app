@@ -16,19 +16,21 @@
 
     <div class="montagem-grade">
       <section class="painel painel-formulario" aria-labelledby="titulo-arquivo">
-        <p class="texto-apoio">Traz para o app os alunos que estão no Data4U. Faça uma vez por dia, de manhã, depois das 05:00.</p>
+        <p class="texto-apoio">Traz para o app os alunos e o histórico de treinos que estão no Data4U. Faça uma vez por dia, de manhã, depois das 05:00.</p>
+
+        <p id="modo-teste" class="aviso-campo aviso-erro" hidden>MODO TESTE: o histórico de treinos será só simulado (nada dele é gravado). Os alunos são atualizados normalmente.</p>
 
         <div class="campo">
           <label id="titulo-arquivo" for="arquivo">Arquivo base_total.zip</label>
           <input id="arquivo" type="file" accept=".zip,application/zip">
-          <p class="dica">No PC da recepção ele fica na pasta NFSE, na Área de Trabalho. O arquivo não sai do computador: o navegador separa e envia só nome, CPF, situação e celular.</p>
+          <p class="dica">No PC da recepção ele fica na pasta NFSE, na Área de Trabalho. O arquivo não sai do computador: o navegador separa e envia só nome, CPF, situação e celular dos alunos, e os treinos com seus exercícios.</p>
         </div>
 
         <p id="resumo" class="texto-apoio" role="status" aria-live="polite"></p>
         <p id="erro-geral" class="aviso-campo aviso-erro" role="alert"></p>
 
         <div class="acoes-formulario">
-          <button id="botao-enviar" type="button" class="botao-principal" disabled>Enviar e atualizar alunos</button>
+          <button id="botao-enviar" type="button" class="botao-principal" disabled>Enviar e atualizar</button>
         </div>
 
         <pre id="relatorio" class="relatorio-importacao" hidden></pre>
@@ -38,7 +40,7 @@
         <h2 id="titulo-como">O que acontece</h2>
         <ol class="passos">
           <li><span class="passo-numero">1</span><div><strong>Escolha o arquivo</strong><p>O navegador mostra de quando é a cópia, antes de enviar qualquer coisa.</p></div></li>
-          <li><span class="passo-numero">2</span><div><strong>Envie</strong><p>Quem é novo entra, quem mudou é atualizado. Ninguém é apagado e os treinos ficam como estão.</p></div></li>
+          <li><span class="passo-numero">2</span><div><strong>Envie</strong><p>Primeiro os alunos: quem é novo entra, quem mudou é atualizado, ninguém é apagado. Depois o histórico de treinos do Data4U, que é copiado de novo (os treinos montados aqui no app nunca são tocados).</p></div></li>
           <li><span class="passo-numero">3</span><div><strong>Confira o resumo</strong><p>Aparece só com números, sem nome de aluno.</p></div></li>
         </ol>
       </aside>

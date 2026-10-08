@@ -1,9 +1,5 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 5 (08/10/2026): exercícios, alunos (vindos do Data4U), treinos e computadores autorizados.
--- Mudança da versão 4 para a 5 (histórico de treinos do Data4U): o treino ganhou `origem`
--- ('app' ou 'data4u') e `data4u_id`, e o índice de nome repetido passou a valer só para os
--- treinos feitos no app (o histórico do Data4U tem nomes repetidos). Bancos da versão 4 são
--- atualizados sozinhos na subida do app (ver app/db.py, função `migrar`).
+-- Versão 4 (07/10/2026): exercícios, alunos (vindos do Data4U), treinos e computadores autorizados.
 -- Mudança da versão 3 para a 4 (proteção da área do professor): entraram as tabelas
 -- codigo_de_autorizacao, dispositivo e autorizacao_falha (ver o fim do arquivo).
 -- Mudanças da versão 2 para a 3 (importação dos alunos do Data4U): o CPF do aluno
@@ -15,7 +11,7 @@
 -- Fora desta versão, de propósito: login do aluno, pendências da recepção e
 -- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 5;
+PRAGMA user_version = 4;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -94,12 +90,6 @@ CREATE INDEX IF NOT EXISTS ix_aluno_cpf ON aluno(cpf);
 -- nome: até 40 letras (limite de NM_TREINO no Data4U).
 -- montado_por: nome de quem montou, digitado na hora de salvar (até 60 letras).
 --   Treinos montados automaticamente (robô/Claude, no futuro) usam "Academia Glória Fit".
---   Nos treinos do Data4U é o nome do professor registrado lá.
--- origem: 'app' = montado aqui; 'data4u' = histórico copiado do Data4U (app/importar_treinos.py).
---   Os 'data4u' são um espelho: cada importação apaga todos e grava de novo.
--- data4u_id: ID_TREINO no Data4U (histórico importado; no futuro, também o treino do app
---   depois de enviado ao Data4U). Único; vazio nos treinos que ainda não existem lá.
--- criado_em: UTC. No histórico é o DT_LANCAMENTO do Data4U (horário de Brasília) convertido.
 -- Apagar um aluno que tem treino é recusado (não perde histórico sem querer).
 CREATE TABLE IF NOT EXISTS treino (
     id           INTEGER PRIMARY KEY,
@@ -107,18 +97,11 @@ CREATE TABLE IF NOT EXISTS treino (
     nome         TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
     montado_por  TEXT    NOT NULL CHECK (length(montado_por) BETWEEN 1 AND 60),
     ativo        INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
-    origem       TEXT    NOT NULL DEFAULT 'app' CHECK (origem IN ('app', 'data4u')),
-    data4u_id    INTEGER,
     criado_em    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_treino_aluno ON treino(aluno_id);
--- Um aluno não pode ter dois treinos do app com o mesmo nome (o Data4U também recusa). O índice
--- só vale para os treinos do app: no histórico do Data4U há nomes repetidos, e o app precisa
--- guardá-los como estão. A conferência contra TODOS os treinos do aluno (inclusive os do
--- Data4U) está em app/treinos.py; este índice é a trava final contra dois "salvar" ao mesmo tempo.
-CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_nome_por_aluno
-    ON treino(aluno_id, nome COLLATE NOCASE) WHERE origem = 'app';
-CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_data4u ON treino(data4u_id);
+-- Um aluno não pode ter dois treinos com o mesmo nome (o Data4U também recusa).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_nome_por_aluno ON treino(aluno_id, nome COLLATE NOCASE);
 
 -- nome: até 15 letras (limite de NM_TREINO_FICHA no Data4U; corta sem avisar).
 -- ordem: posição da ficha dentro do treino (1 = A, 2 = B...).
@@ -134,9 +117,7 @@ CREATE TABLE IF NOT EXISTS ficha (
 -- bloco: itens da mesma ficha com o mesmo número de bloco formam um bi-set
 --        (2 itens) ou tri-set (3 itens). NULL = exercício sozinho.
 -- series, repeticoes, carga: texto de até 11 caracteres (limite do Data4U).
--- pausa: segundos. No Data4U é um horário "hh:mm:ss" (o histórico importado é convertido);
---        o app ainda não pede a pausa na tela de montar.
--- observacao: texto livre do Data4U (DS_PRESCRICAO_OBS); a tela de montar ainda não usa.
+-- pausa: número, como no Data4U (a unidade não foi verificada).
 -- Exercício já usado numa ficha não pode ser apagado: desative (ativo = 0).
 CREATE TABLE IF NOT EXISTS ficha_item (
     id           INTEGER PRIMARY KEY,
