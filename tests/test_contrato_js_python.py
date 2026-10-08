@@ -71,6 +71,8 @@ const tabelas = {{
     {{ ID_TREINO_PRESCRICAO: 102, ID_TREINO_FICHA: 11, ID_TREINO_EXERCICIO: 7, NR_ORDEM: 2, NR_SERIE: null, DS_REPETICAO: "10", DS_PESO: null, TM_PAUSA: null, DS_PRESCRICAO_OBS: null }},
     {{ ID_TREINO_PRESCRICAO: 103, ID_TREINO_FICHA: 12, ID_TREINO_EXERCICIO: 555, NR_ORDEM: 1, NR_SERIE: "4", DS_REPETICAO: "8", DS_PESO: "12,5", TM_PAUSA: "00:00:30", DS_PRESCRICAO_OBS: null }},
     {{ ID_TREINO_PRESCRICAO: 201, ID_TREINO_FICHA: 21, ID_TREINO_EXERCICIO: 7, NR_ORDEM: 1, NR_SERIE: "3", DS_REPETICAO: "12", DS_PESO: null, TM_PAUSA: null, DS_PRESCRICAO_OBS: null }},
+    {{ ID_TREINO_PRESCRICAO: 104, ID_TREINO_FICHA: 12, ID_TREINO_EXERCICIO: null, NR_ORDEM: 2, NR_SERIE: "3", DS_REPETICAO: "15", DS_PESO: "MODERADO", TM_PAUSA: "00:00:00", DS_PRESCRICAO_OBS: null }},
+    {{ ID_TREINO_PRESCRICAO: 105, ID_TREINO_FICHA: 12, ID_TREINO_EXERCICIO: null, NR_ORDEM: 3, NR_SERIE: null, DS_REPETICAO: null, DS_PESO: null, TM_PAUSA: "00:00:00", DS_PRESCRICAO_OBS: null }},
   ],
   TREINO_EXERCICIO: [
     {{ ID_TREINO_EXERCICIO: -5, NM_EXERCICIO: "<b>SUPINO RETO</b> APAGADO", DS_ANIMACAO: "a.gif", ST_DELETED: "T" }},
@@ -149,5 +151,7 @@ def test_pacote_do_navegador_vira_historico_no_banco(pacotes):
         ("SUPINO RETO APAGADO", "3", "12", "20", 60, "devagar"),  # peso veio número, tags HTML saíram
         ("REMADA BAIXA", None, "10", None, None, None),
         (importar_treinos.NOME_DO_EXERCICIO_REMOVIDO, "4", "8", "12,5", 30, None),  # exercício 555 não existe no Data4U
-    ]
+        (importar_treinos.NOME_DO_EXERCICIO_NAO_INFORMADO, "3", "15", "MODERADO", 0, None),  # sem exercício, com dose: entra
+    ]  # (e a linha 105, sem exercício e em branco, ficou de fora)
+    assert relatorio.itens_vazios_ignorados == 1
     conn.close()

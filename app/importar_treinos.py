@@ -33,6 +33,11 @@ Regras (as decisões são do Thiago, de 08/10/2026, salvo onde dito o contrário
   (`<b>X</b> APAGADO`, como o Data4U marca o que o usuário apagou) são tiradas; o "APAGADO"
   fica. Se o nome já existe no app (sem diferenciar maiúsculas), o exercício existente é usado.
   Exercício que uma prescrição usa mas não existe na tabela do Data4U vira "Exercício removido do Data4U".
+- Prescrição SEM exercício escolhido (ID_TREINO_EXERCICIO vazio; conferido em 08/10/2026 na cópia real:
+  236 de 129.471, em 176 fichas, todas com outros exercícios): se tem alguma coisa escrita (séries,
+  repetições, carga, pausa maior que zero ou observação), entra como "Exercício não informado no
+  Data4U", para não perder o que o professor escreveu; se está totalmente vazia (168 das 236), fica de
+  fora. As duas quantidades vão para o relatório.
 - Nada é adivinhado nem cortado em silêncio: valor longo demais é cortado no limite do
   banco e CONTADO no relatório; pausa que não é "hh:mm:ss" fica vazia e é contada.
 - Tudo ou nada: se algo der errado no meio, o banco fica como estava. `simular=True` roda tudo
@@ -65,6 +70,7 @@ LIMITE_NOME_EXERCICIO = 120  # o maior nome real tem 74 letras
 LIMITE_OBSERVACAO = 200  # a maior observação real tem 131 letras
 
 NOME_DO_EXERCICIO_REMOVIDO = "Exercício removido do Data4U"
+NOME_DO_EXERCICIO_NAO_INFORMADO = "Exercício não informado no Data4U"
 NOME_SEM_PROFESSOR = "Professor não informado"
 NOME_TREINO_SEM_NOME = "(sem nome)"
 
@@ -88,7 +94,8 @@ _TIPOS_DAS_COLUNAS = {
     "TREINO_FICHA": {"ID_TREINO_FICHA": (int, False), "ID_TREINO": (int, False), "NR_FICHA": (int, False),
                      "NM_TREINO_FICHA": (str, True)},
     "TREINO_PRESCRICAO": {"ID_TREINO_PRESCRICAO": (int, False), "ID_TREINO_FICHA": (int, False),
-                          "ID_TREINO_EXERCICIO": (int, False), "NR_ORDEM": (int, False),
+                          "ID_TREINO_EXERCICIO": (int, True),  # vazio existe no Data4U real (ver o início do arquivo)
+                          "NR_ORDEM": (int, False),
                           "NR_SERIE": (str, True), "DS_REPETICAO": (str, True), "DS_PESO": (str, True),
                           "TM_PAUSA": (str, True), "DS_PRESCRICAO_OBS": (str, True)},
     "TREINO_EXERCICIO": {"ID_TREINO_EXERCICIO": (int, False), "NM_EXERCICIO": (str, True)},
@@ -234,6 +241,8 @@ class Relatorio:
     nomes_cortados: int = 0
     campos_cortados: int = 0
     pausas_ilegiveis: int = 0
+    itens_sem_exercicio: int = 0  # sem exercício escolhido no Data4U, mas com algo escrito: entraram
+    itens_vazios_ignorados: int = 0  # sem exercício e sem nada escrito: ficaram de fora
 
     @property
     def treinos_no_app(self) -> int:
@@ -280,6 +289,9 @@ class Relatorio:
             f"    nomes cortados no limite do banco: {self.nomes_cortados}",
             f"    séries, repetições, cargas ou observações cortadas: {self.campos_cortados}",
             f"    pausas fora do formato hh:mm:ss (ficaram vazias): {self.pausas_ilegiveis}",
+            f"    itens sem exercício escolhido no Data4U, mas com algo escrito (ficaram \"{NOME_DO_EXERCICIO_NAO_INFORMADO}\"): "
+            f"{self.itens_sem_exercicio}",
+            f"    itens sem exercício e sem nada escrito (ficaram de fora): {self.itens_vazios_ignorados}",
         ]
         return "\n".join(linhas)
 
@@ -330,6 +342,17 @@ def _resolver_exercicios(conn, nomes_do_data4u: dict[int, str | None], necessari
         )
         mapa[data4u_id] = exercicio_id
     return mapa
+
+
+def _exercicio_nao_informado(conn) -> int:
+    """Id do exercício (inativo) que representa "o Data4U não diz qual era o exercício". Cria se faltar."""
+    linha = conn.execute("SELECT id FROM exercicio WHERE nome = ?", (NOME_DO_EXERCICIO_NAO_INFORMADO,)).fetchone()
+    if linha is not None:
+        return linha[0]
+    return conn.execute(
+        "INSERT INTO exercicio (nome, ativo, combinado, origem) VALUES (?, 0, 0, 'data4u_academia')",
+        (NOME_DO_EXERCICIO_NAO_INFORMADO,),
+    ).lastrowid
 
 
 def importar(conn: sqlite3.Connection, copia: CopiaDeTreinos, simular: bool = False) -> Relatorio:
@@ -405,7 +428,9 @@ def importar(conn: sqlite3.Connection, copia: CopiaDeTreinos, simular: bool = Fa
             for linha, _, _ in escolhidos
             for ficha in fichas_por_treino.get(linha[t["ID_TREINO"]], [])
             for item in itens_por_ficha.get(ficha[f["ID_TREINO_FICHA"]], [])
+            if item[p["ID_TREINO_EXERCICIO"]] is not None
         }
+        exercicio_sem_nome = None  # criado só quando algum item precisar
         mapa_de_exercicios = _resolver_exercicios(conn, nomes_dos_exercicios, necessarios, relatorio)
 
         # ---- gravar
@@ -460,19 +485,33 @@ def importar(conn: sqlite3.Connection, copia: CopiaDeTreinos, simular: bool = Fa
                     key=lambda linha: (linha[p["NR_ORDEM"]], linha[p["ID_TREINO_PRESCRICAO"]]),
                 )
                 linhas_dos_itens = []
-                for ordem, item in enumerate(itens, start=1):
+                for item in itens:
                     campos = []
+                    cortados = 0
                     for coluna, limite in (("NR_SERIE", LIMITE_CAMPO), ("DS_REPETICAO", LIMITE_CAMPO),
                                            ("DS_PESO", LIMITE_CAMPO), ("DS_PRESCRICAO_OBS", LIMITE_OBSERVACAO)):
                         texto, cortado = _cortar(limpar(item[p[coluna]]), limite)
-                        relatorio.campos_cortados += cortado
+                        cortados += cortado
                         campos.append(texto or None)
                     pausa = pausa_em_segundos(item[p["TM_PAUSA"]])
-                    relatorio.pausas_ilegiveis += pausa is None and item[p["TM_PAUSA"]] is not None
                     series, repeticoes, carga, observacao = campos
+
+                    exercicio_data4u = item[p["ID_TREINO_EXERCICIO"]]
+                    if exercicio_data4u is None:
+                        if not (any(campos) or (pausa or 0) > 0):
+                            relatorio.itens_vazios_ignorados += 1  # linha em branco no Data4U: nada a mostrar
+                            continue
+                        if exercicio_sem_nome is None:
+                            exercicio_sem_nome = _exercicio_nao_informado(conn)
+                        exercicio_id = exercicio_sem_nome
+                        relatorio.itens_sem_exercicio += 1
+                    else:
+                        exercicio_id = mapa_de_exercicios[exercicio_data4u]
+
+                    relatorio.campos_cortados += cortados
+                    relatorio.pausas_ilegiveis += pausa is None and item[p["TM_PAUSA"]] is not None
                     linhas_dos_itens.append(
-                        (ficha_id, ordem, mapa_de_exercicios[item[p["ID_TREINO_EXERCICIO"]]],
-                         series, repeticoes, carga, pausa, observacao)
+                        (ficha_id, len(linhas_dos_itens) + 1, exercicio_id, series, repeticoes, carga, pausa, observacao)
                     )
                 conn.executemany(
                     "INSERT INTO ficha_item (ficha_id, ordem, exercicio_id, series, repeticoes, carga, pausa, observacao)"

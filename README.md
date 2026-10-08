@@ -215,6 +215,10 @@ treino é único por aluno, sem diferenciar maiúscula nem acento (regra do Data
 - **Data do treino:** vem do lançamento (`DT_LANCAMENTO`, tipo -510), em horário de Brasília convertido para UTC.
 - **Exercício que sumiu do Data4U:** o item fica com o exercício "Exercício removido do Data4U". Exercícios do histórico
   que não estão na biblioteca do app são criados **inativos** (aparecem no histórico, não aparecem na busca de montar treino).
+- **Item sem exercício escolhido:** na cópia real de 08/10/2026, 236 dos 129.471 itens não tinham exercício (campo vazio no Data4U; o
+  primeiro teste com o arquivo de verdade parou por causa deles, sem gravar nada). Os 168 totalmente em branco ficam de fora; os 68 com
+  alguma coisa escrita (séries, repetições, carga, pausa maior que zero ou observação) entram como "Exercício não informado no Data4U"
+  (exercício inativo). As duas contagens saem no relatório.
 - **Pausa** vem como hora (`00:01:30`) e vira segundos; **observação** do exercício vem sem tags HTML.
 - **Nome repetido:** treino do histórico conta na regra "nome único por aluno" (sem diferenciar maiúscula/acento): se o aluno
   tem um treino antigo "TREINO ABC", o professor não consegue salvar outro novo com o mesmo nome (recebe o aviso 409 e escolhe outro).

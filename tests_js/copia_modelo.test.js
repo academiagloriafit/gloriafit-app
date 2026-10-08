@@ -500,6 +500,20 @@ describe("montarPacoteDeTreinos: o que sai do computador", () => {
     expect(typeof prescricoes[0][2]).toBe("number");
   });
 
+  it("prescrição sem exercício escolhido (vazio no Data4U) vai no pacote e não leva exercício nenhum junto", () => {
+    const { pacote } = montarPacoteDeTreinos(
+      copiaComTreinos({
+        prescricoes: [
+          { ID_TREINO_PRESCRICAO: 101, ID_TREINO_FICHA: 11, ID_TREINO_EXERCICIO: null, NR_ORDEM: 1, NR_SERIE: "3", DS_REPETICAO: "15", DS_PESO: "MODERADO", TM_PAUSA: "00:00:00", DS_PRESCRICAO_OBS: null },
+          { ID_TREINO_PRESCRICAO: 201, ID_TREINO_FICHA: 21, ID_TREINO_EXERCICIO: 7, NR_ORDEM: 1, NR_SERIE: null, DS_REPETICAO: "10", DS_PESO: null, TM_PAUSA: null, DS_PRESCRICAO_OBS: null },
+        ],
+      }),
+    );
+
+    expect(pacote.tabelas.TREINO_PRESCRICAO.linhas[0]).toEqual([101, 11, null, 1, "3", "15", "MODERADO", "00:00:00", null]);
+    expect(pacote.tabelas.TREINO_EXERCICIO.linhas).toEqual([[7, "REMADA BAIXA"]]);
+  });
+
   it("treino sem lançamento ou sem professor não quebra o filtro", () => {
     const { pacote } = montarPacoteDeTreinos(
       copiaComTreinos({

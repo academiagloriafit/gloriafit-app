@@ -13,6 +13,7 @@ from app.alunos import data_local
 from app.db import conectar, criar_tabelas
 from app.importar_treinos import (
     COLUNAS_NECESSARIAS,
+    NOME_DO_EXERCICIO_NAO_INFORMADO,
     NOME_DO_EXERCICIO_REMOVIDO,
     NOME_SEM_PROFESSOR,
     NOME_TREINO_SEM_NOME,
@@ -638,6 +639,139 @@ def test_nome_de_exercicio_muito_longo_e_cortado(conn):
 
     assert relatorio.nomes_cortados == 1
     assert _linhas(conn, "SELECT length(nome) FROM exercicio WHERE origem = 'data4u_academia'") == [(120,)]
+
+
+# ------------------------------------------------------------------ prescrição sem exercício escolhido
+# Existe no Data4U real (08/10/2026: 236 de 129.471). O primeiro teste com o arquivo de verdade recusou
+# o pacote inteiro por causa delas; por isso o servidor as aceita e decide o que fazer com cada uma.
+
+
+def _mundo_com_itens_sem_exercicio(*itens):
+    """O mundo básico, com estes itens (sem exercício) acrescentados na ficha B (id 12), depois do item 103."""
+    mundo = mundo_basico()
+    mundo["TREINO_PRESCRICAO"] += [list(item) for item in itens]
+    return mundo
+
+
+def test_pacote_com_prescricao_sem_exercicio_e_aceito():
+    mundo = _mundo_com_itens_sem_exercicio([104, 12, None, 2, None, None, None, None, None])
+
+    copia_de_pacote(empacotar(mundo), agora=AGORA)  # não levanta
+
+
+def test_item_sem_exercicio_mas_com_algo_escrito_entra_com_o_rotulo(conn):
+    mundo = _mundo_com_itens_sem_exercicio(
+        [104, 12, None, 2, "3", "15", "MODERADO", "00:00:00", None],
+        [105, 12, None, 3, None, None, None, None, "ABDOMINAL CANOINHA"],
+    )
+
+    relatorio = importar(conn, copia(mundo))
+
+    itens = _linhas(
+        conn,
+        "SELECT i.ordem, e.nome, e.ativo, i.series, i.repeticoes, i.carga, i.observacao"
+        " FROM ficha_item i JOIN exercicio e ON e.id = i.exercicio_id WHERE i.ficha_id = 2 ORDER BY i.ordem",
+    )
+    assert itens == [
+        (1, "REMADA BAIXA", 0, "3", "15", "5", None),
+        (2, NOME_DO_EXERCICIO_NAO_INFORMADO, 0, "3", "15", "MODERADO", None),
+        (3, NOME_DO_EXERCICIO_NAO_INFORMADO, 0, None, None, None, "ABDOMINAL CANOINHA"),
+    ]
+    assert (relatorio.itens_sem_exercicio, relatorio.itens_vazios_ignorados) == (2, 0)
+    assert relatorio.exercicios_prescritos == 6  # os 4 de antes + os 2 novos
+    assert _linhas(conn, "SELECT COUNT(*) FROM exercicio WHERE nome = ?", NOME_DO_EXERCICIO_NAO_INFORMADO) == [(1,)]
+
+
+def test_item_sem_exercicio_e_sem_nada_escrito_fica_de_fora_e_a_ordem_continua_sem_buraco(conn):
+    mundo = _mundo_com_itens_sem_exercicio(
+        [104, 12, None, 2, None, None, None, None, None],  # em branco
+        [105, 12, None, 3, "", "  ", "", "00:00:00", "   "],  # só espaços e pausa zero: também em branco
+        [106, 12, 7, 4, "2", "8", None, None, None],  # com exercício: entra, na ordem 2 (não 4)
+    )
+
+    relatorio = importar(conn, copia(mundo))
+
+    assert _linhas(
+        conn, "SELECT i.ordem, e.nome FROM ficha_item i JOIN exercicio e ON e.id = i.exercicio_id WHERE i.ficha_id = 2 ORDER BY i.ordem"
+    ) == [(1, "REMADA BAIXA"), (2, "REMADA BAIXA")]
+    assert (relatorio.itens_sem_exercicio, relatorio.itens_vazios_ignorados) == (0, 2)
+    assert _linhas(conn, "SELECT COUNT(*) FROM exercicio WHERE nome = ?", NOME_DO_EXERCICIO_NAO_INFORMADO) == [(0,)]
+
+
+def test_pausa_maior_que_zero_basta_para_o_item_sem_exercicio_entrar(conn):
+    mundo = _mundo_com_itens_sem_exercicio(
+        [104, 12, None, 2, None, None, None, "00:00:30", None],  # só a pausa: entra
+        [105, 12, None, 3, None, None, None, "meio minuto", None],  # pausa ilegível e nada mais: fica de fora
+    )
+
+    relatorio = importar(conn, copia(mundo))
+
+    assert (relatorio.itens_sem_exercicio, relatorio.itens_vazios_ignorados) == (1, 1)
+    assert _linhas(conn, "SELECT pausa FROM ficha_item WHERE ficha_id = 2 ORDER BY ordem") == [(None,), (30,)]
+    assert relatorio.pausas_ilegiveis == 0  # o item ignorado não conta como "pausa ilegível"
+
+
+def test_item_sem_exercicio_nao_conta_como_exercicio_usado_nem_cria_exercicio_do_data4u(conn):
+    mundo = _mundo_com_itens_sem_exercicio([104, 12, None, 2, "3", "15", None, None, None])
+
+    relatorio = importar(conn, copia(mundo))
+
+    assert relatorio.exercicios_usados == 2  # SUPINO RETO e REMADA BAIXA
+    assert _linhas(conn, "SELECT COUNT(*) FROM exercicio_data4u WHERE exercicio_id IN (SELECT id FROM exercicio WHERE nome = ?)", NOME_DO_EXERCICIO_NAO_INFORMADO) == [(0,)]
+
+
+def test_rotulo_de_exercicio_nao_informado_e_um_so_mesmo_rodando_de_novo(conn):
+    mundo = _mundo_com_itens_sem_exercicio(
+        [104, 12, None, 2, "3", "15", None, None, None],
+        [202, 21, None, 2, "3", "15", None, None, None],  # em outro treino
+    )
+
+    importar(conn, copia(mundo))
+    importar(conn, copia(mundo))
+
+    assert _linhas(conn, "SELECT COUNT(*) FROM exercicio WHERE nome = ?", NOME_DO_EXERCICIO_NAO_INFORMADO) == [(1,)]
+    assert _linhas(conn, "SELECT COUNT(*) FROM ficha_item i JOIN exercicio e ON e.id = i.exercicio_id WHERE e.nome = ?", NOME_DO_EXERCICIO_NAO_INFORMADO) == [(2,)]
+
+
+def test_rotulo_de_exercicio_nao_informado_nao_aparece_na_lista_de_montar_treino(conn):
+    mundo = _mundo_com_itens_sem_exercicio([104, 12, None, 2, "3", "15", None, None, None])
+
+    importar(conn, copia(mundo))
+
+    assert _linhas(conn, "SELECT ativo FROM exercicio WHERE nome = ?", NOME_DO_EXERCICIO_NAO_INFORMADO) == [(0,)]
+
+
+def test_simulacao_com_item_sem_exercicio_nao_deixa_o_rotulo_no_banco(conn):
+    mundo = _mundo_com_itens_sem_exercicio([104, 12, None, 2, "3", "15", None, None, None])
+
+    relatorio = importar(conn, copia(mundo), simular=True)
+
+    assert relatorio.itens_sem_exercicio == 1
+    assert _linhas(conn, "SELECT COUNT(*) FROM exercicio") == [(0,)]
+
+
+def test_relatorio_conta_os_itens_sem_exercicio(conn):
+    mundo = _mundo_com_itens_sem_exercicio(
+        [104, 12, None, 2, "3", "15", None, None, None],
+        [105, 12, None, 3, None, None, None, None, None],
+    )
+
+    texto = importar(conn, copia(mundo)).texto()
+
+    assert f'(ficaram "{NOME_DO_EXERCICIO_NAO_INFORMADO}"): 1' in texto
+    assert "itens sem exercício e sem nada escrito (ficaram de fora): 1" in texto
+
+
+def test_cupom_de_treino_com_item_sem_exercicio_funciona(conn):
+    from app import cupom
+
+    mundo = _mundo_com_itens_sem_exercicio([104, 12, None, 2, None, None, None, None, "ABDOMINAL CANOINHA"])
+    importar(conn, copia(mundo))
+
+    conteudo = cupom.montar_cupom(conn, 1)
+
+    exercicios = [linha["esquerda"] for ficha in conteudo["fichas"] for linha in ficha["linhas"] if linha["tipo"] == "exercicio"]
+    assert NOME_DO_EXERCICIO_NAO_INFORMADO in exercicios
 
 
 def test_so_os_exercicios_dos_treinos_importados_entram(conn):
