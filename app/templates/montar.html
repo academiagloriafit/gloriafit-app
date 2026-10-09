@@ -18,6 +18,53 @@
     </div>
 
     <div class="area-montagem" id="area-montagem">
+      {# Começar de um treino pronto: um treino padrão da academia ou o treino de outro aluno. Nada é gravado
+         aqui: o treino escolhido entra na tela, o professor confere e salva como sempre. #}
+      <section class="cartao cartao-importar" aria-labelledby="titulo-importar">
+        <div class="barra-importar">
+          <h2 id="titulo-importar">Começar de um treino pronto</h2>
+          <button type="button" id="abrir-importar" class="botao-escuro" aria-expanded="false" aria-controls="painel-importar">Importar treino</button>
+          <p class="dica">Copie um treino padrão ou o treino de outro aluno e ajuste antes de salvar.</p>
+        </div>
+        <p id="aviso-importado" class="aviso-importado" role="status" hidden></p>
+
+        <div id="painel-importar" class="painel-importar" hidden>
+          <div class="abas abas-importar" role="tablist" aria-label="De onde importar">
+            <button type="button" role="tab" id="aba-padrao" class="aba aba-ativa" aria-selected="true" aria-controls="conteudo-padrao">Treino padrão</button>
+            <button type="button" role="tab" id="aba-aluno" class="aba" aria-selected="false" aria-controls="conteudo-aluno">Treino de outro aluno</button>
+          </div>
+
+          <div id="conteudo-padrao" role="tabpanel" aria-labelledby="aba-padrao">
+            <p id="estado-padroes" class="dica" aria-live="polite"></p>
+            <ul id="lista-padroes" class="lista-importar"></ul>
+          </div>
+
+          <div id="conteudo-aluno" role="tabpanel" aria-labelledby="aba-aluno" hidden>
+            <div id="bloco-busca-aluno">
+              <div class="campo">
+                <label for="busca-aluno-importar">Aluno (nome, CPF ou matrícula)</label>
+                <input id="busca-aluno-importar" type="search" autocomplete="off" maxlength="60" placeholder="Digite para buscar">
+              </div>
+              <p id="estado-alunos" class="dica" aria-live="polite"></p>
+              <ul id="lista-alunos-importar" class="lista-importar"></ul>
+            </div>
+            <div id="treinos-do-aluno" hidden>
+              <div class="cabecalho-treinos-do-aluno">
+                <h3 id="titulo-treinos-do-aluno"></h3>
+                <button type="button" id="voltar-alunos" class="botao-discreto">&larr; Escolher outro aluno</button>
+              </div>
+              <p id="estado-treinos" class="dica" aria-live="polite"></p>
+              <ul id="lista-treinos-importar" class="lista-importar"></ul>
+            </div>
+          </div>
+
+          <div class="rodape-importar">
+            <p id="aviso-importar" class="aviso-campo" role="status"></p>
+            <button type="button" id="fechar-importar" class="botao-discreto">Fechar</button>
+          </div>
+        </div>
+      </section>
+
       {# Nome do treino e professor ficam no alto, como no Data4U: nada de segunda tela para salvar. #}
       <section class="cartao cabecalho-treino" aria-label="Dados do treino">
         <div class="campo campo-treino">
@@ -79,6 +126,15 @@
             <button type="button" id="descartar" class="botao-perigo">Sim, descartar</button>
             <button type="button" id="continuar-editando" class="botao-discreto">Não, continuar</button>
           </span>
+          {# Guarda o treino da tela como treino padrão (aparece em "Importar treino"). Não salva nada para o aluno. #}
+          <button type="button" id="salvar-como-padrao" class="botao-discreto">Salvar como treino padrão</button>
+          <span id="form-padrao" class="confirmacao form-padrao" hidden>
+            <label for="nome-padrao">Nome do treino padrão</label>
+            <input id="nome-padrao" type="text" maxlength="40" autocomplete="off" aria-describedby="aviso-padrao">
+            <button type="button" id="confirmar-padrao" class="botao-escuro">Guardar</button>
+            <button type="button" id="cancelar-padrao" class="botao-discreto">Cancelar</button>
+          </span>
+          <p id="aviso-padrao" class="aviso" aria-live="polite"></p>
           <p id="aviso" class="aviso" aria-live="polite"></p>
         </div>
       </div>

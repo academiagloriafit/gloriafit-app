@@ -1,7 +1,8 @@
-"""Testes das atualizações do banco: 4 -> 5 (histórico de treinos do Data4U) e 5 -> 6 (ciclo do treino).
+"""Testes das atualizações do banco: 4 -> 5 (histórico de treinos do Data4U), 5 -> 6 (ciclo do treino) e
+6 -> 7 (treinos padrão).
 
-Os bancos antigos são montados a partir de `schema_v4.sql` e `schema_v5.sql`: cópias exatas dos
-desenhos que estiveram em produção (a versão 4 desde 07/10/2026, a 5 desde 08/10/2026). Se alguém
+Os bancos antigos são montados a partir de `schema_v4.sql`, `schema_v5.sql` e `schema_v6.sql`: cópias exatas dos
+desenhos que estiveram em produção (a versão 4 desde 07/10/2026, a 5 e a 6 desde 08/10/2026). Se alguém
 mexer no schema.sql sem escrever a migração, o teste "banco migrado fica igual a um banco novo" falha.
 """
 
@@ -18,6 +19,7 @@ from app.web import criar_app
 
 SCHEMA_V4 = Path(__file__).with_name("schema_v4.sql")
 SCHEMA_V5 = Path(__file__).with_name("schema_v5.sql")
+SCHEMA_V6 = Path(__file__).with_name("schema_v6.sql")
 
 
 def _banco_v4(caminho) -> None:
@@ -86,6 +88,34 @@ def caminho_v5(tmp_path):
     return caminho
 
 
+def _banco_v6(caminho) -> None:
+    """Cria um banco da versão 6 (a de produção até os treinos padrão), com um aluno e um treino completo."""
+    conn = sqlite3.connect(caminho)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.executescript(SCHEMA_V6.read_text(encoding="utf-8"))
+    conn.execute("INSERT INTO exercicio (id, nome, origem) VALUES (1, 'SUPINO RETO', 'app')")
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'MARIANA COSTA')")
+    conn.execute(
+        "INSERT INTO treino (id, aluno_id, nome, montado_por, inicio, sessoes_por_ficha)"
+        " VALUES (1, 1, 'TREINO ABC', 'ANA', '2026-10-05', 15)"
+    )
+    conn.execute("INSERT INTO ficha (id, treino_id, nome, ordem) VALUES (1, 1, 'A', 1)")
+    conn.execute(
+        "INSERT INTO ficha_item (ficha_id, ordem, exercicio_id, series, repeticoes) VALUES (1, 1, 1, '3', '12')"
+    )
+    conn.execute("INSERT INTO sessao (treino_id, ficha_ordem) VALUES (1, 1)")
+    conn.commit()
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    conn.close()
+
+
+@pytest.fixture
+def caminho_v6(tmp_path):
+    caminho = tmp_path / "app.db"
+    _banco_v6(caminho)
+    return caminho
+
+
 def _colunas(conn, tabela):
     return {
         linha["name"]: (linha["type"], linha["notnull"], linha["dflt_value"], linha["pk"])
@@ -112,8 +142,8 @@ def test_migra_da_4_para_a_5_sem_perder_nada(caminho_v4):
 
     aplicadas = migrar(conn)
 
-    assert aplicadas == [4, 5]  # a 4 -> 5 e, na sequência, a 5 -> 6
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSAO_DO_BANCO == 6
+    assert aplicadas == [4, 5, 6]  # a 4 -> 5 e, na sequência, a 5 -> 6 e a 6 -> 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSAO_DO_BANCO == 7
     treinos = conn.execute("SELECT id, nome, montado_por, origem, data4u_id FROM treino ORDER BY id").fetchall()
     assert [tuple(t) for t in treinos] == [
         (1, "TREINO ABC", "ANA", "app", None),
@@ -125,16 +155,16 @@ def test_migra_da_4_para_a_5_sem_perder_nada(caminho_v4):
     conn.close()
 
 
-@pytest.mark.parametrize("versao_de_partida", [4, 5])
+@pytest.mark.parametrize("versao_de_partida", [4, 5, 6])
 def test_banco_migrado_fica_igual_a_um_banco_novo(tmp_path, versao_de_partida):
     caminho = tmp_path / "app.db"
-    (_banco_v4 if versao_de_partida == 4 else _banco_v5)(caminho)
+    {4: _banco_v4, 5: _banco_v5, 6: _banco_v6}[versao_de_partida](caminho)
     migrado = conectar(caminho)
     migrar(migrado)
     novo = conectar()
     criar_tabelas(novo)
 
-    for tabela in ("treino", "ficha", "ficha_item", "aluno", "exercicio", "sessao"):
+    for tabela in ("treino", "ficha", "ficha_item", "aluno", "exercicio", "sessao", "modelo_treino"):
         assert _colunas(migrado, tabela) == _colunas(novo, tabela), tabela
         assert _indices(migrado, tabela) == _indices(novo, tabela), tabela
     migrado.close()
@@ -143,7 +173,7 @@ def test_banco_migrado_fica_igual_a_um_banco_novo(tmp_path, versao_de_partida):
 
 def test_rodar_de_novo_nao_faz_nada(caminho_v4):
     conn = conectar(caminho_v4)
-    assert migrar(conn) == [4, 5]
+    assert migrar(conn) == [4, 5, 6]
     assert migrar(conn) == []
     criar_tabelas(conn)  # também não pode dar erro num banco já atual
     conn.close()
@@ -154,7 +184,7 @@ def test_criar_tabelas_atualiza_banco_antigo_e_completa_o_resto(caminho_v4):
 
     criar_tabelas(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
     assert "origem" in _colunas(conn, "treino")
     assert "inicio" in _colunas(conn, "treino")
     conn.close()
@@ -164,7 +194,7 @@ def test_banco_novo_nao_e_migrado():
     conn = conectar()
     assert migrar(conn) == []  # sem tabelas: nada a migrar
     criar_tabelas(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
     conn.close()
 
 
@@ -172,7 +202,7 @@ def test_banco_na_memoria_migra_sem_copia():
     conn = conectar()
     conn.executescript(SCHEMA_V4.read_text(encoding="utf-8"))
 
-    assert migrar(conn) == [4, 5]  # não há arquivo para copiar, e não pode dar erro por isso
+    assert migrar(conn) == [4, 5, 6]  # não há arquivo para copiar, e não pode dar erro por isso
     conn.close()
 
 
@@ -182,7 +212,7 @@ def test_banco_na_memoria_migra_sem_copia():
 def test_tira_copia_de_seguranca_antes_de_migrar(caminho_v4):
     conn = conectar(caminho_v4)
 
-    migrar(conn)  # dois passos (4 -> 5 -> 6): mesmo assim uma cópia só, do banco como era
+    migrar(conn)  # três passos (4 -> 5 -> 6 -> 7): mesmo assim uma cópia só, do banco como era
     conn.close()
 
     copias = list((caminho_v4.parent / PASTA_ANTES_DA_MIGRACAO).glob("app-*.db"))
@@ -197,7 +227,7 @@ def test_tira_copia_de_seguranca_antes_de_migrar(caminho_v4):
 def test_copia_de_seguranca_da_versao_5_guarda_o_banco_como_era(caminho_v5):
     conn = conectar(caminho_v5)
 
-    assert migrar(conn) == [5]
+    assert migrar(conn) == [5, 6]
     conn.close()
 
     copias = list((caminho_v5.parent / PASTA_ANTES_DA_MIGRACAO).glob("app-*.db"))
@@ -282,9 +312,9 @@ def test_dois_processos_subindo_juntos_migram_uma_vez_so(caminho_v4):
 
     assert erros == []
     # cada passo roda uma vez só; quem chega primeiro faz o que dá, o outro faz o resto (ou nada)
-    assert sorted(a for r in resultados for a in r) == [4, 5]
+    assert sorted(a for r in resultados for a in r) == [4, 5, 6]
     conn = conectar(caminho_v4)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
     conn.close()
 
 
@@ -295,7 +325,7 @@ def test_app_atualiza_banco_antigo_ao_subir(caminho_v4):
     criar_app(caminho_v4)
 
     conn = conectar(caminho_v4)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
     conn.close()
 
 
@@ -471,8 +501,8 @@ def test_5_para_6_banco_sem_nenhum_treino(tmp_path):
     vazio.close()
     conn = conectar(caminho)
 
-    assert migrar(conn) == [5]
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert migrar(conn) == [5, 6]
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
     conn.close()
 
 
@@ -535,3 +565,89 @@ def test_sessao_exige_treino_que_existe_e_ficha_a_partir_de_1(conn_nova):
         conn_nova.execute("INSERT INTO sessao (treino_id, ficha_ordem) VALUES (999, 1)")
     with pytest.raises(sqlite3.IntegrityError):
         conn_nova.execute("INSERT INTO sessao (treino_id, ficha_ordem) VALUES (?, 0)", (treino,))
+
+
+# ------------------------------------------------------------------ 6 -> 7: treinos padrão
+
+
+def test_6_para_7_nao_perde_nada_e_a_tabela_dos_padroes_nasce_vazia(caminho_v6):
+    conn = conectar(caminho_v6)
+
+    assert migrar(conn) == [6]
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert conn.execute("SELECT COUNT(*) FROM modelo_treino").fetchone()[0] == 0
+    assert conn.execute("SELECT nome, ativo, inicio, sessoes_por_ficha FROM treino").fetchone()[:] == ("TREINO ABC", 1, "2026-10-05", 15)
+    assert conn.execute("SELECT COUNT(*) FROM ficha_item").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM sessao").fetchone()[0] == 1
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    conn.close()
+
+
+def test_copia_de_seguranca_da_versao_6_guarda_o_banco_como_era(caminho_v6):
+    conn = conectar(caminho_v6)
+
+    migrar(conn)
+    conn.close()
+
+    copias = list((caminho_v6.parent / PASTA_ANTES_DA_MIGRACAO).glob("app-*.db"))
+    assert len(copias) == 1
+    antiga = sqlite3.connect(copias[0])
+    assert antiga.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert antiga.execute("SELECT COUNT(*) FROM sqlite_master WHERE name = 'modelo_treino'").fetchone()[0] == 0
+    antiga.close()
+
+
+def test_migracao_6_para_7_que_quebra_no_fim_nao_deixa_rastro(caminho_v6, monkeypatch):
+    def quebra(conn):
+        db._de_6_para_7(conn)
+        raise RuntimeError("falha no fim")
+
+    monkeypatch.setitem(db.MIGRACOES, 6, quebra)
+    conn = conectar(caminho_v6)
+
+    with pytest.raises(RuntimeError, match="falha no fim"):
+        migrar(conn)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name = 'modelo_treino'").fetchone()[0] == 0
+    assert not conn.in_transaction
+    conn.close()
+
+
+def test_banco_com_o_numero_baixado_a_mao_para_6_sobe_de_novo_sem_perder_os_padroes(caminho_v6, monkeypatch):
+    # Para abrir o banco com o app antigo (que ignora a tabela nova) alguém pode baixar o número da versão.
+    conn = conectar(caminho_v6)
+    migrar(conn)
+    conn.execute("INSERT INTO modelo_treino (nome, montado_por, conteudo) VALUES ('BÁSICO', 'ANA', '{}')")
+    conn.commit()
+    conn.execute("PRAGMA user_version = 6")
+    monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)  # o nome da cópia leva só o segundo: aqui não importa
+
+    assert migrar(conn) == [6]  # a tabela já existe: não pode falhar
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert conn.execute("SELECT nome FROM modelo_treino").fetchall()[0][0] == "BÁSICO"
+    conn.close()
+
+
+def test_modelo_treino_aceita_nome_de_1_a_40_e_professor_de_1_a_60(conn_nova):
+    def inserir(nome, professor, meta=None):
+        conn_nova.execute(
+            "INSERT INTO modelo_treino (nome, montado_por, sessoes_por_ficha, conteudo) VALUES (?, ?, ?, '{}')",
+            (nome, professor, meta),
+        )
+
+    inserir("X" * 40, "Y" * 60, 999)
+    inserir("Y", "A", None)
+    for nome, professor, meta in [("", "A", None), ("X" * 41, "A", None), ("N", "", None), ("N", "P" * 61, None), ("N", "A", 0), ("N", "A", 1000)]:
+        with pytest.raises(sqlite3.IntegrityError):
+            inserir(nome, professor, meta)
+
+
+def test_nome_do_modelo_nao_repete_nem_com_outra_caixa(conn_nova):
+    conn_nova.execute("INSERT INTO modelo_treino (nome, montado_por, conteudo) VALUES ('Básico', 'A', '{}')")
+
+    with pytest.raises(sqlite3.IntegrityError):
+        conn_nova.execute("INSERT INTO modelo_treino (nome, montado_por, conteudo) VALUES ('básico', 'B', '{}')")

@@ -6,6 +6,8 @@
 //   { proximoUid, proximoBloco,
 //     fichas: [ { nome, itens: [ { uid, exercicioId, nome, series, repeticoes, carga,
 //                                  pausaMin, pausaSeg, observacao, bloco } ] } ] }
+// Um item que veio de "Importar treino" pode ter também  indisponivel: true  (o exercício saiu da lista de
+// exercícios: a tela pede para trocar, e o treino não salva enquanto ele estiver lá).
 // ("carga" é o campo "Peso" da tela; o nome interno não muda porque é o do servidor e do banco.
 //  O Intervalo é digitado em minutos e segundos, como no Data4U, e vai ao servidor em segundos.)
 // "bloco": itens vizinhos com o mesmo número formam um bi-set (2) ou tri-set (3);
@@ -287,6 +289,14 @@ export function validar(estado) {
       problemas.push({ ficha: f, uid: null, campo: "itens", mensagem: `${rotulo}: adicione pelo menos um exercício.` });
     }
     ficha.itens.forEach((item) => {
+      if (item.indisponivel) {
+        problemas.push({
+          ficha: f,
+          uid: item.uid,
+          campo: "exercicio",
+          mensagem: `${rotulo}: "${item.nome}" não está mais na lista de exercícios. Remova-o e escolha outro.`,
+        });
+      }
       problemas.push(...problemasDoIntervaloEDaObservacao(item, f, rotulo));
       for (const [campo, nomeDoCampo, obrigatorio] of [
         ["series", "séries", false], // em branco vale (cardio: o professor escreve o tempo, ou nada)
@@ -422,23 +432,26 @@ export function lerSessoesPorFicha(texto) {
   return n >= 1 && n <= MAXIMO_SESSOES_POR_FICHA ? n : undefined;
 }
 
+// Confere um campo de texto de uma linha (nome do treino, professor...): obrigatório, sem caractere
+// invisível e até `maximo` letras. Acrescenta o problema a `problemas`.
+function conferirTexto(problemas, campo, valor, vazio, nomeDoCampo, maximo, aviso) {
+  const limpo = limparEspacos(valor);
+  if (!limpo) {
+    problemas.push({ campo, mensagem: vazio });
+  } else if (CARACTERE_INVALIDO.test(limpo)) {
+    problemas.push({ campo, mensagem: `${nomeDoCampo} tem caracteres inválidos (invisíveis ou de controle).` });
+  } else if (tamanho(limpo) > maximo) {
+    problemas.push({ campo, mensagem: `${nomeDoCampo} tem ${tamanho(limpo)} letras; o máximo é ${maximo}${aviso}.` });
+  }
+}
+
 // Confere os campos do alto que o professor preenche ao salvar. Cada problema:
 // { campo: "nome-treino" | "quem-montou" | "data-inicio" | "data-fim" | "sessoes-por-ficha", mensagem }.
 // `inicio` e `fim` são 'AAAA-MM-DD' (ou vazio); `sessoesPorFicha` é o texto do campo.
 export function validarDadosDoTreino({ nomeTreino, montadoPor, inicio = "", fim = "", sessoesPorFicha = "" }) {
   const problemas = [];
-  const confere = (campo, valor, vazio, nomeDoCampo, maximo, aviso) => {
-    const limpo = limparEspacos(valor);
-    if (!limpo) {
-      problemas.push({ campo, mensagem: vazio });
-    } else if (CARACTERE_INVALIDO.test(limpo)) {
-      problemas.push({ campo, mensagem: `${nomeDoCampo} tem caracteres inválidos (invisíveis ou de controle).` });
-    } else if (tamanho(limpo) > maximo) {
-      problemas.push({ campo, mensagem: `${nomeDoCampo} tem ${tamanho(limpo)} letras; o máximo é ${maximo}${aviso}.` });
-    }
-  };
-  confere("nome-treino", nomeTreino, "Dê um nome ao treino.", "O nome do treino", LIMITE_NOME_TREINO, " (limite do Data4U)");
-  confere("quem-montou", montadoPor, "Informe o professor que montou o treino.", "O nome do professor", LIMITE_QUEM_MONTOU, "");
+  conferirTexto(problemas, "nome-treino", nomeTreino, "Dê um nome ao treino.", "O nome do treino", LIMITE_NOME_TREINO, " (limite do Data4U)");
+  conferirTexto(problemas, "quem-montou", montadoPor, "Informe o professor que montou o treino.", "O nome do professor", LIMITE_QUEM_MONTOU, "");
 
   const anos = `de ${ANO_MINIMO_DO_TREINO} a ${ANO_MAXIMO_DO_TREINO}`;
   const diaInicio = lerDia(inicio);
@@ -466,6 +479,79 @@ export function montarPedido(estado, { nomeTreino, montadoPor, inicio = "", fim 
     montado_por: limparEspacos(montadoPor),
     inicio: inicio || null,
     fim: fim || null,
+    sessoes_por_ficha: lerSessoesPorFicha(sessoesPorFicha) ?? null,
+    fichas: paraEnvio(estado).fichas,
+  };
+}
+
+// ------------------------------------------------------------------ importar treino e treino padrão
+
+const MAXIMO_PAUSA_EM_SEGUNDOS = MAXIMO_PAUSA * 60 + MAXIMO_PAUSA; // 59 min 59 s
+
+// Transforma o treino que o servidor devolveu em "Importar treino" (ver app/modelos.py, `para_montar`) no
+// estado da tela de montar. Devolve null se o formato não serve (nada é carregado). O intervalo vem em
+// segundos e entra em minutos e segundos (90 -> 1 : 30); textos que faltam entram vazios.
+export function estadoDeImportacao(treino) {
+  if (!treino || typeof treino !== "object" || !Array.isArray(treino.fichas)) return null;
+  const texto = (valor) => (typeof valor === "string" ? valor : "");
+  let uid = 1;
+  const fichas = [];
+  for (const ficha of treino.fichas) {
+    if (!ficha || typeof ficha.nome !== "string" || !Array.isArray(ficha.itens)) return null;
+    const itens = [];
+    for (const item of ficha.itens) {
+      if (!item || !ehInteiro(item.exercicio_id) || typeof item.nome !== "string") return null;
+      const pausa = Number.isInteger(item.pausa) && item.pausa > 0 && item.pausa <= MAXIMO_PAUSA_EM_SEGUNDOS ? item.pausa : 0;
+      itens.push({
+        uid: uid++,
+        exercicioId: item.exercicio_id,
+        nome: item.nome,
+        series: texto(item.series),
+        repeticoes: texto(item.repeticoes),
+        carga: texto(item.carga),
+        pausaMin: pausa ? String(Math.floor(pausa / 60)) : "",
+        pausaSeg: pausa ? String(pausa % 60).padStart(2, "0") : "",
+        observacao: texto(item.observacao),
+        bloco: ehInteiro(item.bloco) ? item.bloco : null,
+        ...(item.indisponivel === true ? { indisponivel: true } : {}),
+      });
+    }
+    fichas.push({ nome: ficha.nome, itens });
+  }
+  // lerRascunho confere de novo tudo (quantidade de fichas e de exercícios, uids, blocos) e numera os próximos
+  return lerRascunho(serializar({ proximoUid: uid, proximoBloco: 1, fichas }));
+}
+
+// A "meta" (treinos por ficha) que vem junto na importação, como texto para o campo da tela ("" = sem meta).
+export function metaDaImportacao(treino) {
+  const n = treino?.sessoes_por_ficha;
+  return Number.isInteger(n) && n >= 1 && n <= MAXIMO_SESSOES_POR_FICHA ? String(n) : "";
+}
+
+// Quantos exercícios do treino ainda precisam ser trocados (saíram da lista de exercícios).
+export function contarIndisponiveis(estado) {
+  return estado.fichas.reduce((total, ficha) => total + ficha.itens.filter((i) => i.indisponivel).length, 0);
+}
+
+// Quantos exercícios há no treino todo.
+export function contarExercicios(estado) {
+  return estado.fichas.reduce((total, ficha) => total + ficha.itens.length, 0);
+}
+
+// Confere o nome e o professor do treino padrão (a conferência das fichas é a de `validar`).
+// Cada problema: { campo: "nome-padrao" | "quem-montou", mensagem }.
+export function validarDadosDoPadrao({ nomePadrao, montadoPor }) {
+  const problemas = [];
+  conferirTexto(problemas, "nome-padrao", nomePadrao, "Dê um nome ao treino padrão.", "O nome do treino padrão", LIMITE_NOME_TREINO, "");
+  conferirTexto(problemas, "quem-montou", montadoPor, "Informe o professor que montou o treino (campo Professor).", "O nome do professor", LIMITE_QUEM_MONTOU, "");
+  return problemas;
+}
+
+// O pedido que guarda o treino da tela como treino padrão (não grava nada para o aluno).
+export function montarPedidoDePadrao(estado, { nomePadrao, montadoPor, sessoesPorFicha = "" }) {
+  return {
+    nome: limparEspacos(nomePadrao),
+    montado_por: limparEspacos(montadoPor),
     sessoes_por_ficha: lerSessoesPorFicha(sessoesPorFicha) ?? null,
     fichas: paraEnvio(estado).fichas,
   };
@@ -529,6 +615,7 @@ export function lerRascunho(texto) {
         pausaSeg: i.pausaSeg ?? "",
         observacao: i.observacao ?? "",
         bloco: i.bloco,
+        ...(i.indisponivel === true ? { indisponivel: true } : {}),
       });
     }
     const ficha = { nome: f.nome, itens };

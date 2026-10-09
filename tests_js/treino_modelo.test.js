@@ -8,12 +8,17 @@ import {
   adicionarFicha,
   adicionarItem,
   atualizarItem,
+  contarExercicios,
+  contarIndisponiveis,
   criarEstado,
   descreverFicha,
   enderecoDeImpressao,
   desfazerBloco,
+  estadoDeImportacao,
   etiquetas,
   lerRascunho,
+  metaDaImportacao,
+  montarPedidoDePadrao,
   moverUnidade,
   paraEnvio,
   pausaEmSegundos,
@@ -24,6 +29,7 @@ import {
   unidades,
   unirEmBloco,
   validar,
+  validarDadosDoPadrao,
 } from "../app/static/treino_modelo.js";
 
 // ---------------------------------------------------------------- auxiliares
@@ -677,5 +683,204 @@ describe("enderecoDeImpressao", () => {
     ["id decimal", { id: 1.5 }],
   ])("%s: devolve null e o botão não aparece", (_nome, corpo) => {
     expect(enderecoDeImpressao(corpo)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------- importar treino e treino padrão
+
+// O que o servidor devolve em /api/modelos/<id> e /api/treinos/<id>/para-montar (app/modelos.py, `para_montar`).
+function treinoDoServidor(mudancas = {}) {
+  return {
+    nome: "TREINO ABC",
+    sessoes_por_ficha: 15,
+    indisponiveis: 0,
+    fichas: [
+      {
+        nome: "FICHA A",
+        itens: [
+          { exercicio_id: 10, nome: "SUPINO RETO", series: "4", repeticoes: "10", carga: "30", pausa: 90, observacao: "devagar", bloco: 1, indisponivel: false },
+          { exercicio_id: 11, nome: "CRUCIFIXO", series: "4", repeticoes: "10", carga: "", pausa: null, observacao: "", bloco: 1, indisponivel: false },
+          { exercicio_id: 12, nome: "ELÍPTICO", series: "", repeticoes: "", carga: "", pausa: null, observacao: "", bloco: null, indisponivel: false },
+        ],
+      },
+      { nome: "FICHA B", itens: [{ exercicio_id: 13, nome: "AGACHAMENTO", series: "3", repeticoes: "12", carga: "", pausa: 60, observacao: "", bloco: null, indisponivel: false }] },
+    ],
+    ...mudancas,
+  };
+}
+
+describe("estadoDeImportacao", () => {
+  it("monta o estado da tela com o intervalo em minutos e segundos", () => {
+    const e = estadoDeImportacao(treinoDoServidor());
+
+    expect(e.fichas.map((f) => f.nome)).toEqual(["FICHA A", "FICHA B"]);
+    const [supino, crucifixo, eliptico] = e.fichas[0].itens;
+    expect([supino.exercicioId, supino.nome, supino.series, supino.repeticoes, supino.carga]).toEqual([10, "SUPINO RETO", "4", "10", "30"]);
+    expect([supino.pausaMin, supino.pausaSeg, supino.observacao]).toEqual(["1", "30", "devagar"]);
+    expect([crucifixo.pausaMin, crucifixo.pausaSeg]).toEqual(["", ""]);
+    expect([eliptico.series, eliptico.repeticoes]).toEqual(["", ""]); // cardio: em branco
+    expect(e.fichas[1].itens[0].pausaSeg).toBe("00"); // 60 s = 1 : 00
+  });
+
+  it("dá um uid diferente para cada exercício e conta os próximos uids e blocos", () => {
+    const e = estadoDeImportacao(treinoDoServidor());
+
+    const uids = e.fichas.flatMap((f) => f.itens.map((i) => i.uid));
+    expect(uids).toEqual([1, 2, 3, 4]);
+    expect(e.proximoUid).toBe(5);
+    expect(e.proximoBloco).toBe(2);
+  });
+
+  it("mantém os bi-sets", () => {
+    const e = estadoDeImportacao(treinoDoServidor());
+
+    expect(e.fichas[0].itens.map((i) => i.bloco)).toEqual([1, 1, null]);
+    expect(descreverFicha(e.fichas[0])).toBe("3 exercícios, 1 bi-set");
+  });
+
+  it("um treino sem problema passa na conferência da tela e vai ao servidor no formato certo", () => {
+    const e = estadoDeImportacao(treinoDoServidor());
+
+    expect(validar(e)).toEqual([]);
+    const envio = paraEnvio(e).fichas[0].itens;
+    expect(envio[0]).toMatchObject({ exercicio_id: 10, series: "4", repeticoes: "10", carga: "30", pausa: 90, observacao: "devagar", bloco: 1 });
+    expect(envio[2]).toMatchObject({ series: "", repeticoes: "", pausa: null, bloco: null });
+    expect(envio[0]).not.toHaveProperty("indisponivel");
+  });
+
+  it("exercício indisponível entra marcado e impede de salvar até ser removido", () => {
+    const treino = treinoDoServidor();
+    treino.fichas[0].itens[1].indisponivel = true;
+    const e = estadoDeImportacao(treino);
+
+    expect(contarIndisponiveis(e)).toBe(1);
+    const problemas = validar(e);
+    expect(problemas).toHaveLength(1);
+    expect(problemas[0]).toMatchObject({ ficha: 0, uid: 2, campo: "exercicio" });
+    expect(problemas[0].mensagem).toContain("CRUCIFIXO");
+    expect(problemas[0].mensagem).toContain("FICHA A");
+
+    const sem = removerItem(e, 0, 2); // o bi-set fica com 1 só e desfaz
+    expect(validar(sem)).toEqual([]);
+    expect(contarIndisponiveis(sem)).toBe(0);
+    expect(sem.fichas[0].itens.map((i) => i.bloco)).toEqual([null, null]);
+  });
+
+  it("o aviso de indisponível sobrevive ao rascunho (recarregar a página)", () => {
+    const treino = treinoDoServidor();
+    treino.fichas[1].itens[0].indisponivel = true;
+    const e = estadoDeImportacao(treino);
+
+    const lido = lerRascunho(serializar(e));
+
+    expect(contarIndisponiveis(lido)).toBe(1);
+    expect(lido.fichas[1].itens[0].indisponivel).toBe(true);
+    expect(lido.fichas[0].itens[0]).not.toHaveProperty("indisponivel");
+  });
+
+  it("exercício adicionado depois pela lista nunca vem marcado", () => {
+    const e = adicionarItem(estadoDeImportacao(treinoDoServidor()), 0, ex(99));
+
+    expect(e.fichas[0].itens.at(-1)).not.toHaveProperty("indisponivel");
+  });
+
+  it("textos que faltam entram vazios e intervalo estranho é ignorado", () => {
+    const treino = treinoDoServidor();
+    treino.fichas[0].itens[0] = { exercicio_id: 10, nome: "SUPINO RETO", series: null, pausa: 99999, bloco: 0 };
+    treino.fichas[0].itens[1].pausa = -5;
+
+    const e = estadoDeImportacao(treino);
+
+    const [a, b] = e.fichas[0].itens;
+    expect([a.series, a.repeticoes, a.carga, a.observacao, a.pausaMin, a.pausaSeg, a.bloco]).toEqual(["", "", "", "", "", "", null]);
+    expect([b.pausaMin, b.pausaSeg]).toEqual(["", ""]);
+  });
+
+  it("aceita o intervalo máximo de 59 min 59 s", () => {
+    const treino = treinoDoServidor();
+    treino.fichas[1].itens[0].pausa = 3599;
+
+    const item = estadoDeImportacao(treino).fichas[1].itens[0];
+
+    expect([item.pausaMin, item.pausaSeg]).toEqual(["59", "59"]);
+  });
+
+  it.each([
+    ["nada", null],
+    ["texto", "treino"],
+    ["sem fichas", { fichas: "A" }],
+    ["lista de fichas vazia", { fichas: [] }],
+    ["ficha sem nome", { fichas: [{ itens: [] }] }],
+    ["ficha sem lista de exercícios", { fichas: [{ nome: "A" }] }],
+    ["exercício sem id", { fichas: [{ nome: "A", itens: [{ nome: "X" }] }] }],
+    ["exercício com id de texto", { fichas: [{ nome: "A", itens: [{ exercicio_id: "7", nome: "X" }] }] }],
+    ["exercício sem nome", { fichas: [{ nome: "A", itens: [{ exercicio_id: 7 }] }] }],
+  ])("formato que não serve (%s) não carrega nada", (_descricao, treino) => {
+    expect(estadoDeImportacao(treino)).toBeNull();
+  });
+
+  it("recusa treino com fichas demais ou exercícios demais", () => {
+    const muitasFichas = { fichas: Array.from({ length: MAXIMO_FICHAS + 1 }, (_, i) => ({ nome: "F" + i, itens: [] })) };
+    const muitosItens = {
+      fichas: [{ nome: "A", itens: Array.from({ length: MAXIMO_ITENS_POR_FICHA + 1 }, (_, i) => ({ exercicio_id: i + 1, nome: "X" })) }],
+    };
+
+    expect(estadoDeImportacao(muitasFichas)).toBeNull();
+    expect(estadoDeImportacao(muitosItens)).toBeNull();
+  });
+});
+
+describe("metaDaImportacao, contarIndisponiveis e contarExercicios", () => {
+  it("a meta vira o texto do campo; sem meta (ou fora de 1 a 999), vazio", () => {
+    expect(metaDaImportacao({ sessoes_por_ficha: 15 })).toBe("15");
+    expect(metaDaImportacao({ sessoes_por_ficha: 999 })).toBe("999");
+    for (const ruim of [null, 0, 1000, "15", 1.5, undefined]) expect(metaDaImportacao({ sessoes_por_ficha: ruim })).toBe("");
+    expect(metaDaImportacao(null)).toBe("");
+  });
+
+  it("conta os exercícios do treino todo", () => {
+    expect(contarExercicios(estadoDeImportacao(treinoDoServidor()))).toBe(4);
+    expect(contarExercicios(criarEstado())).toBe(0);
+  });
+});
+
+describe("treino padrão a partir da tela", () => {
+  const dados = { nomePadrao: "Básico 1", montadoPor: "Ana Paula" };
+
+  it("monta o pedido com as fichas e a meta, sem datas", () => {
+    const e = preencher(comItens(2));
+
+    const pedido = montarPedidoDePadrao(e, { ...dados, sessoesPorFicha: " 15 " });
+
+    expect(pedido.nome).toBe("Básico 1");
+    expect(pedido.montado_por).toBe("Ana Paula");
+    expect(pedido.sessoes_por_ficha).toBe(15);
+    expect(pedido.fichas).toEqual(paraEnvio(e).fichas);
+    expect(pedido).not.toHaveProperty("inicio");
+    expect(pedido).not.toHaveProperty("nome_treino");
+  });
+
+  it("sem meta vai null; nome e professor perdem os espaços sobrando", () => {
+    const pedido = montarPedidoDePadrao(comItens(1), { nomePadrao: "  Básico   1 ", montadoPor: " Ana  Paula ", sessoesPorFicha: "" });
+
+    expect(pedido.sessoes_por_ficha).toBeNull();
+    expect(pedido.nome).toBe("Básico 1");
+    expect(pedido.montado_por).toBe("Ana Paula");
+  });
+
+  it("confere nome e professor", () => {
+    expect(validarDadosDoPadrao(dados)).toEqual([]);
+    expect(validarDadosDoPadrao({ nomePadrao: "  ", montadoPor: "" }).map((p) => p.campo)).toEqual(["nome-padrao", "quem-montou"]);
+    const longo = validarDadosDoPadrao({ nomePadrao: "X".repeat(41), montadoPor: "Y".repeat(61) });
+    expect(longo.map((p) => p.campo)).toEqual(["nome-padrao", "quem-montou"]);
+    expect(longo[0].mensagem).toContain("máximo é 40");
+    expect(validarDadosDoPadrao({ nomePadrao: "X".repeat(40), montadoPor: "Y".repeat(60) })).toEqual([]);
+  });
+
+  it("recusa caractere invisível", () => {
+    const [problema] = validarDadosDoPadrao({ nomePadrao: "Bom\u0000dia", montadoPor: "Ana" });
+
+    expect(problema.campo).toBe("nome-padrao");
+    expect(problema.mensagem).toContain("caracteres inválidos");
   });
 });

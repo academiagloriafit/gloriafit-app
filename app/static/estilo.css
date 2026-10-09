@@ -438,6 +438,54 @@ button { font-family: inherit; }
   .cabecalho-treino, .campos-do-ciclo { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ---- importar treino (tela de lançar treino) ---- */
+.barra-importar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.barra-importar h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.barra-importar .dica { flex: 1 1 260px; }
+.aviso-importado {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border-left: 4px solid #1f5a2b;
+  background: #e4f1e4;
+  color: #1f3d27;
+  font-size: 16px;
+  line-height: 1.4;
+}
+.aviso-importado.aviso-importado-atencao { border-left-color: var(--laranja); background: var(--alerta-fundo); color: var(--alerta-texto); }
+.painel-importar { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--borda); display: flex; flex-direction: column; gap: 10px; }
+.abas-importar { margin-bottom: 0; }
+.abas-importar .aba { border-bottom: 1px solid var(--borda); border-radius: 10px; }
+.abas-importar .aba-ativa, .abas-importar .aba-ativa:hover { border-bottom: 1px solid var(--borda); }
+.lista-importar { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--borda); max-height: 42vh; overflow-y: auto; }
+.lista-importar:empty { display: none; }
+.linha-importar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--borda);
+}
+.importar-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 280px; }
+.importar-titulo { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.importar-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cabecalho-treinos-do-aluno { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.cabecalho-treinos-do-aluno h3 { margin: 0; font-size: 17px; font-weight: 700; }
+.rodape-importar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.rodape-importar .aviso-campo { flex: 1 1 280px; min-height: 0; }
+#bloco-busca-aluno { display: flex; flex-direction: column; gap: 8px; }
+.tela-treino .painel-importar .dica { min-height: 1.3em; }
+
+/* exercício que saiu da lista (veio de "Importar treino"): o professor precisa trocar */
+.linha-indisponivel { background: #fff1f1; }
+.linha-indisponivel .linha-nome { color: #7a0016; }
+.linha-indisponivel .selo { margin-left: 8px; }
+.linha-nome[aria-invalid="true"] { text-decoration: underline wavy #b00020; text-underline-offset: 3px; }
+.aviso.aviso-erro { color: #7a0016; font-weight: 600; }
+.form-padrao label { font-weight: 600; }
+
 /* ---- treino salvo ---- */
 .painel-salvo h1 { margin: 0; font-size: 26px; font-weight: 700; }
 .painel-salvo h1:focus { outline: none; }
@@ -613,8 +661,21 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .aviso-troca-ficha { margin: 0; border-radius: 0; border-left-width: 6px; }
 .treino-conteudo { padding: 4px 16px 16px 40px; display: flex; flex-direction: column; gap: 8px; }
 .acoes-treino { margin: 0 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.acoes-treino .aviso-acao { font-size: 15px; font-weight: 600; color: #1f5a2b; }
-.acoes-treino .aviso-acao.aviso-erro { color: #7a0016; }
+.acoes-treino .aviso-acao, .acoes-treino .aviso-padrao { font-size: 15px; font-weight: 600; color: #1f5a2b; }
+.acoes-treino .aviso-acao.aviso-erro, .acoes-treino .aviso-padrao.aviso-erro { color: #7a0016; }
+.acoes-treino .aviso-padrao:empty { display: none; }
+.form-padrao-ficha input, .form-padrao input {
+  height: 40px;
+  min-width: 220px;
+  border: 1.5px solid #8c8b83;
+  border-radius: 8px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+  background: var(--branco);
+  color: var(--escuro);
+}
 .dados-do-treino { margin: 0; font-size: 15px; color: var(--texto-suave); }
 .ficha-sessoes { margin-left: auto; font-size: 15px; font-weight: 700; }
 @media (max-width: 700px) {

@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 6
+VERSAO_DO_BANCO = 7
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -134,8 +134,30 @@ def _de_5_para_6(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX ix_sessao_treino ON sessao(treino_id)")
 
 
+def _de_6_para_7(conn: sqlite3.Connection) -> None:
+    """Treinos padrão: nasce a tabela `modelo_treino` (treino pronto para copiar para qualquer aluno).
+
+    Só acrescenta uma tabela: nenhum dado que já existe é tocado. Os comandos são "IF NOT EXISTS" de propósito:
+    se um dia o número da versão for baixado à mão (para abrir o banco com o app antigo, que ignora a tabela
+    nova), subir de novo com este app não falha por a tabela já existir.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS modelo_treino (
+            id                INTEGER PRIMARY KEY,
+            nome              TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
+            montado_por       TEXT    NOT NULL CHECK (length(montado_por) BETWEEN 1 AND 60),
+            sessoes_por_ficha INTEGER CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999),
+            conteudo          TEXT    NOT NULL,
+            criado_em         TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_modelo_treino_nome ON modelo_treino(nome COLLATE NOCASE)")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
-MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6}
+MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7}
 
 
 def _arquivo_do_banco(conn: sqlite3.Connection) -> Path | None:

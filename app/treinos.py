@@ -59,7 +59,7 @@ def _tem_caractere_de_controle(texto: str) -> bool:
     return any(unicodedata.category(c).startswith("C") for c in texto)
 
 
-def _texto(valor, rotulo: str, maximo: int, obrigatorio: bool, problemas: list[str]) -> str | None:
+def validar_texto(valor, rotulo: str, maximo: int, obrigatorio: bool, problemas: list[str]) -> str | None:
     """Confere um campo de texto. Devolve o texto limpo, ou None (e anota o problema)."""
     if valor is None and not obrigatorio:
         return ""
@@ -99,7 +99,7 @@ def _dia(valor, rotulo: str, problemas: list[str]):
     return valor
 
 
-def _sessoes_por_ficha(valor, problemas: list[str]):
+def validar_sessoes_por_ficha(valor, problemas: list[str]):
     """Quantas vezes o aluno faz cada ficha no ciclo. Vazio (None ou "") = sem meta.
     Devolve o número, ou None; se é inválido, anota o problema e devolve False."""
     if valor is None or valor == "":
@@ -141,10 +141,10 @@ def _validar_itens(conn, itens, rotulo: str, problemas: list[str]) -> list[dict]
             continue
         # Séries e repetições podem ficar em branco (cardio: o professor escreve o tempo, ou nada). Pedido do
         # Thiago, 08/10/2026. Em branco vira NULL no banco, como no histórico do Data4U.
-        series = _texto(item.get("series"), f"{onde}: séries", LIMITE_CAMPO, False, problemas)
-        repeticoes = _texto(item.get("repeticoes"), f"{onde}: repetições", LIMITE_CAMPO, False, problemas)
-        carga = _texto(item.get("carga"), f"{onde}: peso", LIMITE_CAMPO, False, problemas)
-        observacao = _texto(item.get("observacao"), f"{onde}: observação", LIMITE_OBSERVACAO, False, problemas)
+        series = validar_texto(item.get("series"), f"{onde}: séries", LIMITE_CAMPO, False, problemas)
+        repeticoes = validar_texto(item.get("repeticoes"), f"{onde}: repetições", LIMITE_CAMPO, False, problemas)
+        carga = validar_texto(item.get("carga"), f"{onde}: peso", LIMITE_CAMPO, False, problemas)
+        observacao = validar_texto(item.get("observacao"), f"{onde}: observação", LIMITE_OBSERVACAO, False, problemas)
         pausa = _pausa(item.get("pausa"), onde, problemas)
         bloco = item.get("bloco")
         if bloco is not None and (not _inteiro(bloco) or bloco < 1):
@@ -207,7 +207,7 @@ def _renumerar_blocos(itens: list[dict], rotulo: str, problemas: list[str]) -> l
     return itens
 
 
-def _validar_fichas(conn, fichas, problemas: list[str]) -> list[dict] | None:
+def validar_fichas(conn, fichas, problemas: list[str]) -> list[dict] | None:
     if not isinstance(fichas, list) or not 1 <= len(fichas) <= MAXIMO_FICHAS:
         problemas.append(f"O treino precisa ter de 1 a {MAXIMO_FICHAS} fichas (A, B, C...).")
         return None
@@ -216,7 +216,7 @@ def _validar_fichas(conn, fichas, problemas: list[str]) -> list[dict] | None:
         if not isinstance(ficha, dict):
             problemas.append(f"Ficha {numero}: formato inválido.")
             continue
-        nome = _texto(ficha.get("nome"), f"O nome da ficha {numero}", LIMITE_NOME_FICHA, True, problemas)
+        nome = validar_texto(ficha.get("nome"), f"O nome da ficha {numero}", LIMITE_NOME_FICHA, True, problemas)
         itens = _validar_itens(conn, ficha.get("itens"), nome or f"Ficha {numero}", problemas)
         if nome is not None and itens is not None:
             validas.append({"nome": nome, "itens": itens})
@@ -248,17 +248,17 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
         raise TreinoInvalido(["Formato do pedido inválido."])
 
     problemas: list[str] = []
-    nome_treino = _texto(dados.get("nome_treino"), "O nome do treino", LIMITE_NOME_TREINO, True, problemas)
-    montado_por = _texto(dados.get("montado_por"), "O nome de quem montou", LIMITE_QUEM_MONTOU, True, problemas)
+    nome_treino = validar_texto(dados.get("nome_treino"), "O nome do treino", LIMITE_NOME_TREINO, True, problemas)
+    montado_por = validar_texto(dados.get("montado_por"), "O nome de quem montou", LIMITE_QUEM_MONTOU, True, problemas)
     agora = agora or agora_utc()
     inicio = _dia(dados.get("inicio"), "Início", problemas)
     fim = _dia(dados.get("fim"), "Fim", problemas)
-    sessoes = _sessoes_por_ficha(dados.get("sessoes_por_ficha"), problemas)
+    sessoes = validar_sessoes_por_ficha(dados.get("sessoes_por_ficha"), problemas)
     if inicio is None:
         inicio = hoje(agora)  # sem data de início = começa hoje (como no Data4U)
     if inicio is not False and fim not in (None, False) and fim < inicio:  # 'AAAA-MM-DD' compara como texto
         problemas.append("A data do fim não pode ser antes da data do início.")
-    fichas = _validar_fichas(conn, dados.get("fichas"), problemas)
+    fichas = validar_fichas(conn, dados.get("fichas"), problemas)
     if problemas:
         raise TreinoInvalido(problemas)
 

@@ -1,7 +1,5 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 7 (09/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão e computadores autorizados.
--- Mudança da versão 6 para a 7 (treinos padrão): nasceu a tabela `modelo_treino` (treino pronto para copiar para
--- qualquer aluno, pelo botão "Importar treino"). Bancos da versão 6 são atualizados sozinhos na subida do app.
+-- Versão 6 (08/10/2026): exercícios, alunos (vindos do Data4U), treinos e computadores autorizados.
 -- Mudança da versão 5 para a 6 (ciclo do treino): o treino ganhou `inicio`, `fim`,
 -- `concluido_em` e `sessoes_por_ficha`; só UM treino por aluno pode ficar ativo (índice
 -- `ux_treino_ativo_por_aluno`); nasceu a tabela `sessao` (cada vez que o aluno treinou uma ficha).
@@ -21,7 +19,7 @@
 -- Fora desta versão, de propósito: login do aluno, pendências da recepção e
 -- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 7;
+PRAGMA user_version = 6;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -183,27 +181,6 @@ CREATE TABLE IF NOT EXISTS sessao (
     feita_em    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_sessao_treino ON sessao(treino_id);
-
--- ------------------------------------------------------------ treinos padrão
--- Um treino pronto (fichas e exercícios) que o professor copia para um aluno pelo botão "Importar
--- treino" da tela de lançar treino. Copiar NÃO liga o aluno ao padrão: depois de copiado, o treino do
--- aluno é só dele (mexer ou apagar o padrão não muda os treinos que já foram copiados).
--- nome: até 40 letras, como o do treino; não repete (sem diferença de maiúscula/minúscula).
--- montado_por: o professor que montou (até 60 letras).
--- sessoes_por_ficha: a meta "treinos por ficha" que vem junto na cópia (vazio = sem meta).
--- conteudo: JSON {"fichas": [{"nome", "itens": [{"exercicio_id", "series", "repeticoes", "carga",
---   "pausa" (segundos), "observacao", "bloco"}]}]}: o mesmo desenho do pedido de salvar treino, já conferido
---   (app/modelos.py). Guarda só o id do exercício; na hora de copiar, o app confere se ele ainda está ativo.
--- criado_em: UTC.
-CREATE TABLE IF NOT EXISTS modelo_treino (
-    id                INTEGER PRIMARY KEY,
-    nome              TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
-    montado_por       TEXT    NOT NULL CHECK (length(montado_por) BETWEEN 1 AND 60),
-    sessoes_por_ficha INTEGER CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999),
-    conteudo          TEXT    NOT NULL,
-    criado_em         TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_modelo_treino_nome ON modelo_treino(nome COLLATE NOCASE);
 
 -- ------------------------------------------------------------ acesso do professor
 -- A área do professor só abre em computadores AUTORIZADOS (hoje: o dos professores e o

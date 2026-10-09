@@ -14,7 +14,8 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
    (busca por nome; "Parte do corpo" recolhido). No alto também ficam **Início** (vem com a data de hoje),
    **Fim** (opcional) e **Treinos por ficha** (opcional: quantas vezes o aluno faz cada ficha no ciclo), e, se o aluno já tem
    um treino ativo, o aviso de que ele será concluído ao salvar. O rascunho (fichas, nome, professor, datas e meta) fica no
-   navegador até salvar.
+   navegador até salvar. O botão **Importar treino** (no alto) começa de um treino pronto: um **treino padrão** ou o treino de
+   **outro aluno** (ver "Treinos padrão e Importar treino" abaixo); **Salvar como treino padrão** (no rodapé) guarda o que está na tela.
 4. **Salvar treino**: um só botão, **Salvar treino**, sempre à vista no rodapé. O nome do treino vem
    sugerido (ex.: "TREINO ABC 07/10/26") e acompanha as fichas até o professor mexer nele; o
    **Professor** é digitado pelo próprio professor (obrigatório, não vem preenchido). Quem tenta
@@ -74,8 +75,8 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 
 | Arquivo | Para quê |
 |---|---|
-| `app/schema.sql` | Desenho das tabelas (versão 6): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha) e os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`). Não há tabela de professores: o nome é digitado a cada treino |
-| `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco da versão 4 ou 5 até a 6 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
+| `app/schema.sql` | Desenho das tabelas (versão 7): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha), `modelo_treino` (treinos padrão) e os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`). Não há tabela de professores: o nome é digitado a cada treino |
+| `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco da versão 4, 5 ou 6 até a 7 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
 | `app/importar_exercicios.py` | Lê a planilha `dados/quadro_exercicios_v2.xlsx` e grava no banco |
 | `app/texto.py` | `normalizar`: minúsculas e sem acento ("Bíceps" → "biceps") |
 | `app/exercicios.py` | Consultas: grupos e busca de exercícios |
@@ -86,6 +87,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/provisorios.py` | Aluno provisório: valida nome e CPF (dígitos verificadores) e cadastra, recusando CPF que já exista (a conferência e a gravação são um comando só no SQLite, então dois pedidos juntos não passam os dois) |
 | `app/cupom.py` | Monta o conteúdo do cupom do treino (linhas, etiquetas, avisos de bi-set/tri-set); o desenho fica em `templates/imprimir.html` e `static/imprimir.css` |
 | `app/treinos.py` | Salvar e ler treinos: confere tudo de novo no servidor e grava tudo-ou-nada (inclui início, fim, meta e a conclusão do treino ativo anterior) |
+| `app/modelos.py` | Treinos padrão (`modelo_treino`: criar, listar, excluir) e a cópia de treinos para a tela de lançar treino: devolve um treino padrão ou o treino de um aluno no formato da tela (`para_montar`), marcando exercício que saiu da lista e arrumando bi-sets fora do molde. **Não grava nada para o aluno** |
 | `app/ciclo.py` | O ciclo do treino: concluir, reativar, registrar sessão (só testes por enquanto), contar o andamento e decidir o aviso "hora de trocar o treino" |
 | `app/datas.py` | Fuso de Brasília: dia local de um momento em UTC, "hoje", leitura rigorosa de `AAAA-MM-DD` |
 | `app/acesso.py` | Computadores autorizados: gera o código de uso único, troca o código por um cookie, reconhece o computador, revoga, limita tentativas erradas. O banco guarda só o hash (SHA-256) do código e do cookie |
@@ -97,12 +99,15 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/static/atualizar_alunos.js` | A tela em si (escolher arquivo, mostrar resumo, enviar os dois pacotes, mostrar o relatório). Usa só `textContent`. Com `?simular_treinos=1` na página, o histórico é só simulado |
 | `app/static/treino_modelo.js` | Lógica do treino (fichas, bi-set, validação, rascunho, nome sugerido, pedido de salvar), sem nada de tela |
 | `app/static/montar.js`, `salvar.js`, `biblioteca.js` | Desenho da tela Lançar treino (nome, professor, fichas, tabela), envio do treino ao servidor e lista de exercícios |
-| `app/static/api.js` | `enviarJson`: envia um POST em JSON com limite de tempo (20 s) e devolve status + corpo; usado por salvar treino e WhatsApp |
+| `app/static/importar_treino.js` | O painel **Importar treino** (abas "Treino padrão" e "Treino de outro aluno"): só lê do servidor e entrega o treino escolhido a `montar.js`; pede confirmação antes de substituir o que já está na tela |
+| `app/static/padrao_ficha.js` | Botão **Salvar como treino padrão** de cada treino na ficha do aluno |
+| `app/static/dom.js` | `el()`: cria elementos de tela só com `textContent` (nada vindo do banco vira HTML) |
+| `app/static/api.js` | `enviarJson` (POST em JSON) e `buscarJson` (GET) com limite de tempo (20 s) devolvendo status + corpo; `textoDoErro` escolhe a mensagem para mostrar; usado por salvar treino, WhatsApp e importar treino |
 | `app/static/autorizar.js`, `autorizar_modelo.js` | Tela `/autorizar`: envia o código e mostra a resposta (o texto de cada resposta fica em `autorizar_modelo.js`, testado à parte) |
 | `app/static/novo_aluno.js`, `novo_aluno_modelo.js` | Tela `/alunos/novo`: envia o cadastro e mostra erros por campo ou os links de quem já tem o CPF (o que mostrar para cada resposta fica em `novo_aluno_modelo.js`, testado à parte) |
 | `app/static/alunos.js`, `ficha.js` | Busca de alunos (espera 200 ms depois de digitar e cancela a busca anterior) e a edição do WhatsApp na ficha |
 | `app/static/ciclo_ficha.js` | Botões **Concluído** (com confirmação) e **Reativar** da ficha do aluno |
-| `tests/` | Testes do Python (pytest). `schema_v4.sql` e `schema_v5.sql` são cópias dos desenhos antigos, usadas para provar as migrações; `test_contrato_js_python.py` roda o JavaScript (Node) e entrega o pacote dele ao servidor |
+| `tests/` | Testes do Python (pytest). `schema_v4.sql`, `schema_v5.sql` e `schema_v6.sql` são cópias dos desenhos antigos, usadas para provar as migrações; `test_contrato_js_python.py` roda o JavaScript (Node) e entrega o pacote dele ao servidor |
 | `tests_js/` | Testes do JavaScript (Vitest) |
 
 ## Como rodar
@@ -204,6 +209,13 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 | `POST /api/alunos/<id>/treinos` | Grava um treino. Corpo JSON: `nome_treino`, `montado_por`, `inicio` (`AAAA-MM-DD`, vazio = hoje), `fim` (opcional, não pode ser antes do início), `sessoes_por_ficha` (opcional, 1 a 999), `fichas` (cada uma com `nome` e `itens`: `exercicio_id`, `series`, `repeticoes`, `carga`, `pausa`, `observacao`, `bloco`). Se o aluno já tinha treino ativo, ele é concluído na mesma gravação. Devolve `201 {"id": N, "concluido_anterior": "NOME" ou null}`; `400 {"erros": [...]}` dado inválido; `404` aluno inexistente; `409` o aluno já tem treino com esse nome; `413` pedido grande demais (> 512 KB); `415` não é JSON |
 | `POST /api/treinos/<id>/concluir` | Botão "Concluído": o treino vira inativo (guarda `concluido_em`). Corpo JSON `{}`. `200 {"ok": true}`; `404`; `409` já está concluído; `415` |
 | `POST /api/treinos/<id>/reativar` | Desfaz o "Concluído". `200 {"ok": true}`; `404`; `409` já está ativo, ou o aluno já tem outro treino ativo (a mensagem diz qual); `415` |
+| `GET /api/modelos` | `{"modelos": [{id, nome, montado_por, sessoes_por_ficha, criado_em, fichas, exercicios, resumo}]}`: os treinos padrão, em ordem alfabética |
+| `GET /api/modelos/<id>` | Um treino padrão no formato da tela de montar: `{nome, sessoes_por_ficha, indisponiveis, fichas: [{nome, itens: [{exercicio_id, nome, series, repeticoes, carga, pausa, observacao, bloco, indisponivel}]}]}`. **Não grava nada.** `404` |
+| `POST /api/modelos` | Guarda o treino da tela como treino padrão. Corpo JSON: `nome` (até 40), `montado_por`, `sessoes_por_ficha` (opcional), `fichas` (mesmo formato de salvar treino; mesma conferência). `201 {"id"}`; `400 {"erros"}`; `409` já existe padrão com esse nome (sem diferenciar maiúscula nem acento); `415` |
+| `POST /api/modelos/<id>/excluir` | Apaga um treino padrão (os treinos já copiados para alunos não mudam). Corpo `{}`. `200 {"ok": true}`; `404`; `415` |
+| `POST /api/treinos/<id>/modelo` | "Salvar como treino padrão" de um treino que já existe. Corpo JSON: `{"nome": "..."}`. Fica com o professor e a meta do treino original. `201 {"id"}`; `400 {"erros"}` (inclui treino com exercício que saiu da lista); `404`; `409` nome repetido; `415` |
+| `GET /api/alunos/<id>/treinos-para-copiar` | `{"treinos": [{id, nome, ativo, do_data4u, inicio, montado_por, fichas, exercicios, resumo}]}`: os treinos do aluno que têm exercício (o ativo primeiro). `404` aluno inexistente |
+| `GET /api/treinos/<id>/para-montar` | Um treino de aluno no formato da tela de montar (igual ao de `/api/modelos/<id>`). **Não grava nada.** `404` |
 | `GET /saude` | `{"ok": true}` se o app está de pé e enxerga o banco. **Pública** |
 
 **Todas as rotas acima, menos `/autorizar`, `/api/autorizar`, `/saude` e os arquivos de
@@ -245,6 +257,30 @@ Pedido do Thiago em 08/10/2026 (decisões dele, uma a uma):
   treino novo do Data4U entra inativo, e só vira o ativo do aluno se for o mais recente dele (o ativo de antes é concluído).
 - **Fora desta versão, de propósito:** enviar início/fim/meta de volta ao Data4U (`DT_INICIO`, `DT_FIM`, `NR_SESSOES_PRESCRITAS`);
   registrar *quem* concluiu; aviso de troca na lista de alunos (hoje só na ficha do aluno).
+
+## Treinos padrão e "Importar treino": como funciona
+
+Pedido do Thiago em 09/10/2026: começar um treino sem partir do zero, copiando um treino padrão da academia ou o treino de outro
+aluno de perfil parecido.
+
+- **Botão "Importar treino"** (tela Lançar treino, no alto), duas abas: **Treino padrão** (os guardados) e **Treino de outro aluno**
+  (busca o aluno e mostra os treinos dele, o ativo primeiro; vale também para repetir um treino antigo do próprio aluno).
+- **Importar não grava nada para o aluno.** O treino escolhido entra na tela (fichas, exercícios, séries, repetições, peso, intervalo,
+  observação, bi-sets e a meta "treinos por ficha"); o professor confere, ajusta e clica em **Salvar treino**, que passa pela
+  conferência de sempre. Se já há exercícios na tela, o painel pergunta antes de substituir. Nome do treino, professor, início e fim
+  não vêm junto (são de cada aluno e de cada ciclo).
+- **Copiar não liga ao original.** Depois de salvo, o treino é só do aluno; mexer ou apagar o padrão não muda treinos já copiados.
+- **Treino padrão** = linha da tabela `modelo_treino` (nome único, professor, meta e o conteúdo em JSON, no mesmo desenho do pedido de
+  salvar treino, já conferido). **A tabela começa vazia.** Para criar um: botão **Salvar como treino padrão** dentro de cada treino
+  na ficha do aluno, ou no rodapé da tela Lançar treino (guarda o que está na tela, sem salvar nada para o aluno; precisa do campo
+  Professor preenchido). Treino com exercício que saiu da lista de exercícios não vira padrão (a mensagem diz quais).
+- **Exercício que saiu da lista** (acontece nos treinos antigos do Data4U e, no futuro, se um exercício for desativado): vem marcado
+  **"Fora da lista"**, em vermelho, e a tela não deixa salvar enquanto ele estiver lá: o professor remove e escolhe outro. O servidor
+  também recusaria.
+- **Bi-sets/tri-sets do Data4U fora do molde** (bloco com 1 exercício ou com 4 ou mais) viram exercícios sozinhos ao copiar; blocos
+  bons são renumerados.
+- **Ainda não existe** (planejado, pedido do Thiago): trocar o treino do aluno sozinho, ao concluir, pelo próximo de uma sequência de
+  treinos padrão (básico, intermediário...), e montar um treino sob medida a partir de uma descrição.
 
 ## Histórico de treinos: como funciona
 
@@ -319,13 +355,13 @@ Pedido do Thiago em 08/10/2026 (decisões dele, uma a uma):
 - O servidor só aceita `POST` com `Content-Type: application/json` (um formulário de outro
   site não consegue mandar esse tipo), com cookie `SameSite=Lax` e com conferência de origem:
   três camadas contra pedidos forjados por outro site.
-- **Atualização do banco (migração).** Os bancos das versões 4 e 5 sobem sozinhos até a 6 (a 4 -> 5 é a de
-  07/10/2026; a 5 -> 6 é o ciclo do treino, de 08/10/2026) quando o app novo liga: antes de mexer, o app tira uma cópia
+- **Atualização do banco (migração).** Os bancos das versões 4, 5 e 6 sobem sozinhos até a 7 (a 4 -> 5 é a de
+  07/10/2026; a 5 -> 6 é o ciclo do treino, de 08/10/2026; a 6 -> 7 acrescenta a tabela dos treinos padrão, de 09/10/2026) quando o app novo liga: antes de mexer, o app tira uma cópia
   consistente em `<pasta do banco>/antes-da-migracao/` (uma por subida, guarda as 5 últimas); cada passo roda numa
   transação (ou muda tudo, ou nada); os 2 processos do gunicorn subindo juntos não migram duas vezes. Banco mais antigo
   que a versão 4 ainda é recusado (`BancoDesatualizado`).
-  **Voltar atrás:** depois que o banco virou versão 6, a imagem ANTIGA do app se recusa a abrir (ela só
-  conhece a 5). Para voltar à imagem antiga é preciso também voltar o arquivo: copiar a cópia de
+  **Voltar atrás:** depois que o banco virou versão 7, a imagem ANTIGA do app se recusa a abrir (ela só
+  conhece a 6; a 5 e a 4 idem). Para voltar à imagem antiga é preciso também voltar o arquivo: copiar a cópia de
   `/dados/antes-da-migracao/` (ou uma de `/backups`) por cima de `/dados/app.db` com o app parado. Nunca apagar
   o banco para "resolver": o erro de versão **mais nova** diz isso na mensagem.
 - O importador **não copia** senha, RG, nascimento, salário nem observações do Data4U: lê só
@@ -342,7 +378,7 @@ Pedido do Thiago em 08/10/2026 (decisões dele, uma a uma):
   saber quais combinações já existem como um exercício só; entra no passo de salvar.
 - Qual `professor_id` do Data4U usar ao enviar o treino para lá (o app guarda só o nome digitado;
   a fila do Data4U exige um id de pessoa).
-- Se o Data4U aceita séries/repetições vazias (o app exige as duas).
+- Se o Data4U aceita séries/repetições vazias (o app aceita em branco, para o cardio).
 - A busca de alunos mostra o **último treino** (o mais novo, do app ou do histórico), que normalmente é o ativo; ainda falta o app do aluno.
 - A **situação** mostrada é a letra do Data4U (Ativo, Pendente...), no lugar do "Em dia" do
   desenho. "Em dia" não foi verificado (o desenho dizia "pagou nos últimos 30 dias").

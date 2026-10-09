@@ -57,6 +57,15 @@
           <div class="treino-conteudo">
             <p class="acoes-treino">
               <a class="botao-link" href="{{ url_for('pagina_imprimir_treino', treino_id=treino.id) }}">Visualizar e imprimir</a>
+              {# Guarda este treino como treino padrão: ele passa a aparecer em "Importar treino" na tela de lançar treino. #}
+              <button type="button" class="botao-link botao-padrao">Salvar como treino padrão</button>
+              <span class="confirmacao form-padrao-ficha" hidden>
+                <label for="nome-padrao-{{ treino.id }}">Nome do treino padrão</label>
+                <input id="nome-padrao-{{ treino.id }}" class="campo-padrao" type="text" maxlength="40" autocomplete="off" value="{{ treino.nome }}">
+                <button type="button" class="botao-escuro sim-padrao" data-treino="{{ treino.id }}">Guardar</button>
+                <button type="button" class="botao-discreto nao-padrao">Cancelar</button>
+              </span>
+              <span class="aviso-padrao" role="status"></span>
               {% if treino.ativo %}
               <button type="button" class="botao-link botao-concluir" data-treino="{{ treino.id }}">Concluído</button>
               {% elif not ficha.tem_treino_ativo %}
@@ -128,5 +137,6 @@
 
   <script type="module" src="{{ url_for('static', filename='ficha.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='ciclo_ficha.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='padrao_ficha.js') }}"></script>
 </body>
 </html>

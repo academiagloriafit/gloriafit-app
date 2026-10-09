@@ -2,7 +2,10 @@
 // (testada à parte); aqui só desenhamos a tela e ligamos os botões.
 // Palavras do Data4U: o TREINO tem um nome e várias FICHAS (A, B, C...); cada ficha
 // tem exercícios com séries, repetições, peso, intervalo e observações.
+import { enviarJson, textoDoErro } from "./api.js";
 import { iniciarBiblioteca } from "./biblioteca.js";
+import { el } from "./dom.js";
+import { iniciarImportacao } from "./importar_treino.js";
 import { iniciarSalvar } from "./salvar.js";
 import * as M from "./treino_modelo.js";
 
@@ -25,6 +28,12 @@ const botaoSalvar = document.getElementById("salvar");
 const botaoCancelar = document.getElementById("cancelar");
 const elConfirmarDescarte = document.getElementById("confirmar-descarte");
 const areaMontagem = document.getElementById("area-montagem");
+const elAvisoImportado = document.getElementById("aviso-importado");
+const botaoPadrao = document.getElementById("salvar-como-padrao");
+const elFormPadrao = document.getElementById("form-padrao");
+const campoNomePadrao = document.getElementById("nome-padrao");
+const botaoConfirmarPadrao = document.getElementById("confirmar-padrao");
+const elAvisoPadrao = document.getElementById("aviso-padrao");
 
 // ------------------------------------------------------------------ estado da tela
 
@@ -38,6 +47,7 @@ let mostrarProblemas = false; // vira true depois de clicar em "Salvar treino"
 let errosDoServidor = []; // o que o servidor recusou (ex.: nome de treino repetido)
 let nomeEditadoPeloProfessor = false; // se sim, não trocamos o nome por outra sugestão
 let erroDeBloco = "";
+let origemImportada = null; // de onde veio o treino copiado por "Importar treino" (ou null)
 let focoPendente = null; // onde devolver o foco depois de redesenhar
 let refs = {}; // pedaços da tela que atualizamos sem redesenhar tudo
 
@@ -106,23 +116,6 @@ function apagarRascunho() {
 }
 
 // ------------------------------------------------------------------ ajudantes de tela
-
-// Cria um elemento. Texto sempre via textContent: nada do que vem do banco ou do
-// teclado é interpretado como HTML.
-function el(tag, props = {}, ...filhos) {
-  const e = document.createElement(tag);
-  for (const [chave, valor] of Object.entries(props)) {
-    if (chave === "texto") e.textContent = valor;
-    else if (chave === "classe") e.className = valor;
-    else if (chave === "aoClicar") e.addEventListener("click", valor);
-    else if (chave === "aoDigitar") e.addEventListener("input", valor);
-    else if (chave === "aoMudar") e.addEventListener("change", valor);
-    else if (valor === true) e.setAttribute(chave, "");
-    else if (valor !== false && valor != null) e.setAttribute(chave, valor);
-  }
-  filhos.flat().forEach((f) => f && e.append(f));
-  return e;
-}
 
 function anunciar(texto) {
   elAviso.textContent = texto;
@@ -408,10 +401,16 @@ function desenharLinha(item, etiqueta, dentroDeBloco) {
 
   return el(
     "li",
-    { classe: "linha" + (dentroDeBloco ? " linha-bloco" : "") },
+    { classe: "linha" + (dentroDeBloco ? " linha-bloco" : "") + (item.indisponivel ? " linha-indisponivel" : "") },
     marcador,
     el("span", { classe: "etiqueta", texto: etiqueta }),
-    el("span", { classe: "linha-nome", texto: item.nome }),
+    el(
+      "span",
+      { classe: "linha-nome", "data-uid": item.uid, "data-campo": "exercicio" },
+      item.nome,
+      // exercício que saiu da lista (veio de "Importar treino"): o professor precisa trocá-lo
+      item.indisponivel && el("span", { classe: "selo", texto: "Fora da lista" }),
+    ),
     campoDePrescricao(item, "series", "Séries"),
     campoDePrescricao(item, "repeticoes", "Repetições"),
     campoDePrescricao(item, "carga", "Peso"),
@@ -612,7 +611,10 @@ const salvar = iniciarSalvar({
   alunoNome: document.querySelector(".aluno-nome strong").textContent,
   obterEstado: () => estado,
   obterDados: dadosDoAlto,
-  aoSalvar: apagarRascunho,
+  aoSalvar: () => {
+    origemImportada = null;
+    apagarRascunho();
+  },
   aoTravar: (travado) => {
     areaMontagem.inert = travado; // nada se edita enquanto o servidor responde
     botaoSalvar.disabled = travado;
@@ -705,7 +707,145 @@ function desenhar() {
   desenharMontagem();
   atualizarNomeSugerido();
   atualizarProblemas();
+  atualizarAvisoImportado();
   devolverFoco();
+}
+
+// ------------------------------------------------------------------ importar treino
+
+const plural = (n, singular, pluralTexto) => `${n} ${n === 1 ? singular : pluralTexto}`;
+
+// A faixa verde (ou laranja, se falta trocar exercício) que lembra de onde veio o treino. Fica certa mesmo depois
+// que o professor remove os exercícios marcados.
+function atualizarAvisoImportado() {
+  elAvisoImportado.hidden = origemImportada === null;
+  if (origemImportada === null) return;
+  const fora = M.contarIndisponiveis(estado);
+  let texto =
+    `Treino copiado de "${origemImportada}" (${plural(estado.fichas.length, "ficha", "fichas")}, ` +
+    `${plural(M.contarExercicios(estado), "exercício", "exercícios")}). Confira tudo e ajuste antes de salvar.`;
+  if (fora > 0) {
+    texto +=
+      fora === 1
+        ? " 1 exercício saiu da lista de exercícios e está em vermelho: remova-o e escolha outro."
+        : ` ${fora} exercícios saíram da lista de exercícios e estão em vermelho: remova-os e escolha outros.`;
+  }
+  elAvisoImportado.textContent = texto;
+  elAvisoImportado.classList.toggle("aviso-importado-atencao", fora > 0);
+}
+
+// Põe na tela o treino que "Importar treino" buscou. Devolve null se deu certo ou o texto do problema.
+function carregarTreinoImportado(treino, origem) {
+  const novo = M.estadoDeImportacao(treino);
+  if (novo === null) return "Não consegui abrir este treino (o servidor mandou um formato inesperado). Nada foi alterado.";
+  estado = novo;
+  fichaAtual = 0;
+  selecionados.clear();
+  confirmandoExclusao = false;
+  erroDeBloco = "";
+  errosDoServidor = [];
+  campoSessoes.value = M.metaDaImportacao(treino);
+  origemImportada = origem;
+  // com exercício fora da lista, a conferência já aparece: o professor vê o que falta trocar
+  mostrarProblemas = M.contarIndisponiveis(novo) > 0;
+  guardarRascunho();
+  desenhar();
+  anunciar(`Treino copiado de ${origem}.`);
+  elAvisoImportado.scrollIntoView({ block: "nearest" });
+  return null;
+}
+
+iniciarImportacao({
+  temTreinoNaTela: () => M.contarExercicios(estado) > 0,
+  aoCarregar: carregarTreinoImportado,
+});
+
+// ------------------------------------------------------------------ salvar como treino padrão
+
+let guardandoPadrao = false;
+
+function avisarPadrao(texto, erro = false) {
+  elAvisoPadrao.textContent = texto;
+  elAvisoPadrao.classList.toggle("aviso-erro", erro);
+}
+
+function fecharFormDoPadrao() {
+  elFormPadrao.hidden = true;
+  botaoPadrao.hidden = false;
+}
+
+botaoPadrao.addEventListener("click", () => {
+  // o nome que o professor já digitou; se ele não mexeu, o sugerido SEM a data (padrão não tem data)
+  campoNomePadrao.value = nomeEditadoPeloProfessor ? M.limparEspacos(campoNome.value) : M.sugerirNomeDoTreino(estado, "");
+  avisarPadrao("");
+  botaoPadrao.hidden = true;
+  elFormPadrao.hidden = false;
+  campoNomePadrao.focus();
+  campoNomePadrao.select();
+});
+
+document.getElementById("cancelar-padrao").addEventListener("click", () => {
+  fecharFormDoPadrao();
+  avisarPadrao("");
+  botaoPadrao.focus();
+});
+
+campoNomePadrao.addEventListener("keydown", (evento) => {
+  if (evento.key === "Enter" && !evento.isComposing) {
+    evento.preventDefault();
+    guardarComoPadrao();
+  }
+});
+botaoConfirmarPadrao.addEventListener("click", guardarComoPadrao);
+
+async function guardarComoPadrao() {
+  if (guardandoPadrao) return; // clique duplo ou Enter repetido não manda duas vezes
+  const dados = { nomePadrao: campoNomePadrao.value, montadoPor: campoQuem.value, sessoesPorFicha: campoSessoes.value };
+  const dosDados = M.validarDadosDoPadrao(dados);
+  if (dosDados.length) {
+    avisarPadrao(dosDados[0].mensagem, true);
+    document.getElementById(dosDados[0].campo).focus();
+    return;
+  }
+  if (M.lerSessoesPorFicha(dados.sessoesPorFicha) === undefined) {
+    avisarPadrao(`Treinos por ficha: digite um número inteiro de 1 a ${M.MAXIMO_SESSOES_POR_FICHA}, ou deixe em branco.`, true);
+    campoSessoes.focus();
+    return;
+  }
+  if (M.validar(estado).length) {
+    mostrarProblemas = true; // os campos com problema ficam em vermelho
+    atualizarProblemas();
+    avisarPadrao("Corrija o que está em vermelho antes de guardar o treino padrão.", true);
+    elProblemas.scrollIntoView({ block: "nearest" });
+    return;
+  }
+
+  guardandoPadrao = true;
+  botaoConfirmarPadrao.disabled = true;
+  avisarPadrao("Guardando…");
+  let resposta;
+  try {
+    resposta = await enviarJson("/api/modelos", M.montarPedidoDePadrao(estado, dados));
+  } catch {
+    avisarPadrao(
+      "Não consegui confirmar com o servidor se o treino padrão foi guardado (sem resposta ou sem rede). " +
+        'Confira em "Importar treino", aba "Treino padrão", antes de tentar de novo.',
+      true,
+    );
+    return;
+  } finally {
+    guardandoPadrao = false;
+    botaoConfirmarPadrao.disabled = false;
+  }
+
+  if (resposta.status === 201) {
+    fecharFormDoPadrao();
+    avisarPadrao(`Treino padrão "${M.limparEspacos(dados.nomePadrao)}" guardado. O treino deste aluno ainda NÃO foi salvo.`);
+    botaoPadrao.focus();
+    return;
+  }
+  avisarPadrao(textoDoErro(resposta, "O servidor não guardou o treino padrão"), true);
+  if (resposta.status === 409) campoNomePadrao.focus(); // já existe um padrão com esse nome
 }
 
 iniciarBiblioteca(document.querySelector("[data-biblioteca]"), {

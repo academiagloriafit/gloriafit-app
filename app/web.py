@@ -13,7 +13,20 @@ from urllib.parse import urlsplit
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app import acesso, alunos, ciclo, cupom, datas, db, exercicios, importar_alunos, importar_treinos, provisorios, treinos
+from app import (
+    acesso,
+    alunos,
+    ciclo,
+    cupom,
+    datas,
+    db,
+    exercicios,
+    importar_alunos,
+    importar_treinos,
+    modelos,
+    provisorios,
+    treinos,
+)
 
 
 # Um treino enorme (26 fichas x 100 exercícios) tem poucas dezenas de KB. Acima disto o
@@ -442,6 +455,75 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         except ciclo.CicloInvalido as erro:
             return jsonify(erro=erro.mensagem), 409
         return jsonify(ok=True)
+
+    # ------------------------------------------------- treinos padrão e cópia de treinos ("Importar treino")
+
+    @app.get("/api/modelos")
+    def api_listar_modelos():
+        """Os treinos padrão, em ordem alfabética, com resumo."""
+        return jsonify(modelos=modelos.listar_modelos(conexao()))
+
+    @app.get("/api/modelos/<int:modelo_id>")
+    def api_obter_modelo(modelo_id: int):
+        """Um treino padrão no formato da tela de montar (ver modelos.para_montar). Não grava nada."""
+        treino = modelos.modelo_para_montar(conexao(), modelo_id)
+        if treino is None:
+            return jsonify(erro="Treino padrão não encontrado."), 404
+        return jsonify(treino)
+
+    @app.post("/api/modelos")
+    def api_criar_modelo():
+        """Guarda o treino que está na tela de montar como treino padrão (não grava nada para o aluno).
+
+        Corpo: {"nome", "montado_por", "sessoes_por_ficha", "fichas"}. 201 {"id"}; 400 {"erros"}; 409 {"erros"}
+        se já existe um padrão com esse nome.
+        """
+        dados = corpo_json()
+        try:
+            modelo_id = modelos.criar_modelo(conexao(), dados)
+        except treinos.TreinoInvalido as erro:
+            return jsonify(erros=erro.problemas), erro.status
+        return jsonify(id=modelo_id), 201
+
+    @app.post("/api/modelos/<int:modelo_id>/excluir")
+    def api_excluir_modelo(modelo_id: int):
+        """Apaga um treino padrão. Os treinos já copiados para alunos não mudam."""
+        corpo_json()  # o corpo é vazio ({}), mas o pedido precisa ser JSON como os outros
+        try:
+            modelos.excluir_modelo(conexao(), modelo_id)
+        except modelos.ModeloNaoEncontrado:
+            return jsonify(erro="Treino padrão não encontrado."), 404
+        return jsonify(ok=True)
+
+    @app.post("/api/treinos/<int:treino_id>/modelo")
+    def api_treino_como_modelo(treino_id: int):
+        """Botão "Salvar como treino padrão" da ficha do aluno. Corpo: {"nome": "nome do treino padrão"}."""
+        dados = corpo_json()
+        if not isinstance(dados, dict):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        try:
+            modelo_id = modelos.criar_modelo_do_treino(conexao(), treino_id, dados.get("nome"))
+        except modelos.TreinoNaoEncontrado:
+            return jsonify(erro="Treino não encontrado."), 404
+        except treinos.TreinoInvalido as erro:
+            return jsonify(erros=erro.problemas), erro.status
+        return jsonify(id=modelo_id), 201
+
+    @app.get("/api/alunos/<int:aluno_id>/treinos-para-copiar")
+    def api_treinos_do_aluno(aluno_id: int):
+        """Os treinos do aluno que dá para copiar (o ativo primeiro). Para a aba "Treino de outro aluno"."""
+        try:
+            return jsonify(treinos=modelos.listar_treinos_do_aluno(conexao(), aluno_id))
+        except treinos.AlunoNaoEncontrado:
+            return jsonify(erro="Aluno não encontrado."), 404
+
+    @app.get("/api/treinos/<int:treino_id>/para-montar")
+    def api_treino_para_montar(treino_id: int):
+        """Um treino de aluno no formato da tela de montar (ver modelos.para_montar). Não grava nada."""
+        treino = modelos.treino_para_montar(conexao(), treino_id)
+        if treino is None:
+            return jsonify(erro="Treino não encontrado."), 404
+        return jsonify(treino)
 
     @app.post("/api/alunos/<int:aluno_id>/whatsapp")
     def api_corrigir_whatsapp(aluno_id: int):
