@@ -271,6 +271,11 @@ Pedido do Thiago em 08/10/2026 (decisões dele, uma a uma):
 
 ## Cuidados
 
+- **Nome do exercício sem o número da máquina:** o Data4U guarda em alguns exercícios o número da
+  máquina no começo do nome ("(15) CADEIRA ABDUTORA"). Nem toda máquina é numerada, então o número
+  perdeu o sentido (decisão do Thiago, 08/10/2026). `app/texto.py: nome_para_exibir` tira só o
+  número do INÍCIO ("(15) ", "( 7 ) " e "9)") na lista de exercícios, na ficha do aluno e no cupom.
+  O banco guarda o nome original (é a chave do exercício e a ligação com o Data4U); só a exibição muda.
 - `app.db` vai ter CPF e WhatsApp de alunos (dado pessoal, LGPD). Não vai para o Git
   (`.gitignore`), a pasta do servidor onde ele fica não pode ser pública e a cópia de
   segurança precisa sair do servidor com acesso restrito.

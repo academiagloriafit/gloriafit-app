@@ -223,3 +223,11 @@ def test_contar_exercicios_conta_so_os_ativos(conn):
     _exercicio(conn, "C", ativo=0)
 
     assert exercicios.contar_exercicios(conn) == 2
+
+
+def test_a_lista_mostra_o_nome_sem_o_numero_da_maquina_e_a_busca_continua_achando(conn):
+    _exercicio(conn, "(15) CADEIRA ABDUTORA", ["Peito"])
+    resultado = exercicios.buscar_exercicios(conn, texto="abdutora")
+    assert _nomes(resultado) == ["CADEIRA ABDUTORA"]
+    # o banco guarda o nome original (é a chave do exercício); só a exibição muda
+    assert conn.execute("SELECT nome FROM exercicio").fetchone()[0] == "(15) CADEIRA ABDUTORA"

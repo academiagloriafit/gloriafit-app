@@ -10,7 +10,7 @@ import unicodedata
 from datetime import datetime
 
 from app.datas import agora_utc, hoje, ler_dia, momento_para_texto
-from app.texto import normalizar
+from app.texto import nome_para_exibir, normalizar
 
 # Quando o Claude ou um robô montar treinos sozinhos (no futuro), este é o autor.
 AUTOR_AUTOMATICO = "Academia Glória Fit"
@@ -305,6 +305,12 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
     return treino_id
 
 
+def _item_para_exibir(linha: sqlite3.Row) -> dict:
+    item = dict(linha)
+    item["exercicio"] = nome_para_exibir(item["exercicio"])  # sem o número da máquina (ver app/texto.py)
+    return item
+
+
 def obter_treino(conn: sqlite3.Connection, treino_id: int) -> dict | None:
     """O treino completo (com nomes dos exercícios), ou None se não existir.
 
@@ -334,6 +340,6 @@ def obter_treino(conn: sqlite3.Connection, treino_id: int) -> dict | None:
             (ficha["id"],),
         ).fetchall()
         resultado["fichas"].append(
-            {"nome": ficha["nome"], "ordem": ficha["ordem"], "itens": [dict(i) for i in itens]}
+            {"nome": ficha["nome"], "ordem": ficha["ordem"], "itens": [_item_para_exibir(i) for i in itens]}
         )
     return resultado

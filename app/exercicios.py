@@ -2,7 +2,7 @@
 
 import sqlite3
 
-from app.texto import normalizar
+from app.texto import nome_para_exibir, normalizar
 
 LIMITE_PADRAO = 50
 LIMITE_MAXIMO = 200
@@ -90,7 +90,7 @@ def buscar_exercicios(
     exercicios = [
         {
             "id": linha["id"],
-            "nome": linha["nome"],
+            "nome": nome_para_exibir(linha["nome"]),
             "combinado": bool(linha["combinado"]),
             "grupos": grupos_por_exercicio.get(linha["id"], []),
         }

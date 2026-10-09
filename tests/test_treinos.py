@@ -789,3 +789,11 @@ def test_treino_do_historico_inativo_continua_inativo_ao_salvar_novo(conn, aluno
 
     assert _ciclo(conn, antigo)[3:] == (0, None)  # não ganha "concluído em" que não aconteceu agora
     assert _ciclo(conn, novo)[3] == 1
+
+
+def test_o_treino_lido_mostra_o_exercicio_sem_o_numero_da_maquina(conn, aluno_id):
+    ex = conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('(6) SUPINO MAQUINA', 'app')").lastrowid
+    treino_id = salvar_treino(conn, aluno_id, _pedido([_ficha([_item(ex)])]))
+    item = obter_treino(conn, treino_id)["fichas"][0]["itens"][0]
+    assert item["exercicio"] == "SUPINO MAQUINA"
+    assert item["exercicio_id"] == ex  # a ligação com o exercício não muda

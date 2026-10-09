@@ -270,3 +270,10 @@ def test_o_aviso_do_bi_set_vem_depois_do_intervalo_e_da_observacao_do_ultimo_exe
 
     tipos = [l[0] for l in _resumo(montar_cupom(conn, treino))]
     assert tipos == ["exercicio", "dose", "exercicio", "dose", "detalhe", "detalhe", "aviso"]
+
+
+def test_o_numero_da_maquina_nao_sai_no_papel(conn):
+    conn.execute("UPDATE exercicio SET nome = '(15) CADEIRA ABDUTORA' WHERE id = 1")
+    conn.commit()
+    cupom = montar_cupom(conn, _salvar(conn, [("TREINO A", [_item(1)])]), "")
+    assert _resumo(cupom)[0] == ("exercicio", "1", "CADEIRA ABDUTORA", "")
