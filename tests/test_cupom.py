@@ -277,3 +277,10 @@ def test_o_numero_da_maquina_nao_sai_no_papel(conn):
     conn.commit()
     cupom = montar_cupom(conn, _salvar(conn, [("TREINO A", [_item(1)])]), "")
     assert _resumo(cupom)[0] == ("exercicio", "1", "CADEIRA ABDUTORA", "")
+
+
+def test_exercicio_de_cardio_sem_dose_sai_so_com_o_nome(conn):
+    cupom = montar_cupom(conn, _salvar(conn, [("TREINO A", [_item(1, series="", repeticoes="", carga=""), _item(2)])]), "")
+    linhas = _resumo(cupom)
+    assert linhas[0] == ("exercicio", "1", "SUPINO RETO COM BARRA", "")
+    assert linhas[1][0] == "exercicio"  # sem linha de dose vazia no meio: o próximo exercício vem logo depois

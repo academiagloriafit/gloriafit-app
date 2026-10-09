@@ -236,11 +236,32 @@ def test_nome_do_treino_e_obrigatorio(conn, aluno_id, exercicios, valor):
 
 @pytest.mark.parametrize("campo", ["series", "repeticoes"])
 @pytest.mark.parametrize("valor", [None, "", "  "])
-def test_series_e_repeticoes_sao_obrigatorias(conn, aluno_id, exercicios, campo, valor):
+def test_series_e_repeticoes_podem_ficar_em_branco(conn, aluno_id, exercicios, campo, valor):
+    """Cardio: o professor escreve o tempo, ou deixa tudo em branco (pedido do Thiago, 08/10/2026)."""
     item = _item(exercicios["a"])
     item[campo] = valor
 
-    assert _problemas(conn, aluno_id, _pedido([_ficha([item])]))
+    treino_id = salvar_treino(conn, aluno_id, _pedido([_ficha([item])]))
+
+    salvo = obter_treino(conn, treino_id)["fichas"][0]["itens"][0]
+    assert salvo[campo] is None  # em branco vira NULL (como no histórico do Data4U), nunca ""
+
+
+def test_exercicio_de_cardio_sem_nenhuma_dose_e_salvo(conn, aluno_id, exercicios):
+    item = _item(exercicios["a"], series="", repeticoes="", carga="")
+
+    treino_id = salvar_treino(conn, aluno_id, _pedido([_ficha([item])]))
+
+    salvo = obter_treino(conn, treino_id)["fichas"][0]["itens"][0]
+    assert (salvo["series"], salvo["repeticoes"], salvo["carga"]) == (None, None, None)
+
+
+@pytest.mark.parametrize("campo", ["series", "repeticoes"])
+def test_series_e_repeticoes_continuam_limitadas_a_11_caracteres(conn, aluno_id, exercicios, campo):
+    item = _item(exercicios["a"])
+    item[campo] = "x" * 12
+
+    assert any("máximo é 11" in p for p in _problemas(conn, aluno_id, _pedido([_ficha([item])])))
 
 
 def test_ficha_sem_nome_e_recusada(conn, aluno_id, exercicios):
@@ -406,7 +427,7 @@ def test_recusa_numero_de_bloco_invalido(conn, aluno_id, exercicios, bloco):
 
 def test_junta_todos_os_problemas_numa_resposta_so(conn, aluno_id, exercicios):
     pedido = _pedido(
-        [_ficha([_item(exercicios["a"], series="")], "N" * 16)],
+        [_ficha([_item(exercicios["a"], series="x" * 12)], "N" * 16)],
         nome_treino="",
         montado_por="",
     )
@@ -418,7 +439,7 @@ def test_junta_todos_os_problemas_numa_resposta_so(conn, aluno_id, exercicios):
 
 def test_mensagem_de_erro_diz_em_qual_ficha_e_exercicio(conn, aluno_id, exercicios):
     pedido = _pedido(
-        [_ficha([_item(exercicios["a"])], "TREINO A"), _ficha([_item(exercicios["a"]), _item(exercicios["b"], repeticoes="")], "TREINO B")]
+        [_ficha([_item(exercicios["a"])], "TREINO A"), _ficha([_item(exercicios["a"]), _item(exercicios["b"], repeticoes="x" * 12)], "TREINO B")]
     )
 
     problemas = _problemas(conn, aluno_id, pedido)

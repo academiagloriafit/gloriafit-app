@@ -289,8 +289,8 @@ export function validar(estado) {
     ficha.itens.forEach((item) => {
       problemas.push(...problemasDoIntervaloEDaObservacao(item, f, rotulo));
       for (const [campo, nomeDoCampo, obrigatorio] of [
-        ["series", "séries", true],
-        ["repeticoes", "repetições", true],
+        ["series", "séries", false], // em branco vale (cardio: o professor escreve o tempo, ou nada)
+        ["repeticoes", "repetições", false],
         ["carga", "peso", false],
       ]) {
         const valor = item[campo].trim();

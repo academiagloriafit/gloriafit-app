@@ -139,8 +139,10 @@ def _validar_itens(conn, itens, rotulo: str, problemas: list[str]) -> list[dict]
         if not _inteiro(exercicio_id):
             problemas.append(f"{onde}: exercício inválido.")
             continue
-        series = _texto(item.get("series"), f"{onde}: séries", LIMITE_CAMPO, True, problemas)
-        repeticoes = _texto(item.get("repeticoes"), f"{onde}: repetições", LIMITE_CAMPO, True, problemas)
+        # Séries e repetições podem ficar em branco (cardio: o professor escreve o tempo, ou nada). Pedido do
+        # Thiago, 08/10/2026. Em branco vira NULL no banco, como no histórico do Data4U.
+        series = _texto(item.get("series"), f"{onde}: séries", LIMITE_CAMPO, False, problemas)
+        repeticoes = _texto(item.get("repeticoes"), f"{onde}: repetições", LIMITE_CAMPO, False, problemas)
         carga = _texto(item.get("carga"), f"{onde}: peso", LIMITE_CAMPO, False, problemas)
         observacao = _texto(item.get("observacao"), f"{onde}: observação", LIMITE_OBSERVACAO, False, problemas)
         pausa = _pausa(item.get("pausa"), onde, problemas)
@@ -151,7 +153,7 @@ def _validar_itens(conn, itens, rotulo: str, problemas: list[str]) -> list[dict]
         if None in (series, repeticoes, carga, observacao) or pausa is False:
             continue
         limpos.append(
-            {"exercicio_id": exercicio_id, "series": series, "repeticoes": repeticoes,
+            {"exercicio_id": exercicio_id, "series": series or None, "repeticoes": repeticoes or None,
              "carga": carga or None, "pausa": pausa, "observacao": observacao or None,
              "bloco": bloco, "posicao": posicao}
         )

@@ -218,7 +218,7 @@ Número inválido em `grupo` ou `limite` devolve erro 400 em JSON.
 
 O servidor **confere tudo de novo** ao salvar (a tela também confere, mas o navegador não é
 confiável): limites do Data4U (nome do treino 40, nome da ficha 15, séries/repetições/carga 11),
-séries e repetições obrigatórias, intervalo (`pausa`) de 0 a 3.599 s, observação até 200 letras, exercício existente e ativo, bi-set de 2 e tri-set de 3
+séries e repetições opcionais (em branco vale: cardio), intervalo (`pausa`) de 0 a 3.599 s, observação até 200 letras, exercício existente e ativo, bi-set de 2 e tri-set de 3
 exercícios juntos, `montado_por` obrigatório (até 60), sem caracteres de controle. O nome do
 treino é único por aluno, sem diferenciar maiúscula nem acento (regra do Data4U).
 
@@ -271,6 +271,12 @@ Pedido do Thiago em 08/10/2026 (decisões dele, uma a uma):
 
 ## Cuidados
 
+- **Cardio e exercícios sem dose:** séries e repetições podem ficar em branco (pedido do Thiago,
+  08/10/2026): o professor escreve o tempo ("15 MIN") em Repetições ou em Observações, ou deixa em branco.
+  No banco, em branco vira NULL (como no histórico do Data4U). CARDIO, ESTEIRA, BIKE e ESCADA já existem
+  no quadro; **ELÍPTICO** é um exercício só do app (`app/exercicios_do_app.py`; rodar uma vez em cada
+  banco: `python -m app.exercicios_do_app /dados/app.db`). Ele não existe no Data4U: antes de devolver
+  treinos ao Data4U, precisa ser criado lá ou ligado a um exercício de lá.
 - **Nome do exercício sem o número da máquina:** o Data4U guarda em alguns exercícios o número da
   máquina no começo do nome ("(15) CADEIRA ABDUTORA"). Nem toda máquina é numerada, então o número
   perdeu o sentido (decisão do Thiago, 08/10/2026). `app/texto.py: nome_para_exibir` tira só o

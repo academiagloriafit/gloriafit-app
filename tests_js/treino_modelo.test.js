@@ -420,15 +420,16 @@ describe("validar", () => {
     expect(p[0]).toMatchObject({ campo: "itens", uid: null });
   });
 
-  it("séries e repetições são obrigatórias; espaços não contam como preenchido", () => {
+  it("séries e repetições podem ficar em branco (cardio: o professor escreve o tempo, ou nada)", () => {
     let e = comItens(1);
     e = atualizarItem(e, 0, 1, "series", "   ");
-    const campos = validar(e).map((p) => p.campo);
-    expect(campos).toEqual(["series", "repeticoes"]);
+    expect(validar(e)).toEqual([]);
   });
 
-  it("a mensagem diz qual exercício está incompleto", () => {
-    const p = validar(comItens(1));
+  it("a mensagem diz qual exercício tem o problema", () => {
+    const e = atualizarItem(comItens(1), 0, 1, "repeticoes", "x".repeat(LIMITE_CAMPO + 1));
+    const p = validar(e);
+    expect(p).toHaveLength(1);
     expect(p[0].mensagem).toContain("EXERCICIO 1");
     expect(p[0].uid).toBe(1);
   });
