@@ -3,7 +3,7 @@
 // antes de enviar e montamos os pedidos.
 import { MAXIMO_NUMERO_NA_FILA, lerDia, limparEspacos, problemaDoNomeDoProfessor } from "./treino_modelo.js";
 
-// "1,2,4" (o que a página traz em data-usados) -> [1, 2, 4]. Só vale 1 a 99; o resto é ignorado.
+// "1,2,4" (o que a página traz em data-usados) -> [1, 2, 4]. Só vale 1 a 6; o resto é ignorado.
 export function lerUsados(texto) {
   const numeros = new Set();
   for (const parte of String(texto ?? "").split(",")) {
@@ -17,7 +17,7 @@ export function lerUsados(texto) {
 }
 
 // O número que o app sugere para o próximo treino da fila: o seguinte ao maior que já existe (fila vazia = 1).
-// Se a fila já chegou ao 99, o primeiro buraco; null se não sobra número.
+// Se a fila já chegou ao 6, o primeiro buraco; null se não sobra número.
 export function proximoNumeroLivre(usados) {
   const jaUsados = new Set(usados);
   const maior = usados.length ? Math.max(...usados) : 0;

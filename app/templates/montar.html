@@ -142,6 +142,9 @@
             </select>
             <label for="numero-padrao">Número</label>
             <input id="numero-padrao" class="campo-numero-padrao" type="text" inputmode="numeric" maxlength="2" autocomplete="off" disabled>
+            {# Os treinos padrão são fixos: guardar um novo (ou excluir um) só com a senha de administrador. A senha não é guardada em lugar nenhum. #}
+            <label for="senha-admin-padrao">Senha de administrador</label>
+            <input id="senha-admin-padrao" class="campo-senha-admin" type="password" maxlength="128" autocomplete="off" data-lpignore="true" data-1p-ignore>
             <button type="button" id="confirmar-padrao" class="botao-escuro">Guardar</button>
             <button type="button" id="cancelar-padrao" class="botao-discreto">Cancelar</button>
             <span id="dica-fila-padrao" class="dica" role="status"></span>

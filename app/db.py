@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 8
+VERSAO_DO_BANCO = 9
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -204,8 +204,28 @@ def _de_7_para_8(conn: sqlite3.Connection) -> None:
     )
 
 
+def _de_8_para_9(conn: sqlite3.Connection) -> None:
+    """Senha de administrador: nascem `senha_administrador` (uma linha, o hash da senha) e `senha_administrador_falha`.
+
+    Só acrescenta duas tabelas vazias: nenhum dado que já existe é tocado. Os comandos são "IF NOT EXISTS" de propósito:
+    se um dia o número da versão for baixado à mão (para abrir o banco com o app antigo, que ignora o que é novo), subir
+    de novo com este app não falha por já existir, e a senha já definida continua valendo.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS senha_administrador (
+            id          INTEGER PRIMARY KEY CHECK (id = 1),
+            senha_hash  TEXT    NOT NULL,
+            definida_em TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE TABLE IF NOT EXISTS senha_administrador_falha (id INTEGER PRIMARY KEY, em TEXT NOT NULL)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_senha_administrador_falha_em ON senha_administrador_falha(em)")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
-MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8}
+MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9}
 
 
 def _arquivo_do_banco(conn: sqlite3.Connection) -> Path | None:

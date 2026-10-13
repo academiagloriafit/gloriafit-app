@@ -14,8 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from app import filas, importar_alunos, importar_treinos, modelos, treinos
+from app import acesso, administrador, filas, importar_alunos, importar_treinos, modelos, treinos
 from app.db import conectar, criar_tabelas
+from app.web import criar_app
 
 RAIZ = Path(__file__).resolve().parent.parent
 MODULO = (RAIZ / "app" / "static" / "copia_modelo.js").as_uri()
@@ -260,4 +261,42 @@ def test_pedidos_das_filas_montados_pelo_navegador_sao_aceitos_pelo_servidor():
     )
     assert treinos.obter_treino(conn, treino_id)["nome"] == "GESTANTE TREINO 2 13/10/26"
     assert "fila_modelo_id" in pedidos["salvar"]
+    conn.close()
+
+
+def test_pedido_de_treino_padrao_com_senha_montado_pelo_navegador_passa_pelo_servidor(tmp_path):
+    """O JavaScript manda `senha_admin` onde o servidor a procura: com a senha certa o padrão é guardado, sem ela não."""
+    pedidos = _node(f"""
+        import * as M from "{MODELO_DO_TREINO}";
+        let e = M.criarEstado();
+        e = M.adicionarItem(e, 0, {{ id: 1, nome: "SUPINO" }});
+        e = M.atualizarItem(e, 0, 1, "series", "3");
+        e = M.atualizarItem(e, 0, 1, "repeticoes", "12");
+        const dados = {{ nomePadrao: "Homem 6", montadoPor: "Academia Glória Fit", filaId: "1", numero: "6" }};
+        if (M.problemaDaSenhaDeAdmin("Uma senha 123")) throw new Error("a tela recusaria a senha");
+        console.log(JSON.stringify({{
+          certa: M.montarPedidoDePadrao(e, {{ ...dados, senhaAdmin: "Uma senha 123" }}),
+          errada: M.montarPedidoDePadrao(e, {{ ...dados, nomePadrao: "Outro", numero: "5", senhaAdmin: "outra senha 999" }}),
+          vazia: M.montarPedidoDePadrao(e, {{ ...dados, nomePadrao: "Terceiro", numero: "4" }}),
+        }}));
+    """)
+    caminho = tmp_path / "contrato.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO exercicio (id, nome, origem, ativo) VALUES (1, 'SUPINO', 'app', 1)")
+    conn.commit()
+    administrador.definir_senha(conn, "Uma senha 123")
+    token = acesso.autorizar(conn, acesso.gerar_codigo(conn, "Computador de teste").codigo).token
+    conn.close()
+    cliente = criar_app(caminho).test_client()
+    cliente.set_cookie(acesso.NOME_DO_COOKIE, token)
+
+    assert cliente.post("/api/modelos", json=pedidos["certa"]).status_code == 201
+    errada = cliente.post("/api/modelos", json=pedidos["errada"])
+    vazia = cliente.post("/api/modelos", json=pedidos["vazia"])
+
+    assert (errada.status_code, errada.get_json()["senha"]) == (403, "incorreta")
+    assert (vazia.status_code, vazia.get_json()["senha"]) == (403, "incorreta")
+    conn = conectar(caminho)
+    assert [tuple(l) for l in conn.execute("SELECT nome, fila_id, numero FROM modelo_treino")] == [("Homem 6", 1, 6)]
     conn.close()

@@ -1,5 +1,8 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 8 (13/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas e computadores autorizados.
+-- Versão 9 (13/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados e senha de administrador.
+-- Mudança da versão 8 para a 9 (senha de administrador): nasceram as tabelas `senha_administrador` (o hash da senha
+-- que protege adicionar e excluir treino padrão) e `senha_administrador_falha` (senhas erradas, para limitar tentativas).
+-- Bancos da versão 8 são atualizados sozinhos na subida.
 -- Mudança da versão 7 para a 8 (filas numeradas de treino): nasceram as tabelas `fila` (Homem, Mulher, Adolescente,
 -- Gestante, Grupos de risco) e `aluno_fila` (em que fila cada aluno está, em que número, e a liberação de quem precisa);
 -- o treino padrão (`modelo_treino`) ganhou `fila_id` e `numero`. Bancos da versão 7 são atualizados sozinhos na subida.
@@ -24,7 +27,7 @@
 -- Fora desta versão, de propósito: login do aluno, pendências da recepção e
 -- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 8;
+PRAGMA user_version = 9;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -288,3 +291,20 @@ CREATE TABLE IF NOT EXISTS autorizacao_falha (
     em TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_autorizacao_falha_em ON autorizacao_falha(em);
+
+-- ------------------------------------------------------------ senha de administrador
+-- Adicionar ou excluir um treino padrão só vale com a senha de administrador (ver app/administrador.py). A senha é
+-- definida no terminal do servidor: python -m app.administrador definir-senha.
+-- Uma linha só (id = 1). senha_hash: 'scrypt$N$r$p$sal$chave' (nunca a senha). definida_em: UTC.
+CREATE TABLE IF NOT EXISTS senha_administrador (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    senha_hash  TEXT    NOT NULL,
+    definida_em TEXT    NOT NULL
+);
+
+-- Cada senha de administrador errada. Serve para limitar tentativas (5 em 15 minutos).
+CREATE TABLE IF NOT EXISTS senha_administrador_falha (
+    id INTEGER PRIMARY KEY,
+    em TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_senha_administrador_falha_em ON senha_administrador_falha(em);

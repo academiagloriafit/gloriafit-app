@@ -2,7 +2,7 @@
 // (testada à parte); aqui só desenhamos a tela e ligamos os botões.
 // Palavras do Data4U: o TREINO tem um nome e várias FICHAS (A, B, C...); cada ficha
 // tem exercícios com séries, repetições, peso, intervalo e observações.
-import { buscarJson, enviarJson, textoDoErro } from "./api.js";
+import { buscarJson, enviarJson, motivoDaSenha, textoDoErro } from "./api.js";
 import { iniciarBiblioteca } from "./biblioteca.js";
 import { el } from "./dom.js";
 import { ligarSeletorDeFila } from "./fila_padrao.js";
@@ -42,6 +42,7 @@ const elFormPadrao = document.getElementById("form-padrao");
 const campoNomePadrao = document.getElementById("nome-padrao");
 const campoFilaPadrao = document.getElementById("fila-padrao");
 const campoNumeroPadrao = document.getElementById("numero-padrao");
+const campoSenhaPadrao = document.getElementById("senha-admin-padrao");
 const botaoConfirmarPadrao = document.getElementById("confirmar-padrao");
 const elAvisoPadrao = document.getElementById("aviso-padrao");
 const elErroEdicao = document.getElementById("erro-edicao");
@@ -798,6 +799,7 @@ function avisarPadrao(texto, erro = false) {
 }
 
 function fecharFormDoPadrao() {
+  campoSenhaPadrao.value = ""; // a senha não fica na tela
   elFormPadrao.hidden = true;
   botaoPadrao.hidden = false;
 }
@@ -818,12 +820,14 @@ document.getElementById("cancelar-padrao").addEventListener("click", () => {
   botaoPadrao.focus();
 });
 
-campoNomePadrao.addEventListener("keydown", (evento) => {
-  if (evento.key === "Enter" && !evento.isComposing) {
-    evento.preventDefault();
-    guardarComoPadrao();
-  }
-});
+for (const entrada of [campoNomePadrao, campoSenhaPadrao]) {
+  entrada.addEventListener("keydown", (evento) => {
+    if (evento.key === "Enter" && !evento.isComposing) {
+      evento.preventDefault();
+      guardarComoPadrao();
+    }
+  });
+}
 botaoConfirmarPadrao.addEventListener("click", guardarComoPadrao);
 
 // "Fila" e "Número" (opcionais): o número livre é sugerido ao escolher a fila
@@ -866,13 +870,22 @@ async function guardarComoPadrao() {
     elProblemas.scrollIntoView({ block: "nearest" });
     return;
   }
+  // Os treinos padrão são fixos: guardar um novo exige a senha de administrador (o servidor confere).
+  const problemaDaSenha = M.problemaDaSenhaDeAdmin(campoSenhaPadrao.value);
+  if (problemaDaSenha) {
+    avisarPadrao(problemaDaSenha, true);
+    campoSenhaPadrao.focus();
+    return;
+  }
+  const senhaAdmin = campoSenhaPadrao.value;
+  campoSenhaPadrao.value = ""; // a senha sai da tela assim que é enviada; se o servidor recusar, o professor digita de novo
 
   guardandoPadrao = true;
   botaoConfirmarPadrao.disabled = true;
   avisarPadrao("Guardando…");
   let resposta;
   try {
-    resposta = await enviarJson("/api/modelos", M.montarPedidoDePadrao(estado, dados));
+    resposta = await enviarJson("/api/modelos", M.montarPedidoDePadrao(estado, { ...dados, senhaAdmin }));
   } catch {
     avisarPadrao(
       "Não consegui confirmar com o servidor se o treino padrão foi guardado (sem resposta ou sem rede). " +
@@ -896,8 +909,9 @@ async function guardarComoPadrao() {
   }
   const erro = textoDoErro(resposta, "O servidor não guardou o treino padrão");
   avisarPadrao(erro, true);
+  if (motivoDaSenha(resposta)) campoSenhaPadrao.focus(); // senha errada, travada ou ainda não definida
   // 409: o nome já existe ou o número já tem treino na fila (a mensagem do servidor diz qual dos dois)
-  if (resposta.status === 409) (erro.includes("Escolha outro número") ? campoNumeroPadrao : campoNomePadrao).focus();
+  else if (resposta.status === 409) (erro.includes("Escolha outro número") ? campoNumeroPadrao : campoNomePadrao).focus();
 }
 
 iniciarBiblioteca(document.querySelector("[data-biblioteca]"), {

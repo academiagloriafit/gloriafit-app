@@ -61,6 +61,14 @@ export async function buscarJson(url, sinal = null, tempoMaximoMs = TEMPO_MAXIMO
   }
 }
 
+// Quando o servidor recusa uma ação por causa da senha de administrador (403 ou 429 com o campo `senha` no corpo),
+// devolve o motivo: "incorreta", "nao_definida" ou "travada". Em qualquer outra resposta, null.
+export function motivoDaSenha(resposta) {
+  if (resposta?.status !== 403 && resposta?.status !== 429) return null;
+  const motivo = resposta.corpo?.senha;
+  return motivo === "incorreta" || motivo === "nao_definida" || motivo === "travada" ? motivo : null;
+}
+
 // Texto do erro para mostrar ao professor, a partir da resposta do servidor ({ status, corpo }):
 // 401 -> pedir autorização; senão as mensagens em `erros` (lista) ou `erro` (uma só); senão a frase
 // `quandoNaoDizNada` com o código.

@@ -2,9 +2,9 @@
 // "Importar treino" na tela de lançar treino) com o nome que o professor escolher. Opcionalmente ele entra numa fila
 // (Homem, Mulher...) com um número (Treino 1, 2, 3...). A regra de verdade está no servidor (app/modelos.py,
 // app/filas.py); aqui só pedimos e mostramos a resposta.
-import { enviarJson, textoDoErro } from "./api.js";
+import { enviarJson, motivoDaSenha, textoDoErro } from "./api.js";
 import { ligarSeletorDeFila } from "./fila_padrao.js";
-import { LIMITE_NOME_TREINO, lerPosicaoNaFila, limparEspacos, tamanho } from "./treino_modelo.js";
+import { LIMITE_NOME_TREINO, lerPosicaoNaFila, limparEspacos, problemaDaSenhaDeAdmin, tamanho } from "./treino_modelo.js";
 
 const SEM_REDE =
   "Não consegui confirmar com o servidor se o treino padrão foi guardado (sem resposta ou sem rede). " +
@@ -19,7 +19,8 @@ for (const barra of document.querySelectorAll(".acoes-treino")) {
   const selecaoDaFila = barra.querySelector(".campo-fila-padrao");
   const campoNumero = barra.querySelector(".campo-numero-padrao");
   const dicaDaFila = barra.querySelector(".dica-fila-padrao");
-  if (!botao || !formulario || !campo || !guardar || !aviso || !selecaoDaFila || !campoNumero || !dicaDaFila) continue;
+  const campoSenha = barra.querySelector(".campo-senha-admin");
+  if (!botao || !formulario || !campo || !guardar || !aviso || !selecaoDaFila || !campoNumero || !dicaDaFila || !campoSenha) continue;
   const fila = ligarSeletorDeFila({ select: selecaoDaFila, campoNumero, dica: dicaDaFila });
   let enviando = false;
 
@@ -29,6 +30,7 @@ for (const barra of document.querySelectorAll(".acoes-treino")) {
   }
 
   function fechar() {
+    campoSenha.value = ""; // a senha não fica na tela
     formulario.hidden = true;
     botao.hidden = false;
   }
@@ -52,12 +54,22 @@ for (const barra of document.querySelectorAll(".acoes-treino")) {
       (posicao.campo === "fila" ? selecaoDaFila : campoNumero).focus();
       return;
     }
+    // Os treinos padrão são fixos: guardar um novo exige a senha de administrador (o servidor confere).
+    const problemaDaSenha = problemaDaSenhaDeAdmin(campoSenha.value);
+    if (problemaDaSenha) {
+      avisar(problemaDaSenha, true);
+      campoSenha.focus();
+      return;
+    }
+    const senhaAdmin = campoSenha.value;
+    campoSenha.value = ""; // a senha sai da tela assim que é enviada; se o servidor recusar, o professor digita de novo
     enviando = true;
     guardar.disabled = true;
     avisar("Guardando…");
     let resposta;
     try {
       resposta = await enviarJson(`/api/treinos/${encodeURIComponent(guardar.dataset.treino)}/modelo`, {
+        senha_admin: senhaAdmin,
         nome,
         fila_id: posicao.filaId,
         numero: posicao.numero,
@@ -80,8 +92,9 @@ for (const barra of document.querySelectorAll(".acoes-treino")) {
     }
     const erro = textoDoErro(resposta, "O servidor não guardou o treino padrão");
     avisar(erro, true);
+    if (motivoDaSenha(resposta)) campoSenha.focus(); // senha errada, travada ou ainda não definida
     // 409: o nome já existe ou o número já tem treino na fila (a mensagem do servidor diz qual dos dois)
-    if (resposta.status === 409) (erro.includes("Escolha outro número") ? campoNumero : campo).focus();
+    else if (resposta.status === 409) (erro.includes("Escolha outro número") ? campoNumero : campo).focus();
   }
 
   botao.addEventListener("click", () => {
@@ -97,10 +110,12 @@ for (const barra of document.querySelectorAll(".acoes-treino")) {
     botao.focus();
   });
   guardar.addEventListener("click", enviar);
-  campo.addEventListener("keydown", (evento) => {
-    if (evento.key === "Enter" && !evento.isComposing) {
-      evento.preventDefault();
-      enviar();
-    }
-  });
+  for (const entrada of [campo, campoSenha]) {
+    entrada.addEventListener("keydown", (evento) => {
+      if (evento.key === "Enter" && !evento.isComposing) {
+        evento.preventDefault();
+        enviar();
+      }
+    });
+  }
 }

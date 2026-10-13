@@ -28,7 +28,9 @@ from app.treinos import (
     validar_texto,
 )
 
-MAXIMO_NUMERO_NA_FILA = 99
+# Cada fila tem até 6 treinos padrão ("Treino 1" a "Treino 6"), um evoluindo do outro. O banco ainda aceita até 99
+# (CHECK do schema): apertar isso pediria recriar a tabela, e a regra de verdade mora aqui e em treino_modelo.js.
+MAXIMO_NUMERO_NA_FILA = 6
 
 
 class FilaInvalida(TreinoInvalido):
@@ -82,7 +84,7 @@ def validar_posicao(
     """Confere a fila e o número que vêm junto com um treino padrão: (fila_id, numero) ou (None, None) se for solto.
 
     `dados["fila_id"]` e `dados["numero"]`: os dois vazios = treino padrão sem fila; os dois preenchidos = o lugar
-    dele na fila. Um sem o outro, fila que não existe ou número fora de 1 a 99 anotam o problema em `problemas`
+    dele na fila. Um sem o outro, fila que não existe ou número fora de 1 a 6 anotam o problema em `problemas`
     (dado inválido, 400); número que já tem treino na fila anota em `conflitos` (409). Nos dois casos devolve (None, None).
     """
     fila_id, numero = dados.get("fila_id"), dados.get("numero")

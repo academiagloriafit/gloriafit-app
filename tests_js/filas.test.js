@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAXIMO_NUMERO_NA_FILA,
   adicionarItem,
   atualizarItem,
   criarEstado,
@@ -78,8 +79,8 @@ describe("lerPosicaoNaFila (fila e número do treino padrão)", () => {
 
   it("fila e número juntos", () => {
     expect(lerPosicaoNaFila({ filaId: "2", numero: "3" })).toEqual({ ok: true, filaId: 2, numero: 3 });
-    expect(lerPosicaoNaFila({ filaId: 5, numero: 99 })).toEqual({ ok: true, filaId: 5, numero: 99 });
-    expect(lerPosicaoNaFila({ filaId: " 2 ", numero: " 07 " })).toEqual({ ok: true, filaId: 2, numero: 7 });
+    expect(lerPosicaoNaFila({ filaId: 5, numero: 6 })).toEqual({ ok: true, filaId: 5, numero: 6 });
+    expect(lerPosicaoNaFila({ filaId: " 2 ", numero: " 06 " })).toEqual({ ok: true, filaId: 2, numero: 6 });
   });
 
   it("número sem fila: pede a fila", () => {
@@ -94,12 +95,17 @@ describe("lerPosicaoNaFila (fila e número do treino padrão)", () => {
     expect(r.mensagem).toContain("número");
   });
 
-  it("número fora de 1 a 99 ou que não é inteiro", () => {
-    for (const ruim of ["0", "100", "-1", "1.5", "abc", "1e1", "٣"]) {
+  it("número fora de 1 a 6 ou que não é inteiro", () => {
+    for (const ruim of ["0", "7", "10", "99", "100", "-1", "1.5", "abc", "1e1", "٣"]) {
       const r = lerPosicaoNaFila({ filaId: "2", numero: ruim });
       expect(r, ruim).toMatchObject({ ok: false, campo: "numero" });
-      expect(r.mensagem).toContain("de 1 a 99");
+      expect(r.mensagem).toContain("de 1 a 6");
     }
+  });
+
+  it("cada fila vai do Treino 1 ao Treino 6", () => {
+    expect(MAXIMO_NUMERO_NA_FILA).toBe(6);
+    for (let n = 1; n <= 6; n++) expect(lerPosicaoNaFila({ filaId: "2", numero: String(n) })).toEqual({ ok: true, filaId: 2, numero: n });
   });
 
   it("fila que não é um número de verdade", () => {
@@ -155,6 +161,7 @@ describe("o treino padrão aberto pela fila", () => {
   it("padrão solto ou resposta fora do formato não é treino da fila", () => {
     expect(posicaoDoModelo(modeloDaFila({ fila_id: null, fila: null, numero: null }))).toBeNull();
     expect(posicaoDoModelo(modeloDaFila({ numero: 0 }))).toBeNull();
+    expect(posicaoDoModelo(modeloDaFila({ numero: 7 }))).toBeNull();
     expect(posicaoDoModelo(modeloDaFila({ numero: 100 }))).toBeNull();
     expect(posicaoDoModelo(modeloDaFila({ fila: "  " }))).toBeNull();
     expect(posicaoDoModelo(modeloDaFila({ fila: 5 }))).toBeNull();
@@ -214,7 +221,7 @@ describe("filas_modelo: números já usados", () => {
     expect(lerUsados(" 3 , 1 ,3")).toEqual([1, 3]);
     expect(lerUsados("")).toEqual([]);
     expect(lerUsados(undefined)).toEqual([]);
-    expect(lerUsados("0,100,abc,-1,1.5,2")).toEqual([2]);
+    expect(lerUsados("0,7,100,abc,-1,1.5,2")).toEqual([2]);
   });
 
   it("proximoNumeroLivre: o seguinte ao maior", () => {
@@ -225,8 +232,8 @@ describe("filas_modelo: números já usados", () => {
   });
 
   it("proximoNumeroLivre: na ponta, o primeiro buraco; sem número livre, null", () => {
-    expect(proximoNumeroLivre([1, 3, 99])).toBe(2);
-    const todos = Array.from({ length: 99 }, (_, i) => i + 1);
+    expect(proximoNumeroLivre([1, 3, 6])).toBe(2);
+    const todos = [1, 2, 3, 4, 5, 6];
     expect(proximoNumeroLivre(todos)).toBeNull();
   });
 

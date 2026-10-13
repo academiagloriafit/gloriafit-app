@@ -4,8 +4,9 @@
 //   - Treino de outro aluno: busca o aluno, escolhe um dos treinos dele.
 // O servidor só LÊ (nada é gravado para o aluno). O treino escolhido é entregue a quem chamou
 // (`aoCarregar`), que o coloca na tela de montar; o professor confere, ajusta e salva como sempre.
-import { buscarJson, enviarJson, textoDoErro } from "./api.js";
+import { buscarJson, enviarJson, motivoDaSenha, textoDoErro } from "./api.js";
 import { el } from "./dom.js";
+import { problemaDaSenhaDeAdmin } from "./treino_modelo.js";
 
 const SEM_REDE = "Não consegui falar com o servidor (sem resposta ou sem rede). Confira a rede e tente de novo.";
 const LIMITE_DE_ALUNOS = 30;
@@ -103,18 +104,40 @@ export function iniciarImportacao({ temTreinoNaTela, aoCarregar }) {
     );
   }
 
-  function perguntar(acoes, voltar, { texto, sim, textoDoSim, classeDoSim = "botao-perigo" }) {
+  // `pedirSenha`: a pergunta traz um campo de senha de administrador, e `sim` recebe esse campo (o valor dele nunca é
+  // guardado: quem usa lê, manda ao servidor e limpa o campo). Sem `pedirSenha`, `sim` não recebe nada.
+  function perguntar(acoes, voltar, { texto, sim, textoDoSim, classeDoSim = "botao-perigo", pedirSenha = false }) {
     const nao = el("button", { type: "button", classe: "botao-discreto", texto: "Não", aoClicar: () => { voltar(); acoes.querySelector("button")?.focus(); } });
+    const campoSenha = pedirSenha
+      ? el("input", {
+          type: "password",
+          classe: "campo-senha-admin",
+          maxlength: "128",
+          autocomplete: "off",
+          placeholder: "Senha de administrador",
+          "aria-label": "Senha de administrador",
+          "data-lpignore": "true",
+          "data-1p-ignore": true,
+        })
+      : null;
+    const confirmar = () => sim(campoSenha);
+    campoSenha?.addEventListener("keydown", (evento) => {
+      if (evento.key === "Enter" && !evento.isComposing) {
+        evento.preventDefault();
+        confirmar();
+      }
+    });
     acoes.replaceChildren(
       el(
         "span",
         { classe: "confirmacao" },
         el("span", { texto }),
-        el("button", { type: "button", classe: classeDoSim, texto: textoDoSim, aoClicar: sim }),
+        campoSenha,
+        el("button", { type: "button", classe: classeDoSim, texto: textoDoSim, aoClicar: confirmar }),
         nao,
       ),
     );
-    nao.focus();
+    (campoSenha ?? nao).focus();
   }
 
   // ---------------------------------------------------------------- usar um treino (padrão ou de aluno)
@@ -185,7 +208,7 @@ export function iniciarImportacao({ temTreinoNaTela, aoCarregar }) {
     const modelos = resposta.corpo.modelos.filter((m) => Number.isInteger(m?.id));
     estadoPadroes.textContent = modelos.length
       ? ""
-      : 'Ainda não há treino padrão. Monte um treino e use "Salvar como treino padrão" para guardar o primeiro.';
+      : "Ainda não há treino padrão. Os treinos padrão são fixos: só o administrador (com a senha) guarda um novo.";
     listaPadroes.textContent = "";
     modelos.forEach((m) => listaPadroes.append(linhaDoPadrao(m)));
   }
@@ -210,22 +233,33 @@ export function iniciarImportacao({ temTreinoNaTela, aoCarregar }) {
           "aria-label": `Excluir o treino padrão ${m.nome}`,
           aoClicar: () =>
             perguntar(acoes, voltar, {
-              texto: `Excluir o padrão "${m.nome}"? Os treinos que já foram copiados para alunos não mudam.`,
+              texto: `Excluir o padrão "${m.nome}"? Os treinos que já foram copiados para alunos não mudam. Só com a senha de administrador:`,
               textoDoSim: "Sim, excluir",
-              sim: () => excluirPadrao(m),
+              pedirSenha: true,
+              sim: (campoSenha) => excluirPadrao(m, campoSenha),
             }),
         }),
       ],
     });
   }
 
-  async function excluirPadrao(m) {
+  // Os treinos padrão são fixos: excluir um exige a senha de administrador (o servidor confere). `campoSenha` é o
+  // campo da pergunta; a senha sai dele assim que é enviada.
+  async function excluirPadrao(m, campoSenha) {
     if (ocupado) return;
+    const problemaDaSenha = problemaDaSenhaDeAdmin(campoSenha.value);
+    if (problemaDaSenha) {
+      avisar(problemaDaSenha, true);
+      campoSenha.focus();
+      return;
+    }
+    const senhaAdmin = campoSenha.value;
+    campoSenha.value = "";
     ocupado = true;
     avisar("Excluindo…");
     let resposta;
     try {
-      resposta = await enviarJson(`/api/modelos/${encodeURIComponent(m.id)}/excluir`, {});
+      resposta = await enviarJson(`/api/modelos/${encodeURIComponent(m.id)}/excluir`, { senha_admin: senhaAdmin });
     } catch {
       ocupado = false;
       avisar("Não consegui confirmar se o treino padrão foi excluído (sem resposta ou sem rede). Confira a lista.", true);
@@ -233,6 +267,12 @@ export function iniciarImportacao({ temTreinoNaTela, aoCarregar }) {
       return;
     }
     ocupado = false;
+    if (motivoDaSenha(resposta)) {
+      // senha errada, travada ou ainda não definida: o treino NÃO foi excluído; a pergunta continua aberta
+      avisar(textoDoErro(resposta, "O servidor recusou a senha de administrador"), true);
+      campoSenha.focus();
+      return;
+    }
     if (resposta.status === 200 || resposta.status === 404) {
       avisar(`Treino padrão "${m.nome}" excluído.`);
     } else {

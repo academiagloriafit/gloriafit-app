@@ -805,6 +805,21 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 }
 .form-padrao select, .form-padrao-ficha select { width: auto; height: 40px; font-size: 16px; font-weight: 400; border-radius: 8px; }
 .form-padrao .campo-numero-padrao, .form-padrao-ficha .campo-numero-padrao { min-width: 0; width: 64px; text-align: center; }
+/* senha de administrador (guardar ou excluir um treino padrão): o mesmo campo em todos os lugares */
+.campo-senha-admin {
+  height: 40px;
+  width: 220px;
+  max-width: 100%;
+  border: 1.5px solid #8c8b83;
+  border-radius: 8px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+  background: var(--branco);
+  color: var(--escuro);
+}
+.campo-senha-admin:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
 .form-padrao input:disabled, .form-padrao-ficha input:disabled { background: #ecebe5; cursor: not-allowed; }
 .form-padrao .dica, .form-padrao-ficha .dica { flex-basis: 100%; font-weight: 400; }
 .campo select:focus-visible, .form-padrao select:focus-visible, .form-padrao-ficha select:focus-visible {

@@ -98,6 +98,9 @@
                 </select>
                 <label for="numero-padrao-{{ treino.id }}">Número</label>
                 <input id="numero-padrao-{{ treino.id }}" class="campo-numero-padrao" type="text" inputmode="numeric" maxlength="2" autocomplete="off" disabled>
+                {# Os treinos padrão são fixos: guardar um novo (ou excluir um) só com a senha de administrador. A senha não é guardada em lugar nenhum. #}
+                <label for="senha-admin-padrao-{{ treino.id }}">Senha de administrador</label>
+                <input id="senha-admin-padrao-{{ treino.id }}" class="campo-senha-admin" type="password" maxlength="128" autocomplete="off" data-lpignore="true" data-1p-ignore>
                 <button type="button" class="botao-escuro sim-padrao" data-treino="{{ treino.id }}">Guardar</button>
                 <button type="button" class="botao-discreto nao-padrao">Cancelar</button>
                 <span class="dica dica-fila-padrao" role="status"></span>

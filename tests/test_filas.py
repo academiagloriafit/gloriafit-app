@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from app import acesso, ciclo, filas, modelos
+from app import acesso, administrador, ciclo, filas, modelos
 from app.alunos import obter_ficha
 from app.db import conectar, criar_tabelas
 from app.treinos import AlunoNaoEncontrado, TreinoInvalido, obter_treino, salvar_treino
@@ -125,11 +125,13 @@ def test_fila_e_numero_vazios_valem_como_solto(conn):
         ({"fila_id": 99, "numero": 1}, "A fila escolhida não existe"),
         ({"fila_id": "2", "numero": 1}, "A fila escolhida não existe"),
         ({"fila_id": True, "numero": 1}, "A fila escolhida não existe"),
-        ({"fila_id": MULHER, "numero": 0}, "de 1 a 99"),
-        ({"fila_id": MULHER, "numero": 100}, "de 1 a 99"),
-        ({"fila_id": MULHER, "numero": "3"}, "de 1 a 99"),
-        ({"fila_id": MULHER, "numero": 1.5}, "de 1 a 99"),
-        ({"fila_id": MULHER, "numero": True}, "de 1 a 99"),
+        ({"fila_id": MULHER, "numero": 0}, "de 1 a 6"),
+        ({"fila_id": MULHER, "numero": 7}, "de 1 a 6"),
+        ({"fila_id": MULHER, "numero": 99}, "de 1 a 6"),  # o banco aceitaria 99; a regra do app é 6
+        ({"fila_id": MULHER, "numero": 100}, "de 1 a 6"),
+        ({"fila_id": MULHER, "numero": "3"}, "de 1 a 6"),
+        ({"fila_id": MULHER, "numero": 1.5}, "de 1 a 6"),
+        ({"fila_id": MULHER, "numero": True}, "de 1 a 6"),
     ],
 )
 def test_posicao_invalida_e_recusada_com_400_e_nada_e_gravado(conn, extras, trecho):
@@ -139,6 +141,17 @@ def test_posicao_invalida_e_recusada_com_400_e_nada_e_gravado(conn, extras, trec
     assert erro.value.status == 400
     assert trecho in " ".join(erro.value.problemas)
     assert conn.execute("SELECT COUNT(*) FROM modelo_treino").fetchone()[0] == 0
+
+
+def test_cada_fila_vai_de_treino_1_ate_treino_6(conn):
+    ids = _fila_com_treinos(conn, MULHER, numeros=(1, 2, 3, 4, 5, 6))  # os seis cabem
+
+    assert sorted(ids) == [1, 2, 3, 4, 5, 6]
+    assert filas.MAXIMO_NUMERO_NA_FILA == 6
+    with pytest.raises(TreinoInvalido) as erro:
+        _padrao(conn, "SETIMO", MULHER, 7)
+    assert erro.value.status == 400
+    assert conn.execute("SELECT COUNT(*) FROM modelo_treino WHERE fila_id = ?", (MULHER,)).fetchone()[0] == 6
 
 
 def test_numero_ja_ocupado_na_fila_e_conflito_409(conn):
@@ -647,6 +660,7 @@ def caminho(tmp_path):
     c.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ANA FICTICIA'), (2, 'BRUNO FICTICIO')")
     c.execute("INSERT INTO exercicio (id, nome, origem) VALUES (1, 'SUPINO RETO', 'app'), (2, 'REMADA', 'app')")
     c.commit()
+    administrador.definir_senha(c, SENHA_ADMIN)  # adicionar treino padrão exige a senha de administrador
     c.close()
     return caminho
 
@@ -675,8 +689,11 @@ def _banco(caminho, sql, *args):
         c.close()
 
 
+SENHA_ADMIN = "senha-de-teste-1"
+
+
 def _corpo_de_modelo(nome="MULHER 1", **extras):
-    return {"nome": nome, "montado_por": "Ana", "fichas": _fichas(), **extras}
+    return {"senha_admin": SENHA_ADMIN, "nome": nome, "montado_por": "Ana", "fichas": _fichas(), **extras}
 
 
 @pytest.mark.parametrize("url", ["/api/alunos/1/fila", "/api/alunos/1/fila/tirar"])
@@ -752,7 +769,7 @@ def test_rota_lista_e_le_o_treino_padrao_com_a_fila(cliente):
 def test_rota_do_treino_do_aluno_como_padrao_aceita_fila(cliente, caminho):
     treino_id = cliente.post("/api/alunos/1/treinos", json=_pedido()).get_json()["id"]
 
-    resposta = cliente.post(f"/api/treinos/{treino_id}/modelo", json={"nome": "HOMEM 1", "fila_id": HOMEM, "numero": 1})
+    resposta = cliente.post(f"/api/treinos/{treino_id}/modelo", json={"senha_admin": SENHA_ADMIN, "nome": "HOMEM 1", "fila_id": HOMEM, "numero": 1})
 
     assert resposta.status_code == 201
     assert _banco(caminho, "SELECT nome, fila_id, numero FROM modelo_treino") == [("HOMEM 1", HOMEM, 1)]

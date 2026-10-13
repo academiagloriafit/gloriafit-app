@@ -23,7 +23,8 @@ export const MAXIMO_SESSOES_POR_FICHA = 999; // "Treinos por ficha": quantas vez
 export const ANO_MINIMO_DO_TREINO = 2020; // início/fim fora destes anos é erro de digitação
 export const ANO_MAXIMO_DO_TREINO = 2100;
 export const MAXIMO_FICHAS = 26; // uma letra de A a Z para cada
-export const MAXIMO_NUMERO_NA_FILA = 99; // "Treino 1" a "Treino 99" dentro de uma fila (mesma regra do servidor)
+export const MAXIMO_NUMERO_NA_FILA = 6; // "Treino 1" a "Treino 6" dentro de uma fila (mesma regra do servidor)
+export const MAXIMO_DA_SENHA_DE_ADMIN = 128; // tamanho máximo da senha de administrador (mesma regra do servidor)
 export const MAXIMO_ITENS_POR_FICHA = 100; // trava de segurança do rascunho, não é regra da academia
 export const MINIMO_NO_BLOCO = 2;
 export const MAXIMO_NO_BLOCO = 3;
@@ -642,12 +643,25 @@ export function validarDadosDoPadrao({ nomePadrao, montadoPor }) {
   return problemas;
 }
 
+// Confere a senha de administrador digitada (pedida para guardar ou excluir um treino padrão). Devolve a mensagem do
+// problema ou null. A senha NUNCA é limpa nem cortada: espaços no começo ou no fim fazem parte dela. Se está certa ou
+// não, só o servidor sabe; aqui só evitamos mandar um campo vazio ou grande demais (que gastaria uma das tentativas).
+export function problemaDaSenhaDeAdmin(senha) {
+  if (typeof senha !== "string" || senha === "") return "Digite a senha de administrador.";
+  if ([...senha].length > MAXIMO_DA_SENHA_DE_ADMIN) {
+    return `A senha de administrador tem no máximo ${MAXIMO_DA_SENHA_DE_ADMIN} caracteres.`;
+  }
+  return null;
+}
+
 // O pedido que guarda o treino da tela como treino padrão (não grava nada para o aluno).
 // `filaId` e `numero` (opcionais, como vêm dos campos): o lugar do treino numa fila. Valores que não passam em
 // `lerPosicaoNaFila` não vão (quem chama confere antes e mostra o problema ao professor).
-export function montarPedidoDePadrao(estado, { nomePadrao, montadoPor, sessoesPorFicha = "", filaId = "", numero = "" }) {
+// `senhaAdmin`: a senha de administrador, exatamente como foi digitada (o servidor confere; sem ela o pedido é recusado).
+export function montarPedidoDePadrao(estado, { nomePadrao, montadoPor, sessoesPorFicha = "", filaId = "", numero = "", senhaAdmin = "" }) {
   const posicao = lerPosicaoNaFila({ filaId, numero });
   return {
+    senha_admin: senhaAdmin,
     nome: limparEspacos(nomePadrao),
     montado_por: limparEspacos(montadoPor),
     sessoes_por_ficha: lerSessoesPorFicha(sessoesPorFicha) ?? null,

@@ -15,6 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app import (
     acesso,
+    administrador,
     alunos,
     ciclo,
     cupom,
@@ -70,6 +71,20 @@ class TipoNaoSuportado(ErroDeEntrada):
     """O pedido não veio como JSON (vira resposta 415 em JSON)."""
 
     status = 415
+
+
+class SenhaDeAdministradorRecusada(Exception):
+    """A ação exige a senha de administrador e ela não passou (vira resposta 403 ou 429 em JSON).
+
+    `motivo` ("incorreta", "nao_definida" ou "travada") deixa a tela saber o que aconteceu sem ler a frase.
+    """
+
+    def __init__(self, mensagem: str, motivo: str, status: int = 403, espera: int | None = None):
+        super().__init__(mensagem)
+        self.mensagem = mensagem
+        self.motivo = motivo
+        self.status = status
+        self.espera = espera
 
 
 def criar_app(caminho_banco: str | Path | None = None) -> Flask:
@@ -209,6 +224,14 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     def entrada_invalida(erro):
         return jsonify(erro=str(erro)), erro.status
 
+    @app.errorhandler(SenhaDeAdministradorRecusada)
+    def senha_de_administrador_recusada(erro):
+        resposta = jsonify(erro=erro.mensagem, senha=erro.motivo)
+        resposta.status_code = erro.status
+        if erro.espera is not None:
+            resposta.headers["Retry-After"] = str(erro.espera)
+        return resposta
+
     @app.errorhandler(413)
     def pedido_grande_demais(_erro):
         return jsonify(erro="O pedido é grande demais."), 413
@@ -232,6 +255,30 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         if dados is None:
             raise ErroDeEntrada("O JSON enviado é inválido.")
         return dados
+
+    def exigir_senha_de_administrador(dados) -> None:
+        """Confere a senha de administrador que veio no pedido (campo `senha_admin` do JSON) ANTES de qualquer coisa.
+
+        Só passa quem acerta. Sem senha definida no servidor a ação fica fechada (403), nunca aberta. O corpo do pedido
+        com a senha não vai para log nenhum e a senha nunca é repetida na resposta.
+        """
+        if not isinstance(dados, dict):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        try:
+            administrador.conferir_senha(conexao(), dados.get("senha_admin"))
+        except administrador.MuitasTentativas as erro:
+            minutos = -(-erro.segundos // 60)  # arredonda para cima
+            raise SenhaDeAdministradorRecusada(
+                f"Muitas senhas erradas seguidas. Tente de novo em {minutos} min.", "travada", 429, erro.segundos
+            ) from None
+        except administrador.SenhaNaoDefinida:
+            raise SenhaDeAdministradorRecusada(
+                "A senha de administrador ainda não foi definida no servidor, então esta ação está fechada. "
+                "Peça a quem cuida do servidor para definir a senha.",
+                "nao_definida",
+            ) from None
+        except administrador.SenhaIncorreta:
+            raise SenhaDeAdministradorRecusada("Senha de administrador incorreta.", "incorreta") from None
 
     # ------------------------------------------------------------------ rotas
 
@@ -477,10 +524,12 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     def api_criar_modelo():
         """Guarda o treino que está na tela de montar como treino padrão (não grava nada para o aluno).
 
-        Corpo: {"nome", "montado_por", "sessoes_por_ficha", "fichas", "fila_id" e "numero" (opcionais, juntos)}.
+        Corpo: {"senha_admin", "nome", "montado_por", "sessoes_por_ficha", "fichas", "fila_id" e "numero" (opcionais, juntos)}.
+        Exige a senha de administrador (403 se errada ou ainda não definida, 429 se travada).
         201 {"id"}; 400 {"erros"}; 409 {"erros"} se já existe um padrão com esse nome ou esse número na fila.
         """
         dados = corpo_json()
+        exigir_senha_de_administrador(dados)
         try:
             modelo_id = modelos.criar_modelo(conexao(), dados)
         except treinos.TreinoInvalido as erro:
@@ -489,8 +538,11 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.post("/api/modelos/<int:modelo_id>/excluir")
     def api_excluir_modelo(modelo_id: int):
-        """Apaga um treino padrão. Os treinos já copiados para alunos não mudam."""
-        corpo_json()  # o corpo é vazio ({}), mas o pedido precisa ser JSON como os outros
+        """Apaga um treino padrão. Os treinos já copiados para alunos não mudam.
+
+        Corpo: {"senha_admin"}. Exige a senha de administrador (403 se errada ou ainda não definida, 429 se travada).
+        """
+        exigir_senha_de_administrador(corpo_json())
         try:
             modelos.excluir_modelo(conexao(), modelo_id)
         except modelos.ModeloNaoEncontrado:
@@ -499,11 +551,11 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.post("/api/treinos/<int:treino_id>/modelo")
     def api_treino_como_modelo(treino_id: int):
-        """Botão "Salvar como treino padrão" da ficha do aluno. Corpo: {"nome": "nome do treino padrão", "fila_id" e
-        "numero" (opcionais, os dois juntos: o lugar do treino numa fila numerada)}."""
+        """Botão "Salvar como treino padrão" da ficha do aluno. Corpo: {"senha_admin", "nome": "nome do treino padrão",
+        "fila_id" e "numero" (opcionais, os dois juntos: o lugar do treino numa fila numerada)}.
+        Exige a senha de administrador (403 se errada ou ainda não definida, 429 se travada)."""
         dados = corpo_json()
-        if not isinstance(dados, dict):
-            raise ErroDeEntrada("Formato do pedido inválido.")
+        exigir_senha_de_administrador(dados)
         try:
             modelo_id = modelos.criar_modelo_do_treino(
                 conexao(), treino_id, dados.get("nome"), fila_id=dados.get("fila_id"), numero=dados.get("numero")

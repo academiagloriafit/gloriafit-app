@@ -5,10 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from app import acesso
+from app import acesso, administrador
 from app.db import conectar, criar_tabelas
 from app.treinos import salvar_treino
 from app.web import criar_app
+
+
+SENHA = "senha-de-teste-1"  # a senha de administrador dos testes: adicionar e excluir treino padrão exigem
 
 
 @pytest.fixture
@@ -20,6 +23,7 @@ def caminho(tmp_path):
     c.execute("INSERT INTO exercicio (id, nome, origem) VALUES (1, '(3) SUPINO RETO', 'app'), (2, 'REMADA', 'app')")
     c.execute("INSERT INTO exercicio (id, nome, origem, ativo) VALUES (3, 'DESATIVADO', 'app', 0)")
     c.commit()
+    administrador.definir_senha(c, SENHA)
     c.close()
     return caminho
 
@@ -50,7 +54,7 @@ def _fichas():
 
 
 def _corpo_do_modelo(nome="BÁSICO 1", **extras):
-    return {"nome": nome, "montado_por": "Ana", "sessoes_por_ficha": 15, "fichas": _fichas(), **extras}
+    return {"senha_admin": SENHA, "nome": nome, "montado_por": "Ana", "sessoes_por_ficha": 15, "fichas": _fichas(), **extras}
 
 
 def _treino_do_aluno(caminho, aluno=1, nome="TREINO ABC"):
@@ -130,7 +134,7 @@ def test_cria_lista_le_e_exclui_um_treino_padrao(cliente, caminho):
     assert [i["nome"] for i in montar["fichas"][0]["itens"]] == ["SUPINO RETO", "REMADA"]  # sem o número da máquina
     assert montar["indisponiveis"] == 0
 
-    assert cliente.post(f"/api/modelos/{modelo_id}/excluir", json={}).get_json() == {"ok": True}
+    assert cliente.post(f"/api/modelos/{modelo_id}/excluir", json={"senha_admin": SENHA}).get_json() == {"ok": True}
     assert cliente.get("/api/modelos").get_json() == {"modelos": []}
 
 
@@ -167,7 +171,7 @@ def test_corpo_que_nao_e_objeto_volta_400(cliente, corpo):
 
 def test_modelo_que_nao_existe_volta_404(cliente):
     assert cliente.get("/api/modelos/99").status_code == 404
-    assert cliente.post("/api/modelos/99/excluir", json={}).status_code == 404
+    assert cliente.post("/api/modelos/99/excluir", json={"senha_admin": SENHA}).status_code == 404
 
 
 # ------------------------------------------------------------------ salvar como padrão a partir de um treino
@@ -176,7 +180,7 @@ def test_modelo_que_nao_existe_volta_404(cliente):
 def test_treino_vira_padrao_pela_ficha_do_aluno(cliente, caminho):
     treino_id = _treino_do_aluno(caminho)
 
-    resposta = cliente.post(f"/api/treinos/{treino_id}/modelo", json={"nome": "Padrão da Ana"})
+    resposta = cliente.post(f"/api/treinos/{treino_id}/modelo", json={"senha_admin": SENHA, "nome": "Padrão da Ana"})
 
     assert resposta.status_code == 201
     assert _banco(caminho, "SELECT nome, montado_por FROM modelo_treino") == [("Padrão da Ana", "Bia")]
@@ -184,13 +188,13 @@ def test_treino_vira_padrao_pela_ficha_do_aluno(cliente, caminho):
 
 def test_treino_como_padrao_erros(cliente, caminho):
     treino_id = _treino_do_aluno(caminho)
-    cliente.post(f"/api/treinos/{treino_id}/modelo", json={"nome": "X"})
+    cliente.post(f"/api/treinos/{treino_id}/modelo", json={"senha_admin": SENHA, "nome": "X"})
 
-    assert cliente.post(f"/api/treinos/{treino_id}/modelo", json={"nome": "x"}).status_code == 409
-    assert cliente.post(f"/api/treinos/{treino_id}/modelo", json={"nome": ""}).status_code == 400
-    assert cliente.post(f"/api/treinos/{treino_id}/modelo", json={}).status_code == 400
+    assert cliente.post(f"/api/treinos/{treino_id}/modelo", json={"senha_admin": SENHA, "nome": "x"}).status_code == 409
+    assert cliente.post(f"/api/treinos/{treino_id}/modelo", json={"senha_admin": SENHA, "nome": ""}).status_code == 400
+    assert cliente.post(f"/api/treinos/{treino_id}/modelo", json={"senha_admin": SENHA}).status_code == 400
     assert cliente.post(f"/api/treinos/{treino_id}/modelo", json=[]).status_code == 400
-    assert cliente.post("/api/treinos/99/modelo", json={"nome": "Y"}).status_code == 404
+    assert cliente.post("/api/treinos/99/modelo", json={"senha_admin": SENHA, "nome": "Y"}).status_code == 404
 
 
 # ------------------------------------------------------------------ treino de outro aluno

@@ -216,9 +216,9 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 | `POST /api/treinos/<id>/reativar` | Desfaz o "Concluído". `200 {"ok": true}`; `404`; `409` já está ativo, ou o aluno já tem outro treino ativo (a mensagem diz qual); `415` |
 | `GET /api/modelos` | `{"modelos": [{id, nome, montado_por, sessoes_por_ficha, criado_em, fichas, exercicios, resumo, fila_id, fila, numero, posicao}]}`: os treinos padrão, em ordem alfabética (`posicao` = "Mulher · Treino 3", vazio se não está em fila) |
 | `GET /api/modelos/<id>` | Um treino padrão no formato da tela de montar: `{nome, sessoes_por_ficha, indisponiveis, fila_id, fila, numero, fichas: [{nome, itens: [{exercicio_id, nome, series, repeticoes, carga, pausa, observacao, bloco, indisponivel}]}]}` (`fila_id`, `fila` e `numero` vêm vazios num padrão sem fila). **Não grava nada.** `404` |
-| `POST /api/modelos` | Guarda o treino da tela como treino padrão. Corpo JSON: `nome` (até 40), `montado_por`, `sessoes_por_ficha` (opcional), `fila_id` e `numero` (opcionais, **os dois juntos**: o lugar do treino numa fila, número de 1 a 99), `fichas` (mesmo formato de salvar treino; mesma conferência). `201 {"id"}`; `400 {"erros"}` (inclui fila que não existe ou só um dos dois); `409` já existe padrão com esse nome (sem diferenciar maiúscula nem acento) **ou** a fila já tem um treino com esse número; `415` |
-| `POST /api/modelos/<id>/excluir` | Apaga um treino padrão (os treinos já copiados para alunos não mudam). Corpo `{}`. `200 {"ok": true}`; `404`; `415` |
-| `POST /api/treinos/<id>/modelo` | "Salvar como treino padrão" de um treino que já existe. Corpo JSON: `{"nome": "...", "fila_id": N, "numero": N}` (os dois últimos opcionais, como em `POST /api/modelos`). Fica com o professor e a meta do treino original. `201 {"id"}`; `400 {"erros"}` (inclui treino com exercício que saiu da lista); `404`; `409` nome repetido ou número já usado na fila; `415` |
+| `POST /api/modelos` | Guarda o treino da tela como treino padrão. **Exige `senha_admin` no corpo** (ver "Senha de administrador"). Corpo JSON: `senha_admin`, `nome` (até 40), `montado_por`, `sessoes_por_ficha` (opcional), `fila_id` e `numero` (opcionais, **os dois juntos**: o lugar do treino numa fila, número de 1 a 6), `fichas` (mesmo formato de salvar treino; mesma conferência). `201 {"id"}`; `403`/`429` (senha, ver abaixo); `400 {"erros"}` (inclui fila que não existe ou só um dos dois); `409` já existe padrão com esse nome (sem diferenciar maiúscula nem acento) **ou** a fila já tem um treino com esse número; `415` |
+| `POST /api/modelos/<id>/excluir` | Apaga um treino padrão (os treinos já copiados para alunos não mudam). **Exige `senha_admin`.** Corpo `{"senha_admin": "..."}`. `200 {"ok": true}`; `403`/`429` (senha); `404`; `415` |
+| `POST /api/treinos/<id>/modelo` | "Salvar como treino padrão" de um treino que já existe. **Exige `senha_admin`.** Corpo JSON: `{"senha_admin": "...", "nome": "...", "fila_id": N, "numero": N}` (os dois últimos opcionais, como em `POST /api/modelos`). Fica com o professor e a meta do treino original. `201 {"id"}`; `403`/`429` (senha); `400 {"erros"}` (inclui treino com exercício que saiu da lista); `404`; `409` nome repetido ou número já usado na fila; `415` |
 | `POST /api/alunos/<id>/fila` | O professor coloca o aluno numa fila (ou muda a fila dele). Corpo JSON: `fila_id`, `professor` (até 60 letras, obrigatório) e, nas filas que exigem liberação (Gestante e Grupos de risco), `liberacao_conferida: true` e `liberacao_em` (`AAAA-MM-DD`, não pode ser no futuro). Mudar para OUTRA fila zera a posição; repetir a mesma fila mantém o número. `200 {"ok": true}`; `400 {"erros": [...]}`; `404`; `415` |
 | `POST /api/alunos/<id>/fila/tirar` | Tira o aluno da fila (o treino dele não muda). Corpo `{}`. `200 {"ok": true}`; `404`; `415` |
 | `GET /api/alunos/<id>/treinos-para-copiar` | `{"treinos": [{id, nome, ativo, do_data4u, inicio, montado_por, fichas, exercicios, resumo}]}`: os treinos do aluno que têm exercício (o ativo primeiro). `404` aluno inexistente |
@@ -290,12 +290,31 @@ aluno de perfil parecido.
   bons são renumerados.
 - **Filas numeradas** (sequência básico, intermediário...): já existem; ver "Filas numeradas: como funciona". **Ainda não existe** (planejado): montar um treino sob medida a partir de uma descrição (o professor conferiria).
 
+## Senha de administrador: como funciona
+
+Pedido do Thiago (13/10/2026): **os treinos padrão ficam fixos.** Eles são montados pela academia (Treino 1 a 6 de cada fila) e o professor
+não acrescenta nem exclui padrão por acidente. Quem quiser um treino diferente abre "Importar treino", pega o padrão (ou o treino de outro
+aluno) e ajusta **só para aquele aluno**: o padrão nunca muda.
+
+- **Só três ações pedem a senha:** *Salvar como treino padrão* (na tela Lançar treino e na ficha do aluno) e *Excluir* um padrão
+  (`POST /api/modelos`, `POST /api/modelos/<id>/excluir`, `POST /api/treinos/<id>/modelo`). Usar, copiar e editar para um aluno continuam livres.
+- **Uma senha só**, pedida **toda vez** (não fica lembrada). Só o Thiago a sabe. Ela vai no corpo JSON (`senha_admin`), **nunca na URL**, e a tela
+  apaga o campo assim que envia. Não vai para o `sessionStorage`, nem para o console.
+- **No servidor:** guardada só como *hash* `scrypt` com sal (tabela `senha_administrador`, uma linha); comparada em tempo constante.
+  Mínimo 8 e máximo 128 caracteres. **Sem senha definida, as três ações ficam fechadas** (`403`, `senha: "nao_definida"`). Senha errada: `403`,
+  `senha: "incorreta"`. **5 erros em 15 minutos travam** (`429` + `Retry-After`, `senha: "travada"`) até passar o prazo, mesmo com a senha certa.
+  A senha é conferida **antes** de achar o padrão (`404`) ou validar o resto.
+- **Definir ou trocar a senha** (no terminal do servidor, quem digita é o Thiago; a senha não aparece na tela nem vai para arquivo):
+  `python -m app.administrador definir-senha`. `python -m app.administrador situacao` diz só se há senha, quando foi definida e se está travada (nunca a senha).
+- **Limite honesto:** o computador autorizado + a senha protegem de acidente e de curioso. Quem tem acesso ao servidor ou ao banco de dados
+  pode contornar (é a regra de qualquer sistema sem conta de usuário).
+
 ## Filas numeradas: como funciona
 
 Pedido do Thiago (09/10/2026), decisões de 13/10/2026 (fase 2 da "troca automática"). A fase 3 (treino sob medida montado pelo Claude e
 conferido pelo professor) ainda não existe.
 
-- **Fila** = sequência de treinos padrão numerados (Treino 1, 2, 3...) para um tipo de aluno. Começam **cinco**, todas **vazias**: Homem,
+- **Fila** = sequência de treinos padrão numerados, **do Treino 1 ao Treino 6** (um evolui do outro), para um tipo de aluno. Começam **cinco**, todas **vazias**: Homem,
   Mulher, Adolescente, Gestante e Grupos de risco (tabela `fila`; Gestante e Grupos de risco têm `exige_liberacao`).
 - **Montar uma fila:** em **Salvar como treino padrão** (ficha do aluno ou rodapé da tela Lançar treino) escolher a **Fila** e o **Número**.
   O app sugere o próximo número livre e mostra os que já existem. Número repetido na mesma fila é recusado (índice único no banco).
@@ -314,7 +333,7 @@ conferido pelo professor) ainda não existe.
   (lançar outro treino ou mudar o aluno de fila). Fila sem nenhum treino padrão também avisa.
 - **Mudar de fila** zera a posição (começa no início da nova fila); repetir a mesma fila mantém o número. **Tirar da fila** não mexe no
   treino do aluno. Números com buraco (1, 2, 4) funcionam: vale o próximo que existe.
-- **Segurança e erros:** tudo é conferido de novo no servidor (fila existente, número de 1 a 99, liberação `true` literal, data não futura,
+- **Segurança e erros:** tudo é conferido de novo no servidor (fila existente, número de 1 a 6, liberação `true` literal, data não futura,
   aluno realmente na fila do treino). Se a fila do aluno mudar entre abrir e salvar, nada é gravado (tudo ou nada) e a tela mostra o motivo.
   Textos vindos do banco (nome do padrão, professor) entram na página sempre escapados.
 
