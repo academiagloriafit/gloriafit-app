@@ -287,17 +287,103 @@ def test_conversa_sem_padroes_guardados(conn):
     assert "ainda não guardou treinos padrão" in ia_treino.montar_conversa(conn, _pedido()).sistema
 
 
-def test_corpo_do_pedido_obriga_a_ferramenta_e_nao_manda_ajuste_proibido(base):
+def test_corpo_do_pedido_de_modelo_comum_e_simples(base):
     conversa = ia_treino.montar_conversa(base, _pedido())
 
     corpo = ia_treino.corpo_do_pedido(conversa, "claude-modelo-x")
 
     assert corpo["model"] == "claude-modelo-x"
-    assert corpo["tool_choice"] == {"type": "tool", "name": "montar_treino"}
+    assert corpo["tool_choice"] == {"type": "auto"}  # obrigar a ferramenta dá erro 400 no Sonnet 5.5
     assert corpo["tools"] == [ia_treino.FERRAMENTA]
     assert corpo["messages"] == [{"role": "user", "content": conversa.usuario}]
-    assert 0 < corpo["max_tokens"] <= 8000
-    assert "temperature" not in corpo and "top_p" not in corpo  # modelos novos não aceitam
+    assert corpo["system"] == conversa.sistema
+    assert 0 < corpo["max_tokens"] <= 32000
+    assert "thinking" not in corpo and "output_config" not in corpo  # só o Sonnet 5.5 recebe ajuste de pensamento
+
+
+def test_corpo_do_pedido_do_sonnet_5_5_usa_esforco_medio_e_deixa_o_pensamento_adaptativo(base):
+    corpo = ia_treino.corpo_do_pedido(ia_treino.montar_conversa(base, _pedido()), "claude-sonnet-5-5")
+
+    assert corpo["output_config"] == {"effort": "medium"}
+    assert "thinking" not in corpo  # sem o campo = pensamento adaptativo
+
+
+def test_corpo_do_pedido_desliga_o_pensamento_do_jeito_que_o_sonnet_5_5_aceita(base):
+    conversa = ia_treino.montar_conversa(base, _pedido())
+
+    corpo = ia_treino.corpo_do_pedido(conversa, "claude-sonnet-5-5", esforco="low", pensar=False)
+
+    assert corpo["thinking"] == {"type": "between_tools"}  # "disabled" dá erro 400 neste modelo
+    assert corpo["output_config"] == {"effort": "low"}
+
+
+@pytest.mark.parametrize("esforco", ["max", "xhigh", "adaptive", "", "HIGH"])
+def test_esforco_que_a_api_nao_aceita_com_pensamento_desligado_e_recusado_antes_de_gastar(base, esforco):
+    with pytest.raises(ValueError):
+        ia_treino.corpo_do_pedido(ia_treino.montar_conversa(base, _pedido()), "claude-sonnet-5-5", esforco=esforco)
+
+
+@pytest.mark.parametrize("modelo", ["claude-sonnet-5-5", "claude-sonnet-5-5-20261001", "claude-haiku-4-5-20251001"])
+@pytest.mark.parametrize("esforco", [None, "low", "medium", "high"])
+@pytest.mark.parametrize("pensar", [None, True, False])
+def test_corpo_do_pedido_nunca_manda_o_que_a_api_do_sonnet_5_5_recusa(base, modelo, esforco, pensar):
+    """Regras da documentação oficial (migração para o Sonnet 5.5): tudo isto dá erro 400."""
+    corpo = ia_treino.corpo_do_pedido(ia_treino.montar_conversa(base, _pedido()), modelo, esforco, pensar)
+
+    assert corpo["tool_choice"]["type"] not in ("tool", "any")
+    assert "temperature" not in corpo and "top_p" not in corpo and "top_k" not in corpo
+    assert "output_format" not in corpo
+    assert corpo["messages"][-1]["role"] == "user"  # nada de "prefill" na última mensagem
+    pensamento = corpo.get("thinking")
+    assert pensamento is None or pensamento == {"type": "between_tools"}  # nem "disabled" nem "enabled" com orçamento
+    assert pensamento is None or set(pensamento) == {"type"}  # between_tools não aceita display/budget_tokens
+    assert corpo.get("output_config", {}).get("effort", "high") in ("low", "medium", "high")
+
+
+_PALAVRAS_QUE_O_FORMATO_ESTRITO_RECUSA = {
+    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "maxItems", "uniqueItems",
+}
+
+
+def _todos_os_nos(esquema):
+    if isinstance(esquema, dict):
+        yield esquema
+        for valor in esquema.values():
+            yield from _todos_os_nos(valor)
+    elif isinstance(esquema, list):
+        for valor in esquema:
+            yield from _todos_os_nos(valor)
+
+
+def test_a_ferramenta_segue_as_regras_do_formato_estrito_da_api():
+    ferramenta = ia_treino.FERRAMENTA
+
+    assert ferramenta["strict"] is True and ferramenta["name"] == "montar_treino"
+    opcionais = 0
+    for no in _todos_os_nos(ferramenta["input_schema"]):
+        assert not (_PALAVRAS_QUE_O_FORMATO_ESTRITO_RECUSA & set(no)), no
+        assert no.get("minItems", 1) in (0, 1)
+        assert "$ref" not in no and "pattern" not in no
+        if no.get("type") == "object":
+            assert no.get("additionalProperties") is False  # em TODO objeto, senão a API recusa
+            opcionais += len(set(no.get("properties", {})) - set(no.get("required", [])))
+    assert opcionais <= 24  # limite da API para propriedades opcionais
+
+
+def test_a_ferramenta_continua_pedindo_o_que_a_conferencia_usa():
+    esquema = ia_treino.FERRAMENTA["input_schema"]
+    item = esquema["properties"]["fichas"]["items"]["properties"]["itens"]["items"]
+
+    assert set(esquema["required"]) == {"fichas", "resumo"}
+    assert set(item["required"]) == {"exercicio_id", "series", "repeticoes"}
+    assert set(item["properties"]) == {"exercicio_id", "series", "repeticoes", "pausa", "observacao", "bloco"}
+
+
+def test_o_pedido_diz_no_texto_para_chamar_a_ferramenta(base):
+    conversa = ia_treino.montar_conversa(base, _pedido())
+
+    assert "chamando a ferramenta montar_treino" in conversa.usuario  # com tool_choice "auto" é isto que garante a chamada
+    assert "nunca responda em texto" in conversa.sistema
 
 
 # ------------------------------------------------------------------ falar com a API (urlopen falso)
@@ -807,7 +893,7 @@ def test_a_ia_recebe_a_chave_e_so_a_conversa_da_academia(servidor):
     chave, corpo = ia.recebidos[0]
     assert chave == CHAVE
     tudo = json.dumps(corpo, ensure_ascii=False)
-    assert "evitar impacto" in tudo and "tool_choice" in tudo
+    assert "evitar impacto" in tudo and '"tool_choice": {"type": "auto"}' in tudo
     for segredo in ("MARIANA", "FERREIRA", "12345678909", CHAVE):
         assert segredo not in tudo
 
@@ -1060,6 +1146,94 @@ def test_comando_testar_sem_chave(servidor, capsys):
     (servidor.parent / "ia_chave").unlink()
 
     assert _rodar(servidor, "testar") == 1
+
+    assert "definir-chave" in capsys.readouterr().out
+
+
+# ---- diagnosticar: um pedido completo de verdade, sem aluno e sem gravar nada
+
+
+def _rodar_diagnostico(servidor, monkeypatch, *opcoes, devolve=None, levanta=None):
+    visto = {}
+
+    def falsa(chave, corpo, tempo_limite=0):
+        visto["chave"], visto["corpo"] = chave, corpo
+        if levanta:
+            raise levanta
+        return devolve if devolve is not None else _resposta_da_api(
+            _rascunho(("A - PEITO", [_item(1), _item(2)]), ("B - COSTAS", [_item(3)]), alertas=["Atenção ao joelho."]),
+            usage={"input_tokens": 10000, "output_tokens": 2000},
+        )
+
+    monkeypatch.setattr(ia_treino, "chamar_claude", falsa)
+    return ia_treino.principal(["diagnosticar", "--banco", str(servidor), *opcoes]), visto
+
+
+def test_diagnosticar_mostra_tempo_tokens_custo_e_o_rascunho(servidor, monkeypatch, capsys):
+    codigo, visto = _rodar_diagnostico(servidor, monkeypatch, "--dias", "2")
+
+    assert codigo == 0
+    saida = capsys.readouterr().out
+    assert "tokens: entrada 10000, saída 2000" in saida
+    assert "US$ 0.040" in saida  # 10000 x 2/milhão + 2000 x 10/milhão
+    assert "A - PEITO (2 exercícios)" in saida and "SUPINO MAQUINA: 3 x 12" in saida and "B - COSTAS (1 exercício)" in saida
+    assert "Atenção ao joelho." in saida and CHAVE not in saida
+    assert visto["chave"] == CHAVE and visto["corpo"]["tool_choice"] == {"type": "auto"}
+    assert visto["corpo"]["output_config"] == {"effort": "medium"} and "thinking" not in visto["corpo"]
+
+
+def test_diagnosticar_repassa_o_esforco_e_o_pensamento_desligado(servidor, monkeypatch, capsys):
+    codigo, visto = _rodar_diagnostico(servidor, monkeypatch, "--esforco", "low", "--sem-pensar")
+
+    assert codigo == 0
+    assert visto["corpo"]["output_config"] == {"effort": "low"} and visto["corpo"]["thinking"] == {"type": "between_tools"}
+    assert "between_tools" in capsys.readouterr().out
+
+
+def test_diagnosticar_mostra_o_motivo_exato_da_recusa_da_api(servidor, monkeypatch, capsys):
+    erro = ErroDaIA("A IA recusou o pedido (código 400). Avise o Thiago.", 'HTTP 400 invalid_request_error: tool_choice: type "tool" is not supported')
+
+    codigo, _ = _rodar_diagnostico(servidor, monkeypatch, levanta=erro)
+
+    assert codigo == 1
+    saida = capsys.readouterr().out
+    assert "FALHOU" in saida and "tool_choice" in saida and CHAVE not in saida
+
+
+def test_diagnosticar_avisa_quando_a_ia_devolve_texto_em_vez_do_treino(servidor, monkeypatch, capsys):
+    resposta = {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Aqui está o treino..."}], "usage": {}}
+
+    codigo, _ = _rodar_diagnostico(servidor, monkeypatch, devolve=resposta)
+
+    assert codigo == 1
+    assert "FALHOU" in capsys.readouterr().out
+
+
+def test_diagnosticar_nao_grava_pedido_nem_treino(servidor, monkeypatch):
+    _rodar_diagnostico(servidor, monkeypatch)
+
+    conn = conectar(servidor)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM ia_pedido").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM treino").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("opcoes", [("--dias", "1"), ("--dias", "9"), ("--minutos", "50")])
+def test_diagnosticar_recusa_numeros_fora_do_que_o_app_aceita_antes_de_gastar(servidor, monkeypatch, capsys, opcoes):
+    chamadas = []
+    monkeypatch.setattr(ia_treino, "chamar_claude", lambda *a, **k: chamadas.append(a))
+
+    assert ia_treino.principal(["diagnosticar", "--banco", str(servidor), *opcoes]) == 1
+
+    assert chamadas == [] and "--dias" in capsys.readouterr().out
+
+
+def test_diagnosticar_sem_chave(servidor, capsys):
+    (servidor.parent / "ia_chave").unlink()
+
+    assert _rodar(servidor, "diagnosticar") == 1
 
     assert "definir-chave" in capsys.readouterr().out
 
