@@ -34,6 +34,26 @@
         </p>
         {% endif %}
 
+        {# Fila de treino (Homem, Mulher...): o app NÃO troca o treino sozinho, só SUGERE o próximo da fila quando chega a hora
+           (aluno sem treino ativo ou treino na hora de trocar). O professor abre, confere e salva. #}
+        {% set fila = ficha.fila.atual %}
+        {% if fila and fila.hora_de_trocar %}
+        <p class="aviso-troca aviso-troca-ficha aviso-fila" role="note" id="sugestao-fila">
+          {% if fila.sugestao %}
+          <strong>Sugestão da fila {{ fila.nome }}: Treino {{ fila.sugestao.numero }} ({{ fila.sugestao.nome }}).</strong>
+          O app só sugere: abra, confira e clique em "Salvar treino" para o aluno trocar.
+          <a class="botao-link botao-link-forte" href="{{ url_for('pagina_montar', aluno_id=ficha.id, fila=fila.sugestao.modelo_id) }}">Abrir o Treino {{ fila.sugestao.numero }}</a>
+          {% elif fila.fim_da_fila %}
+          <strong>Fim da fila {{ fila.nome }}.</strong>
+          O aluno já fez o último treino da fila (Treino {{ fila.numero_atual }}). Nada recomeça sozinho: decida o próximo passo
+          (lançar um treino, ou mudar o aluno de fila).
+          {% else %}
+          <strong>A fila {{ fila.nome }} ainda não tem treinos.</strong>
+          Monte um treino e use "Salvar como treino padrão" escolhendo a fila {{ fila.nome }} e o número.
+          {% endif %}
+        </p>
+        {% endif %}
+
         {% if ficha.treinos %}
         <div class="titulos-treinos" aria-hidden="true">
           <span>Treino</span><span>Início</span><span>Fim</span><span>Sessões</span><span>Situação</span><span>Professor</span>
@@ -70,8 +90,17 @@
               <span class="confirmacao form-padrao-ficha" hidden>
                 <label for="nome-padrao-{{ treino.id }}">Nome do treino padrão</label>
                 <input id="nome-padrao-{{ treino.id }}" class="campo-padrao" type="text" maxlength="40" autocomplete="off" value="{{ treino.nome }}">
+                {# Opcional: coloca o treino padrão numa fila (Treino 1, 2, 3...) para o app poder sugeri-lo aos alunos dela. #}
+                <label for="fila-padrao-{{ treino.id }}">Fila</label>
+                <select id="fila-padrao-{{ treino.id }}" class="campo-fila-padrao">
+                  <option value="">Sem fila</option>
+                  {% for f in ficha.fila.filas %}<option value="{{ f.id }}" data-usados="{{ f.treinos | map(attribute='numero') | join(',') }}">{{ f.nome }}</option>{% endfor %}
+                </select>
+                <label for="numero-padrao-{{ treino.id }}">Número</label>
+                <input id="numero-padrao-{{ treino.id }}" class="campo-numero-padrao" type="text" inputmode="numeric" maxlength="2" autocomplete="off" disabled>
                 <button type="button" class="botao-escuro sim-padrao" data-treino="{{ treino.id }}">Guardar</button>
                 <button type="button" class="botao-discreto nao-padrao">Cancelar</button>
+                <span class="dica dica-fila-padrao" role="status"></span>
               </span>
               <span class="aviso-padrao" role="status"></span>
               {% if treino.ativo %}
@@ -116,6 +145,77 @@
       </section>
 
       <aside class="coluna-lateral">
+        {# Fila de treino: o professor escolhe a fila do aluno (digitando o próprio nome). Gestante e Grupos de risco pedem a
+           liberação conferida: o app guarda só "sim", a data e o nome do professor (nem atestado, nem motivo). #}
+        <section class="painel painel-fila" id="painel-fila" aria-labelledby="titulo-fila">
+          <h2 id="titulo-fila">Fila de treino</h2>
+          {% if fila %}
+          <p class="fila-resumo">
+            <span class="selo-fila">{{ fila.nome }}</span>
+            {% if fila.numero_atual %}<strong>Treino {{ fila.numero_atual }}</strong> é o atual na fila.{% else %}Ainda não começou a fila.{% endif %}
+          </p>
+          <p class="dica">Colocado na fila em {{ fila.definida_em }} por {{ fila.definida_por }}.</p>
+          {% if fila.exige_liberacao %}<p class="dica">Liberação conferida em {{ fila.liberacao_em }} por {{ fila.liberacao_por }}.</p>{% endif %}
+          {% if fila.vazia %}
+          <p class="dica">Esta fila ainda não tem treinos. Monte um treino e use "Salvar como treino padrão", escolhendo a fila e o número.</p>
+          {% else %}
+          <ol class="fila-treinos">
+            {% for t in fila.treinos %}
+            <li class="{{ 'fila-treino-atual' if t.atual }}{{ ' fila-treino-sugerido' if t.sugerido }}">
+              <span class="fila-numero">Treino {{ t.numero }}</span>
+              <span class="fila-selos">
+                {% if t.atual %}<span class="selo-treino selo-treino-ativo">Atual</span>{% endif %}
+                {% if t.sugerido %}<span class="selo-treino selo-treino-trocar">Sugerido</span>{% endif %}
+              </span>
+              <span class="fila-nome">{{ t.nome }}</span>
+              <a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=ficha.id, fila=t.modelo_id) }}" aria-label="Abrir o Treino {{ t.numero }} da fila {{ fila.nome }} para este aluno">Abrir</a>
+            </li>
+            {% endfor %}
+          </ol>
+          <p class="dica">Abrir não salva nada: o professor confere o treino na tela de lançar treino e clica em "Salvar treino".</p>
+          {% endif %}
+          <div class="fila-acoes">
+            <button type="button" id="abrir-form-fila" class="botao-link" aria-expanded="false" aria-controls="form-fila">Mudar de fila</button>
+            <button type="button" id="fila-tirar" class="botao-discreto">Tirar da fila</button>
+            <span id="confirmar-tirar-fila" class="confirmacao" hidden>
+              <span>Tirar {{ ficha.nome }} da fila {{ fila.nome }}? O treino atual dele não muda.</span>
+              <button type="button" id="fila-tirar-sim" class="botao-perigo">Sim, tirar</button>
+              <button type="button" id="fila-tirar-nao" class="botao-discreto">Não</button>
+            </span>
+          </div>
+          {% else %}
+          <p class="dica">Este aluno não está em nenhuma fila. Escolha uma: o app passa a sugerir o próximo treino dela quando chegar a hora de trocar.</p>
+          {% endif %}
+
+          <div id="form-fila" class="form-fila" {% if fila %}hidden{% endif %}>
+            <div class="campo">
+              <label for="fila-escolhida">Fila</label>
+              <select id="fila-escolhida" data-hoje="{{ hoje }}">
+                <option value="" data-exige="0"{% if not fila %} selected{% endif %}>Escolha a fila</option>
+                {% for f in ficha.fila.filas %}<option value="{{ f.id }}" data-exige="{{ 1 if f.exige_liberacao else 0 }}"{% if fila and fila.fila_id == f.id %} selected{% endif %}>{{ f.nome }}{% if f.exige_liberacao %} (pede liberação){% endif %}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="campo">
+              <label for="fila-professor">Professor <span class="obrigatorio">(obrigatório)</span></label>
+              <input id="fila-professor" type="text" maxlength="60" autocomplete="off" aria-required="true" placeholder="Digite o seu nome">
+            </div>
+            <div id="bloco-liberacao" class="bloco-liberacao" hidden>
+              <label class="linha-marcar" for="fila-liberacao-conferida">
+                <input id="fila-liberacao-conferida" type="checkbox">
+                <span>Conferi a liberação (atestado/triagem) e o aluno pode fazer esta fila</span>
+              </label>
+              <div class="campo">
+                <label for="fila-liberacao-em">Data da liberação</label>
+                <input id="fila-liberacao-em" type="date" value="{{ hoje }}" min="2020-01-01" max="{{ hoje }}">
+              </div>
+              <p class="dica">O app guarda só "sim", a data e o seu nome. Não guarda o atestado nem o motivo.</p>
+            </div>
+            <button type="button" id="fila-colocar" class="botao-escuro botao-largo">{% if fila %}Mudar de fila{% else %}Colocar na fila{% endif %}</button>
+            {% if fila %}<button type="button" id="fila-cancelar" class="botao-discreto">Cancelar</button>{% endif %}
+          </div>
+          <p id="aviso-fila" class="aviso-campo" role="status"></p>
+        </section>
+
         <section class="painel" aria-labelledby="titulo-whatsapp">
           <h2 id="titulo-whatsapp">WhatsApp do aluno</h2>
           <p class="dica">É para esse número que o app manda o código de acesso.</p>
@@ -146,5 +246,6 @@
   <script type="module" src="{{ url_for('static', filename='ficha.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='ciclo_ficha.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='padrao_ficha.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='fila_ficha.js') }}"></script>
 </body>
 </html>

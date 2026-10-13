@@ -134,8 +134,17 @@
           <span id="form-padrao" class="confirmacao form-padrao" hidden>
             <label for="nome-padrao">Nome do treino padrão</label>
             <input id="nome-padrao" type="text" maxlength="40" autocomplete="off" aria-describedby="aviso-padrao">
+            {# Opcional: coloca o treino padrão numa fila (Treino 1, 2, 3...) para o app poder sugeri-lo aos alunos dela. #}
+            <label for="fila-padrao">Fila</label>
+            <select id="fila-padrao">
+              <option value="">Sem fila</option>
+              {% for f in filas %}<option value="{{ f.id }}" data-usados="{{ f.treinos | map(attribute='numero') | join(',') }}">{{ f.nome }}</option>{% endfor %}
+            </select>
+            <label for="numero-padrao">Número</label>
+            <input id="numero-padrao" class="campo-numero-padrao" type="text" inputmode="numeric" maxlength="2" autocomplete="off" disabled>
             <button type="button" id="confirmar-padrao" class="botao-escuro">Guardar</button>
             <button type="button" id="cancelar-padrao" class="botao-discreto">Cancelar</button>
+            <span id="dica-fila-padrao" class="dica" role="status"></span>
           </span>
           <p id="aviso-padrao" class="aviso" aria-live="polite"></p>
           <p id="aviso" class="aviso" aria-live="polite"></p>
@@ -147,6 +156,7 @@
       <h1 id="titulo-salvo" tabindex="-1">Treino salvo</h1>
       <p id="texto-salvo" class="texto-salvo"></p>
       <p id="texto-concluido" class="texto-salvo" hidden></p>
+      <p id="texto-fila" class="texto-salvo" hidden></p>
       <div class="barra-salvar">
         <a id="imprimir-treino" class="botao-link botao-link-forte" href="#" hidden>Imprimir na térmica</a>
         <button type="button" id="montar-outro" class="botao-principal">Lançar outro treino</button>

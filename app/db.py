@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 7
+VERSAO_DO_BANCO = 8
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -156,8 +156,56 @@ def _de_6_para_7(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_modelo_treino_nome ON modelo_treino(nome COLLATE NOCASE)")
 
 
+def _de_7_para_8(conn: sqlite3.Connection) -> None:
+    """Filas numeradas de treino: nascem `fila` (com as 5 filas do começo) e `aluno_fila`; o treino padrão ganha `fila_id` e `numero`.
+
+    Só acrescenta: nenhum dado que já existe é tocado (os treinos padrão que já existirem ficam sem fila). Os comandos
+    são "IF NOT EXISTS" / conferem as colunas de propósito: se um dia o número da versão for baixado à mão (para abrir
+    o banco com o app antigo, que ignora o que é novo), subir de novo com este app não falha por já existir.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fila (
+            id              INTEGER PRIMARY KEY,
+            nome            TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
+            exige_liberacao INTEGER NOT NULL DEFAULT 0 CHECK (exige_liberacao IN (0, 1)),
+            ordem           INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_fila_nome ON fila(nome COLLATE NOCASE)")
+    conn.execute(
+        "INSERT OR IGNORE INTO fila (id, nome, exige_liberacao, ordem) VALUES "
+        "(1, 'Homem', 0, 1), (2, 'Mulher', 0, 2), (3, 'Adolescente', 0, 3), (4, 'Gestante', 1, 4), (5, 'Grupos de risco', 1, 5)"
+    )
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS aluno_fila (
+            aluno_id      INTEGER PRIMARY KEY REFERENCES aluno(id),
+            fila_id       INTEGER NOT NULL REFERENCES fila(id),
+            numero_atual  INTEGER CHECK (numero_atual IS NULL OR numero_atual BETWEEN 1 AND 99),
+            definida_por  TEXT    NOT NULL CHECK (length(definida_por) BETWEEN 1 AND 60),
+            definida_em   TEXT    NOT NULL DEFAULT (datetime('now')),
+            liberacao_em  TEXT    CHECK (liberacao_em IS NULL OR liberacao_em GLOB {_PADRAO_DE_DIA}),
+            liberacao_por TEXT    CHECK (liberacao_por IS NULL OR length(liberacao_por) BETWEEN 1 AND 60)
+        )
+        """
+    )
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(modelo_treino)")}
+    if "fila_id" not in colunas:
+        conn.execute("ALTER TABLE modelo_treino ADD COLUMN fila_id INTEGER REFERENCES fila(id)")
+    if "numero" not in colunas:
+        conn.execute(
+            "ALTER TABLE modelo_treino ADD COLUMN numero INTEGER "
+            "CHECK (numero IS NULL OR (numero BETWEEN 1 AND 99 AND fila_id IS NOT NULL))"
+        )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_modelo_fila_numero ON modelo_treino(fila_id, numero) WHERE fila_id IS NOT NULL"
+    )
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
-MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7}
+MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8}
 
 
 def _arquivo_do_banco(conn: sqlite3.Connection) -> Path | None:

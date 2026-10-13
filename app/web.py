@@ -21,6 +21,7 @@ from app import (
     datas,
     db,
     exercicios,
+    filas,
     importar_alunos,
     importar_treinos,
     modelos,
@@ -312,6 +313,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             hoje=datas.hoje(),
             grupos=exercicios.listar_grupos(conn),
             total_exercicios=exercicios.contar_exercicios(conn),
+            filas=filas.listar_filas(conn),  # o seletor "Fila" do "Salvar como treino padrão"
         )
 
     @app.get("/alunos")
@@ -405,7 +407,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         ficha = alunos.obter_ficha(conexao(), aluno_id)
         if ficha is None:
             abort(404)
-        return render_template("ficha.html", ficha=ficha)
+        return render_template("ficha.html", ficha=ficha, hoje=datas.hoje())
 
     @app.get("/treinos/<int:treino_id>/imprimir")
     def pagina_imprimir_treino(treino_id: int):
@@ -475,8 +477,8 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     def api_criar_modelo():
         """Guarda o treino que está na tela de montar como treino padrão (não grava nada para o aluno).
 
-        Corpo: {"nome", "montado_por", "sessoes_por_ficha", "fichas"}. 201 {"id"}; 400 {"erros"}; 409 {"erros"}
-        se já existe um padrão com esse nome.
+        Corpo: {"nome", "montado_por", "sessoes_por_ficha", "fichas", "fila_id" e "numero" (opcionais, juntos)}.
+        201 {"id"}; 400 {"erros"}; 409 {"erros"} se já existe um padrão com esse nome ou esse número na fila.
         """
         dados = corpo_json()
         try:
@@ -497,12 +499,15 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.post("/api/treinos/<int:treino_id>/modelo")
     def api_treino_como_modelo(treino_id: int):
-        """Botão "Salvar como treino padrão" da ficha do aluno. Corpo: {"nome": "nome do treino padrão"}."""
+        """Botão "Salvar como treino padrão" da ficha do aluno. Corpo: {"nome": "nome do treino padrão", "fila_id" e
+        "numero" (opcionais, os dois juntos: o lugar do treino numa fila numerada)}."""
         dados = corpo_json()
         if not isinstance(dados, dict):
             raise ErroDeEntrada("Formato do pedido inválido.")
         try:
-            modelo_id = modelos.criar_modelo_do_treino(conexao(), treino_id, dados.get("nome"))
+            modelo_id = modelos.criar_modelo_do_treino(
+                conexao(), treino_id, dados.get("nome"), fila_id=dados.get("fila_id"), numero=dados.get("numero")
+            )
         except modelos.TreinoNaoEncontrado:
             return jsonify(erro="Treino não encontrado."), 404
         except treinos.TreinoInvalido as erro:
@@ -547,6 +552,34 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         except treinos.TreinoInvalido as erro:
             return jsonify(erros=erro.problemas), erro.status
         return jsonify(id=treino_id)
+
+    # ------------------------------------------------- filas numeradas de treino (ver app/filas.py)
+
+    @app.post("/api/alunos/<int:aluno_id>/fila")
+    def api_definir_fila(aluno_id: int):
+        """O professor coloca o aluno numa fila (ou muda a fila dele).
+
+        Corpo: {"fila_id", "professor", "liberacao_conferida" (obrigatório nas filas que exigem), "liberacao_em"}.
+        200 {"ok": true}; 400 {"erros"}; 404 aluno inexistente.
+        """
+        dados = corpo_json()
+        try:
+            filas.definir_fila(conexao(), aluno_id, dados)
+        except filas.AlunoNaoEncontrado:
+            return jsonify(erro="Aluno não encontrado."), 404
+        except filas.FilaInvalida as erro:
+            return jsonify(erros=erro.problemas), erro.status
+        return jsonify(ok=True)
+
+    @app.post("/api/alunos/<int:aluno_id>/fila/tirar")
+    def api_tirar_da_fila(aluno_id: int):
+        """O aluno deixa de estar numa fila (o treino dele não muda). Corpo: {}. 200; 404 aluno inexistente."""
+        corpo_json()
+        try:
+            filas.tirar_da_fila(conexao(), aluno_id)
+        except filas.AlunoNaoEncontrado:
+            return jsonify(erro="Aluno não encontrado."), 404
+        return jsonify(ok=True)
 
     @app.post("/api/alunos/<int:aluno_id>/whatsapp")
     def api_corrigir_whatsapp(aluno_id: int):

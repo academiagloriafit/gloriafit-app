@@ -789,3 +789,67 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 }
 .relatorio-importacao[hidden] { display: none; }
 .campo input[type="file"] { padding: 12px; font-size: 16px; }
+
+/* ---- filas de treino (Homem, Mulher, Adolescente, Gestante, Grupos de risco) ---- */
+/* listas de escolha (fila) com a mesma cara dos campos de texto */
+.campo select, .form-padrao select, .form-padrao-ficha select {
+  height: 44px;
+  width: 100%;
+  border: 1.5px solid #8c8b83;
+  border-radius: 10px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 17px;
+  color: var(--escuro);
+  background: var(--branco);
+}
+.form-padrao select, .form-padrao-ficha select { width: auto; height: 40px; font-size: 16px; font-weight: 400; border-radius: 8px; }
+.form-padrao .campo-numero-padrao, .form-padrao-ficha .campo-numero-padrao { min-width: 0; width: 64px; text-align: center; }
+.form-padrao input:disabled, .form-padrao-ficha input:disabled { background: #ecebe5; cursor: not-allowed; }
+.form-padrao .dica, .form-padrao-ficha .dica { flex-basis: 100%; font-weight: 400; }
+.campo select:focus-visible, .form-padrao select:focus-visible, .form-padrao-ficha select:focus-visible {
+  outline: 3px solid var(--foco);
+  outline-offset: 2px;
+}
+.campo select[aria-invalid="true"], .campo input[aria-invalid="true"], .linha-marcar input[aria-invalid="true"] { outline: 2px solid #b00020; }
+
+/* cartão "Fila de treino" na ficha do aluno */
+.fila-resumo { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 16px; }
+.selo-fila {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 14px;
+  background: var(--escuro);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+}
+.selo-fila-padrao { background: var(--escuro); color: #ffffff; margin-left: 8px; }
+.fila-treinos { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--borda); }
+.fila-treinos li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "numero selos abrir" "nome nome nome";
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--borda);
+  border-left: 4px solid transparent;
+}
+.fila-numero { grid-area: numero; }
+.fila-selos { grid-area: selos; display: flex; flex-wrap: wrap; gap: 4px; }
+.fila-nome { grid-area: nome; }
+.fila-treinos .botao-link { grid-area: abrir; }
+.fila-treinos .fila-treino-atual { border-left-color: #1f5a2b; background: #f3f8f2; }
+.fila-treinos .fila-treino-sugerido { border-left-color: var(--laranja); background: #fff8f4; }
+.fila-numero { font-weight: 700; white-space: nowrap; }
+.fila-nome { font-size: 15px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.fila-treinos .botao-link { min-height: 40px; padding: 0 14px; font-size: 15px; }
+.fila-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.form-fila { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--borda); }
+.painel-fila .aviso-campo:empty { display: none; }
+.bloco-liberacao { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: #f6f4ef; }
+.linha-marcar { display: flex; align-items: flex-start; gap: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.linha-marcar input { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--escuro); }
+.aviso-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.aviso-fila strong { flex: 1 1 100%; }

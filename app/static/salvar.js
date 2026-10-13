@@ -14,7 +14,9 @@ const pegar = (id) => document.getElementById(id);
 // aoSalvar(): chamada depois que o servidor confirmou (a tela apaga o rascunho).
 // edicao: null para treino NOVO (POST em /api/alunos/<id>/treinos) ou { treinoId } para mudar no lugar o treino
 // ativo que o professor criou no app (POST em /api/treinos/<id>/editar, que responde 200).
-export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoTravar, aoErros, aoSalvar, edicao = null }) {
+// textoDaFila(): quando o professor abriu o treino sugerido pela fila (?fila=ID), devolve a frase "O aluno agora está no
+// Treino 3 da fila Mulher." para a tela de "Treino salvo"; senão devolve null (o pedido já leva `fila_modelo_id` em obterDados).
+export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoTravar, aoErros, aoSalvar, edicao = null, textoDaFila = () => null }) {
   const areaMontagem = pegar("area-montagem");
   const painelSalvo = pegar("treino-salvo");
   let salvando = false;
@@ -80,6 +82,7 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
 
   // concluidoAnterior: o nome do treino que estava ativo e foi concluído junto (ou nada, se não havia).
   function sucesso(nomeTreino, montadoPor, enderecoDeImpressao, concluidoAnterior) {
+    const frase = textoDaFila(); // antes de aoSalvar, que limpa o que a tela sabe sobre a fila
     aoSalvar();
     areaMontagem.hidden = true;
     const linkImprimir = pegar("imprimir-treino");
@@ -89,7 +92,10 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
     pegar("texto-salvo").textContent = edicao
       ? `O treino "${nomeTreino}" de ${alunoNome} foi atualizado. Professor: ${montadoPor}.`
       : `O treino "${nomeTreino}" foi salvo para ${alunoNome}. Professor: ${montadoPor}.`;
-    pegar("montar-outro").hidden = Boolean(edicao); // recarregar abriria de novo a edição deste mesmo treino
+    pegar("montar-outro").hidden = Boolean(edicao || frase); // recarregar abriria de novo a edição (ou o treino da fila)
+    const textoFila = pegar("texto-fila");
+    textoFila.textContent = frase ?? "";
+    textoFila.hidden = !frase;
     const textoConcluido = pegar("texto-concluido");
     const houveConclusao = typeof concluidoAnterior === "string" && concluidoAnterior !== "";
     textoConcluido.textContent = houveConclusao

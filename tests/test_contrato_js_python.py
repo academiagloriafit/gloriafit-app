@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from app import importar_alunos, importar_treinos, treinos
+from app import filas, importar_alunos, importar_treinos, modelos, treinos
 from app.db import conectar, criar_tabelas
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -217,4 +217,47 @@ def test_pedido_com_inicio_fim_e_meta_montado_pelo_navegador_e_gravado_pelo_serv
         (primeiro, "2026-10-10", "2026-12-31", 15, 0),  # o segundo treino concluiu o primeiro
         (segundo, "2026-10-10", None, None, 1),
     ]
+    conn.close()
+
+
+FILAS_DO_TREINO = (RAIZ / "app" / "static" / "filas_modelo.js").as_uri()
+
+
+def test_pedidos_das_filas_montados_pelo_navegador_sao_aceitos_pelo_servidor():
+    """Treino padrão com fila e número, aluno na fila (com liberação) e treino salvo pela fila: o que o JavaScript manda o servidor aceita."""
+    pedidos = _node(f"""
+        import * as M from "{MODELO_DO_TREINO}";
+        import * as F from "{FILAS_DO_TREINO}";
+        let e = M.criarEstado();
+        e = M.adicionarItem(e, 0, {{ id: 1, nome: "SUPINO" }});
+        e = M.atualizarItem(e, 0, 1, "series", "3");
+        e = M.atualizarItem(e, 0, 1, "repeticoes", "12");
+        const posicao = M.lerPosicaoNaFila({{ filaId: "4", numero: "2" }});
+        if (!posicao.ok) throw new Error("a tela recusaria a posição");
+        const dadosPadrao = {{ nomePadrao: " Gestante   2 ", montadoPor: "Ana Paula", sessoesPorFicha: "", filaId: "4", numero: "2" }};
+        const dadosFila = {{ filaId: "4", professor: " Bia  Souza ", exigeLiberacao: true, conferida: true, liberacaoEm: "2026-10-01", hoje: "2026-10-13" }};
+        if (F.validarColocarNaFila(dadosFila).length) throw new Error("a ficha recusaria estes dados");
+        console.log(JSON.stringify({{
+          padrao: M.montarPedidoDePadrao(e, dadosPadrao),
+          fila: F.montarPedidoDaFila(dadosFila),
+          salvar: M.montarPedido(e, {{ nomeTreino: "GESTANTE TREINO 2 13/10/26", montadoPor: "Bia", inicio: "2026-10-13", filaModeloId: 1 }}),
+        }}));
+    """)
+    conn = conectar()
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ALUNA')")
+    conn.execute("INSERT INTO exercicio (id, nome, origem, ativo) VALUES (1, 'SUPINO', 'app', 1)")
+
+    modelo_id = modelos.criar_modelo(conn, pedidos["padrao"])
+    filas.definir_fila(conn, 1, pedidos["fila"])
+    treino_id = treinos.salvar_treino(conn, 1, {**pedidos["salvar"], "fila_modelo_id": modelo_id})  # (o id do padrão só se sabe aqui)
+
+    assert pedidos["padrao"]["fila_id"] == 4 and pedidos["padrao"]["numero"] == 2
+    assert pedidos["padrao"]["nome"] == "Gestante 2"
+    assert conn.execute("SELECT fila_id, numero FROM modelo_treino WHERE id = ?", (modelo_id,)).fetchone()[:] == (4, 2)
+    assert conn.execute("SELECT fila_id, numero_atual, definida_por, liberacao_em, liberacao_por FROM aluno_fila").fetchone()[:] == (
+        4, 2, "Bia Souza", "2026-10-01", "Bia Souza",
+    )
+    assert treinos.obter_treino(conn, treino_id)["nome"] == "GESTANTE TREINO 2 13/10/26"
+    assert "fila_modelo_id" in pedidos["salvar"]
     conn.close()

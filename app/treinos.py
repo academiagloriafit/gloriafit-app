@@ -295,6 +295,29 @@ def _gravar_fichas(conn: sqlite3.Connection, treino_id: int, fichas: list[dict])
             )
 
 
+def _conferir_treino_da_fila(conn: sqlite3.Connection, aluno_id: int, dados) -> int | None:
+    """Treino aberto pela fila ("Montar o Treino 3"): confere `dados["fila_modelo_id"]` e devolve o NÚMERO dele na fila.
+
+    Sem `fila_modelo_id` (treino montado do zero, importado ou copiado) devolve None e nada muda na fila do aluno.
+    Com ele, o treino padrão precisa existir, ser de uma fila e essa fila precisa ser a do aluno: assim ninguém muda a
+    posição de um aluno numa fila que não é a dele. Quem grava a posição (`numero_atual`) é `salvar_treino`.
+    """
+    modelo_id = dados.get("fila_modelo_id")
+    if modelo_id is None:
+        return None
+    if not _inteiro(modelo_id) or modelo_id < 1:
+        raise TreinoInvalido(["Treino da fila inválido."])
+    modelo = conn.execute("SELECT fila_id, numero FROM modelo_treino WHERE id = ?", (modelo_id,)).fetchone()
+    if modelo is None or modelo["fila_id"] is None:
+        raise TreinoInvalido(["Este treino da fila não existe mais. Volte à ficha do aluno e escolha de novo."], status=409)
+    na_fila = conn.execute("SELECT fila_id FROM aluno_fila WHERE aluno_id = ?", (aluno_id,)).fetchone()
+    if na_fila is None or na_fila["fila_id"] != modelo["fila_id"]:
+        raise TreinoInvalido(
+            ["Este aluno não está na fila deste treino (a fila dele mudou). Volte à ficha do aluno e confira."], status=409
+        )
+    return modelo["numero"]
+
+
 def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetime | None = None) -> int:
     """Grava um treino novo para o aluno. Devolve o id do treino.
 
@@ -303,7 +326,9 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
                "sessoes_por_ficha": int (opcional; quantas vezes o aluno faz CADA ficha),
                "fichas": [{"nome": str, "itens": [{"exercicio_id", "series",
                            "repeticoes", "carga" (o "Peso" da tela), "pausa" (intervalo, em
-                           segundos, opcional), "observacao" (opcional), "bloco"}]}]}
+                           segundos, opcional), "observacao" (opcional), "bloco"}]}],
+               "fila_modelo_id": int (opcional: o treino foi aberto pela fila; o aluno passa a constar no número
+                           desse treino da fila dele, ver app/filas.py)}
     A ordem das fichas e dos exercícios é a ordem das listas. Tudo ou nada: se
     qualquer coisa estiver errada, nada é gravado.
 
@@ -317,6 +342,7 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
     treino = _conferir_dados_do_treino(conn, dados, agora)
     if _nome_ja_usado(conn, aluno_id, treino["nome"]):
         raise _erro_nome_repetido(treino["nome"])
+    numero_na_fila = _conferir_treino_da_fila(conn, aluno_id, dados)
 
     try:
         with conn:  # uma transação: ou grava tudo, ou nada
@@ -331,6 +357,17 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
                 (aluno_id, treino["nome"], treino["montado_por"], treino["inicio"], treino["fim"], treino["sessoes"]),
             ).lastrowid
             _gravar_fichas(conn, treino_id, treino["fichas"])
+            if numero_na_fila is not None:
+                # "AND fila_id = ..." de novo: se outro computador mudou a fila do aluno neste meio-tempo, nada se grava
+                alterados = conn.execute(
+                    "UPDATE aluno_fila SET numero_atual = ? WHERE aluno_id = ? AND fila_id = "
+                    "(SELECT fila_id FROM modelo_treino WHERE id = ?)",
+                    (numero_na_fila, aluno_id, dados["fila_modelo_id"]),
+                ).rowcount
+                if alterados == 0:
+                    raise TreinoInvalido(
+                        ["A fila deste aluno acabou de mudar. Volte à ficha do aluno e confira."], status=409
+                    )
     except sqlite3.IntegrityError as erro:
         # Dois "salvar" ao mesmo tempo com o mesmo nome: o índice único do banco barra o segundo.
         # Só ESTE erro (violação de "único") vira 409. Qualquer outra violação (regra CHECK,

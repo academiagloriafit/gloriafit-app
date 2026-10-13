@@ -1,5 +1,8 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 7 (09/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão e computadores autorizados.
+-- Versão 8 (13/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas e computadores autorizados.
+-- Mudança da versão 7 para a 8 (filas numeradas de treino): nasceram as tabelas `fila` (Homem, Mulher, Adolescente,
+-- Gestante, Grupos de risco) e `aluno_fila` (em que fila cada aluno está, em que número, e a liberação de quem precisa);
+-- o treino padrão (`modelo_treino`) ganhou `fila_id` e `numero`. Bancos da versão 7 são atualizados sozinhos na subida.
 -- Mudança da versão 6 para a 7 (treinos padrão): nasceu a tabela `modelo_treino` (treino pronto para copiar para
 -- qualquer aluno, pelo botão "Importar treino"). Bancos da versão 6 são atualizados sozinhos na subida do app.
 -- Mudança da versão 5 para a 6 (ciclo do treino): o treino ganhou `inicio`, `fim`,
@@ -21,7 +24,7 @@
 -- Fora desta versão, de propósito: login do aluno, pendências da recepção e
 -- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 7;
+PRAGMA user_version = 8;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -184,6 +187,41 @@ CREATE TABLE IF NOT EXISTS sessao (
 );
 CREATE INDEX IF NOT EXISTS ix_sessao_treino ON sessao(treino_id);
 
+-- ------------------------------------------------------------ filas numeradas
+-- Uma fila é uma sequência de treinos padrão numerados (Treino 1, 2, 3...) para um tipo de aluno. O app NÃO troca o
+-- treino do aluno sozinho: ele só SUGERE o próximo número da fila e o professor aprova (ver app/filas.py).
+-- exige_liberacao: 1 = o aluno só entra na fila depois que o professor registra que conferiu a liberação
+--   (atestado/triagem). Hoje: Gestante e Grupos de risco.
+-- ordem: a posição da fila nas telas.
+CREATE TABLE IF NOT EXISTS fila (
+    id              INTEGER PRIMARY KEY,
+    nome            TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
+    exige_liberacao INTEGER NOT NULL DEFAULT 0 CHECK (exige_liberacao IN (0, 1)),
+    ordem           INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_fila_nome ON fila(nome COLLATE NOCASE);
+INSERT OR IGNORE INTO fila (id, nome, exige_liberacao, ordem) VALUES
+    (1, 'Homem', 0, 1),
+    (2, 'Mulher', 0, 2),
+    (3, 'Adolescente', 0, 3),
+    (4, 'Gestante', 1, 4),
+    (5, 'Grupos de risco', 1, 5);
+
+-- A fila de cada aluno (no máximo uma). Quem coloca o aluno na fila é o professor (digita o próprio nome).
+-- numero_atual: o número do treino da fila em que o aluno está (vazio = ainda não começou a fila).
+-- definida_por, definida_em: o professor e o momento (UTC) em que o aluno foi colocado na fila.
+-- liberacao_em, liberacao_por: só nas filas que exigem liberação: o dia ('AAAA-MM-DD') em que o professor conferiu
+--   o atestado/triagem e o nome dele. É TUDO o que o app guarda: nem o atestado nem o motivo (dado de saúde).
+CREATE TABLE IF NOT EXISTS aluno_fila (
+    aluno_id      INTEGER PRIMARY KEY REFERENCES aluno(id),
+    fila_id       INTEGER NOT NULL REFERENCES fila(id),
+    numero_atual  INTEGER CHECK (numero_atual IS NULL OR numero_atual BETWEEN 1 AND 99),
+    definida_por  TEXT    NOT NULL CHECK (length(definida_por) BETWEEN 1 AND 60),
+    definida_em   TEXT    NOT NULL DEFAULT (datetime('now')),
+    liberacao_em  TEXT    CHECK (liberacao_em IS NULL OR liberacao_em GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    liberacao_por TEXT    CHECK (liberacao_por IS NULL OR length(liberacao_por) BETWEEN 1 AND 60)
+);
+
 -- ------------------------------------------------------------ treinos padrão
 -- Um treino pronto (fichas e exercícios) que o professor copia para um aluno pelo botão "Importar
 -- treino" da tela de lançar treino. Copiar NÃO liga o aluno ao padrão: depois de copiado, o treino do
@@ -195,15 +233,20 @@ CREATE INDEX IF NOT EXISTS ix_sessao_treino ON sessao(treino_id);
 --   "pausa" (segundos), "observacao", "bloco"}]}]}: o mesmo desenho do pedido de salvar treino, já conferido
 --   (app/modelos.py). Guarda só o id do exercício; na hora de copiar, o app confere se ele ainda está ativo.
 -- criado_em: UTC.
+-- fila_id, numero: o lugar do treino padrão numa fila numerada ("Mulher, Treino 3"); os dois vazios = treino padrão
+-- solto, sem fila. Cada número aparece uma vez por fila (índice ux_modelo_fila_numero). Não mudam depois de guardados.
 CREATE TABLE IF NOT EXISTS modelo_treino (
     id                INTEGER PRIMARY KEY,
     nome              TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
     montado_por       TEXT    NOT NULL CHECK (length(montado_por) BETWEEN 1 AND 60),
     sessoes_por_ficha INTEGER CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999),
     conteudo          TEXT    NOT NULL,
-    criado_em         TEXT    NOT NULL DEFAULT (datetime('now'))
+    criado_em         TEXT    NOT NULL DEFAULT (datetime('now')),
+    fila_id           INTEGER REFERENCES fila(id),
+    numero            INTEGER CHECK (numero IS NULL OR (numero BETWEEN 1 AND 99 AND fila_id IS NOT NULL))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_modelo_treino_nome ON modelo_treino(nome COLLATE NOCASE);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_modelo_fila_numero ON modelo_treino(fila_id, numero) WHERE fila_id IS NOT NULL;
 
 -- ------------------------------------------------------------ acesso do professor
 -- A área do professor só abre em computadores AUTORIZADOS (hoje: o dos professores e o

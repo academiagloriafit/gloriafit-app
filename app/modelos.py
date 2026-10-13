@@ -18,6 +18,7 @@ import sqlite3
 
 from app.alunos import data_local
 from app.datas import formatar_dia
+from app.filas import texto_da_posicao, validar_posicao
 from app.texto import nome_para_exibir, normalizar
 from app.treinos import (
     LIMITE_NOME_TREINO,
@@ -166,9 +167,12 @@ def criar_modelo(conn: sqlite3.Connection, dados) -> int:
     """Guarda um treino padrão. Devolve o id.
 
     `dados` = {"nome": str (até 40 letras), "montado_por": str (até 60), "sessoes_por_ficha": int ou None,
-               "fichas": [{"nome", "itens": [...]}]} (o mesmo formato do pedido de salvar treino).
+               "fichas": [{"nome", "itens": [...]}],
+               "fila_id": int e "numero": int (opcionais, sempre os dois juntos: o lugar do treino numa fila numerada,
+               ex.: Mulher, Treino 3; ver app/filas.py)} (o resto é o mesmo formato do pedido de salvar treino).
     Vale a mesma conferência de um treino de verdade: todos os exercícios existem e estão ativos, limites
-    de tamanho, bi-sets certos. Dois padrões não têm o mesmo nome. Tudo ou nada.
+    de tamanho, bi-sets certos. Dois padrões não têm o mesmo nome, e dois não ocupam o mesmo número da mesma fila.
+    Tudo ou nada.
     """
     if not isinstance(dados, dict):
         raise TreinoInvalido(["Formato do pedido inválido."])
@@ -177,8 +181,12 @@ def criar_modelo(conn: sqlite3.Connection, dados) -> int:
     montado_por = validar_texto(dados.get("montado_por"), "O nome de quem montou", LIMITE_QUEM_MONTOU, True, problemas)
     sessoes = validar_sessoes_por_ficha(dados.get("sessoes_por_ficha"), problemas)
     fichas = validar_fichas(conn, dados.get("fichas"), problemas)
+    conflitos: list[str] = []
+    fila_id, numero = validar_posicao(conn, dados, problemas, conflitos)
     if problemas:
         raise TreinoInvalido(problemas)
+    if conflitos:  # o número da fila já tem treino: conflito (409), não dado inválido (400)
+        raise TreinoInvalido(conflitos, status=409)
 
     mensagem_de_nome_repetido = f'Já existe um treino padrão chamado "{nome}". Escolha outro nome.'
     if normalizar(nome) in {normalizar(r[0]) for r in conn.execute("SELECT nome FROM modelo_treino")}:
@@ -199,21 +207,27 @@ def criar_modelo(conn: sqlite3.Connection, dados) -> int:
     try:
         with conn:
             return conn.execute(
-                "INSERT INTO modelo_treino (nome, montado_por, sessoes_por_ficha, conteudo) VALUES (?, ?, ?, ?)",
-                (nome, montado_por, sessoes, json.dumps(conteudo, ensure_ascii=False)),
+                "INSERT INTO modelo_treino (nome, montado_por, sessoes_por_ficha, conteudo, fila_id, numero)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (nome, montado_por, sessoes, json.dumps(conteudo, ensure_ascii=False), fila_id, numero),
             ).lastrowid
     except sqlite3.IntegrityError as erro:
-        # Dois "salvar" ao mesmo tempo com o mesmo nome: o índice do banco barra o segundo.
+        # Dois "salvar" ao mesmo tempo (mesmo nome, ou mesmo número na mesma fila): o índice do banco barra o segundo.
         if erro.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
             raise
+        if fila_id is not None and conn.execute(
+            "SELECT 1 FROM modelo_treino WHERE fila_id = ? AND numero = ?", (fila_id, numero)
+        ).fetchone():
+            raise TreinoInvalido([f"Já existe o Treino {numero} nesta fila. Escolha outro número."], status=409) from None
         raise TreinoInvalido([mensagem_de_nome_repetido], status=409) from None
 
 
-def criar_modelo_do_treino(conn: sqlite3.Connection, treino_id: int, nome) -> int:
+def criar_modelo_do_treino(conn: sqlite3.Connection, treino_id: int, nome, fila_id=None, numero=None) -> int:
     """Botão "Salvar como treino padrão" da ficha do aluno: transforma um treino que já existe em padrão.
 
     Fica com o professor e a meta ("treinos por ficha") do treino original. Treino com exercício que saiu da
-    lista (comum nos antigos do Data4U) não vira padrão: o aviso diz quais são.
+    lista (comum nos antigos do Data4U) não vira padrão: o aviso diz quais são. `fila_id` e `numero` (os dois ou nenhum)
+    colocam o padrão numa fila numerada.
     """
     treino = conn.execute(
         "SELECT id, montado_por, sessoes_por_ficha FROM treino WHERE id = ?", (treino_id,)
@@ -240,6 +254,8 @@ def criar_modelo_do_treino(conn: sqlite3.Connection, treino_id: int, nome) -> in
             "montado_por": treino["montado_por"],
             "sessoes_por_ficha": treino["sessoes_por_ficha"],
             "fichas": fichas,
+            "fila_id": fila_id,
+            "numero": numero,
         },
     )
 
@@ -248,8 +264,9 @@ def listar_modelos(conn: sqlite3.Connection) -> list[dict]:
     """Os treinos padrão, em ordem alfabética, com um resumo ('3 fichas · 24 exercícios')."""
     modelos = []
     for linha in conn.execute(
-        "SELECT id, nome, montado_por, sessoes_por_ficha, conteudo, criado_em FROM modelo_treino"
-        " ORDER BY nome COLLATE NOCASE, id"
+        "SELECT m.id, m.nome, m.montado_por, m.sessoes_por_ficha, m.conteudo, m.criado_em, m.fila_id, m.numero,"
+        " f.nome AS fila FROM modelo_treino m LEFT JOIN fila f ON f.id = m.fila_id"
+        " ORDER BY m.nome COLLATE NOCASE, m.id"
     ):
         fichas = json.loads(linha["conteudo"])["fichas"]
         quantas_fichas, quantos_exercicios, resumo = _resumo(fichas)
@@ -260,6 +277,10 @@ def listar_modelos(conn: sqlite3.Connection) -> list[dict]:
                 "montado_por": linha["montado_por"],
                 "sessoes_por_ficha": linha["sessoes_por_ficha"],
                 "criado_em": data_local(linha["criado_em"]),
+                "fila_id": linha["fila_id"],
+                "fila": linha["fila"],
+                "numero": linha["numero"],
+                "posicao": texto_da_posicao(linha["fila"], linha["numero"]),
                 "fichas": quantas_fichas,
                 "exercicios": quantos_exercicios,
                 "resumo": resumo,
@@ -269,13 +290,18 @@ def listar_modelos(conn: sqlite3.Connection) -> list[dict]:
 
 
 def modelo_para_montar(conn: sqlite3.Connection, modelo_id: int) -> dict | None:
-    """O treino padrão no formato da tela de montar, ou None se não existe."""
+    """O treino padrão no formato da tela de montar (mais `fila_id`, `fila` e `numero`, vazios se for um padrão solto),
+    ou None se não existe."""
     linha = conn.execute(
-        "SELECT nome, sessoes_por_ficha, conteudo FROM modelo_treino WHERE id = ?", (modelo_id,)
+        "SELECT m.nome, m.sessoes_por_ficha, m.conteudo, m.fila_id, m.numero, f.nome AS fila"
+        " FROM modelo_treino m LEFT JOIN fila f ON f.id = m.fila_id WHERE m.id = ?",
+        (modelo_id,),
     ).fetchone()
     if linha is None:
         return None
-    return para_montar(conn, linha["nome"], linha["sessoes_por_ficha"], json.loads(linha["conteudo"])["fichas"])
+    resultado = para_montar(conn, linha["nome"], linha["sessoes_por_ficha"], json.loads(linha["conteudo"])["fichas"])
+    resultado.update(fila_id=linha["fila_id"], fila=linha["fila"], numero=linha["numero"])
+    return resultado
 
 
 def excluir_modelo(conn: sqlite3.Connection, modelo_id: int) -> None:

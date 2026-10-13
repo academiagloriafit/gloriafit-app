@@ -5,15 +5,19 @@
 import { buscarJson, enviarJson, textoDoErro } from "./api.js";
 import { iniciarBiblioteca } from "./biblioteca.js";
 import { el } from "./dom.js";
+import { ligarSeletorDeFila } from "./fila_padrao.js";
 import { iniciarImportacao } from "./importar_treino.js";
 import { iniciarSalvar } from "./salvar.js";
 import * as M from "./treino_modelo.js";
 
 const raiz = document.querySelector("[data-aluno]");
 // Editar treino (botão da ficha do aluno): "?editar=ID" muda no lugar o treino ativo criado no app; "?copiar=ID" abre uma
-// cópia que, ao salvar, vira um treino NOVO (é o caminho dos treinos que vieram do Data4U). Sem isso, é treino novo.
+// cópia que, ao salvar, vira um treino NOVO (é o caminho dos treinos que vieram do Data4U). "?fila=ID" abre o treino padrão ID,
+// o próximo da fila do aluno sugerido pelo app: o professor confere e salva como treino novo, e o aluno passa para esse número
+// da fila. Sem nada disso, é treino novo.
 const modo = M.modoDaTela(window.location.search);
 const editandoNoLugar = modo?.tipo === "editar";
+const abrindoDaFila = modo?.tipo === "fila";
 const CHAVE_RASCUNHO = "rascunho-treino-" + raiz.dataset.aluno;
 const CHAVE_DADOS = "rascunho-dados-" + raiz.dataset.aluno;
 
@@ -36,6 +40,8 @@ const elAvisoImportado = document.getElementById("aviso-importado");
 const botaoPadrao = document.getElementById("salvar-como-padrao");
 const elFormPadrao = document.getElementById("form-padrao");
 const campoNomePadrao = document.getElementById("nome-padrao");
+const campoFilaPadrao = document.getElementById("fila-padrao");
+const campoNumeroPadrao = document.getElementById("numero-padrao");
 const botaoConfirmarPadrao = document.getElementById("confirmar-padrao");
 const elAvisoPadrao = document.getElementById("aviso-padrao");
 const elErroEdicao = document.getElementById("erro-edicao");
@@ -55,6 +61,7 @@ let nomeEditadoPeloProfessor = false; // se sim, não trocamos o nome por outra 
 let erroDeBloco = "";
 let origemImportada = null; // de onde veio o treino copiado por "Importar treino" ou por "Editar treino" de um do Data4U (ou null)
 let textoDaEdicao = null; // a faixa de aviso de quem está editando um treino no lugar (ou null)
+let posicaoDaFila = null; // { fila, numero } do treino aberto por "?fila=ID" (ou null)
 let editandoUmaCopia = false; // "?copiar=": ao salvar vira treino novo e o atual é concluído
 let focoPendente = null; // onde devolver o foco depois de redesenhar
 let refs = {}; // pedaços da tela que atualizamos sem redesenhar tudo
@@ -568,6 +575,7 @@ function dadosDoAlto() {
     inicio: campoInicio.value,
     fim: campoFim.value,
     sessoesPorFicha: campoSessoes.value,
+    filaModeloId: abrindoDaFila && posicaoDaFila ? modo.modeloId : null, // o treino da fila que está sendo salvo
   };
 }
 
@@ -625,6 +633,8 @@ const salvar = iniciarSalvar({
   alunoNome: document.querySelector(".aluno-nome strong").textContent,
   obterEstado: () => estado,
   obterDados: dadosDoAlto,
+  textoDaFila: () =>
+    abrindoDaFila && posicaoDaFila ? `O aluno agora está no Treino ${posicaoDaFila.numero} da fila ${posicaoDaFila.fila}.` : null,
   aoSalvar: () => {
     origemImportada = null;
     textoDaEdicao = null;
@@ -816,13 +826,32 @@ campoNomePadrao.addEventListener("keydown", (evento) => {
 });
 botaoConfirmarPadrao.addEventListener("click", guardarComoPadrao);
 
+// "Fila" e "Número" (opcionais): o número livre é sugerido ao escolher a fila
+const filaDoPadrao = ligarSeletorDeFila({
+  select: campoFilaPadrao,
+  campoNumero: campoNumeroPadrao,
+  dica: document.getElementById("dica-fila-padrao"),
+});
+
 async function guardarComoPadrao() {
   if (guardandoPadrao) return; // clique duplo ou Enter repetido não manda duas vezes
-  const dados = { nomePadrao: campoNomePadrao.value, montadoPor: campoQuem.value, sessoesPorFicha: campoSessoes.value };
+  const dados = {
+    nomePadrao: campoNomePadrao.value,
+    montadoPor: campoQuem.value,
+    sessoesPorFicha: campoSessoes.value,
+    filaId: campoFilaPadrao.value,
+    numero: campoNumeroPadrao.value,
+  };
   const dosDados = M.validarDadosDoPadrao(dados);
   if (dosDados.length) {
     avisarPadrao(dosDados[0].mensagem, true);
     document.getElementById(dosDados[0].campo).focus();
+    return;
+  }
+  const posicao = M.lerPosicaoNaFila(dados);
+  if (!posicao.ok) {
+    avisarPadrao(posicao.mensagem, true);
+    (posicao.campo === "fila" ? campoFilaPadrao : campoNumeroPadrao).focus();
     return;
   }
   if (M.lerSessoesPorFicha(dados.sessoesPorFicha) === undefined) {
@@ -858,12 +887,17 @@ async function guardarComoPadrao() {
 
   if (resposta.status === 201) {
     fecharFormDoPadrao();
-    avisarPadrao(`Treino padrão "${M.limparEspacos(dados.nomePadrao)}" guardado. O treino deste aluno ainda NÃO foi salvo.`);
+    const textoDaFila =
+      posicao.filaId === null ? "" : ` Ele é o Treino ${posicao.numero} da fila ${campoFilaPadrao.selectedOptions[0].textContent}.`;
+    avisarPadrao(`Treino padrão "${M.limparEspacos(dados.nomePadrao)}" guardado.${textoDaFila} O treino deste aluno ainda NÃO foi salvo.`);
+    if (posicao.filaId !== null) filaDoPadrao.registrarUsado(posicao.numero);
     botaoPadrao.focus();
     return;
   }
-  avisarPadrao(textoDoErro(resposta, "O servidor não guardou o treino padrão"), true);
-  if (resposta.status === 409) campoNomePadrao.focus(); // já existe um padrão com esse nome
+  const erro = textoDoErro(resposta, "O servidor não guardou o treino padrão");
+  avisarPadrao(erro, true);
+  // 409: o nome já existe ou o número já tem treino na fila (a mensagem do servidor diz qual dos dois)
+  if (resposta.status === 409) (erro.includes("Escolha outro número") ? campoNumeroPadrao : campoNomePadrao).focus();
 }
 
 iniciarBiblioteca(document.querySelector("[data-biblioteca]"), {
@@ -957,6 +991,54 @@ async function abrirTreinoParaEditar() {
   if (problema !== null) falhaDaEdicao(problema);
 }
 
+// ------------------------------------------------------------------ treino sugerido pela fila (?fila=ID)
+
+// Põe na tela o treino padrão que o servidor devolveu (GET /api/modelos/<id>) como treino NOVO do aluno. Devolve null se
+// deu certo ou o texto do problema. Nada é salvo: o professor confere, ajusta e clica em "Salvar treino".
+function carregarTreinoDaFila(modelo) {
+  const posicao = M.posicaoDoModelo(modelo);
+  if (posicao === null) return "Este treino padrão não está em nenhuma fila.";
+  const novo = M.estadoDeImportacao(modelo);
+  if (novo === null) return "Não consegui abrir este treino (o servidor mandou um formato inesperado).";
+
+  estado = novo;
+  fichaAtual = 0;
+  selecionados.clear();
+  confirmandoExclusao = false;
+  erroDeBloco = "";
+  errosDoServidor = [];
+  campoSessoes.value = M.metaDaImportacao(modelo);
+  posicaoDaFila = posicao;
+  // nome sugerido "MULHER TREINO 3 13/10/26"; o professor pode trocar
+  campoNome.value = M.nomeDoTreinoDaFila(posicao.fila, posicao.numero, M.formatarData(new Date()));
+  nomeEditadoPeloProfessor = true;
+  textoDaEdicao =
+    `Treino ${posicao.numero} da fila ${posicao.fila}, sugerido pelo app ` +
+    `(${plural(estado.fichas.length, "ficha", "fichas")}, ${plural(M.contarExercicios(estado), "exercício", "exercícios")}). ` +
+    "Confira e ajuste o que precisar. Ao clicar em \"Salvar treino\", ele vira o treino novo do aluno " +
+    `(o atual será concluído) e o aluno passa para o Treino ${posicao.numero} da fila. Escreva o seu nome em Professor.`;
+  document.querySelector(".barra-importar").hidden = true; // "Importar treino" não combina com o treino da fila
+  areaMontagem.hidden = false;
+  mostrarProblemas = M.contarIndisponiveis(novo) > 0; // exercício que saiu da lista já aparece em vermelho
+  desenhar();
+  anunciar(`Treino ${posicao.numero} da fila ${posicao.fila} aberto.`);
+  return null;
+}
+
+async function abrirTreinoDaFila() {
+  areaMontagem.hidden = true; // só aparece quando o treino chegar
+  let resposta;
+  try {
+    resposta = await buscarJson(`/api/modelos/${encodeURIComponent(modo.modeloId)}`);
+  } catch {
+    return falhaDaEdicao("Não consegui falar com o servidor para abrir o treino da fila (sem resposta ou sem rede).");
+  }
+  if (resposta.status !== 200) return falhaDaEdicao(textoDoErro(resposta, "Não consegui abrir o treino da fila"));
+  const problema = carregarTreinoDaFila(resposta.corpo);
+  if (problema !== null) falhaDaEdicao(problema);
+}
+
 lerDadosGuardados();
 desenhar();
-if (modo) abrirTreinoParaEditar();
+if (abrindoDaFila) abrirTreinoDaFila();
+else if (modo) abrirTreinoParaEditar();

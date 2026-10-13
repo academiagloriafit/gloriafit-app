@@ -9,7 +9,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
-from app import ciclo, treinos
+from app import ciclo, filas, treinos
 from app.datas import FUSO_DA_ACADEMIA, formatar_dia, hoje  # noqa: F401 - outros módulos importam FUSO_DA_ACADEMIA daqui
 from app.exercicios import _escapar_like
 from app.texto import normalizar
@@ -237,7 +237,8 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
     """O aluno com seus treinos salvos (mais novo primeiro), ou None se não existe.
 
     Cada treino leva o andamento do ciclo (início, fim, sessões feitas, se está na hora de trocar); a ficha
-    leva `aviso_de_troca` (frase pronta, vazia se não for hora) e `tem_treino_ativo`.
+    leva `aviso_de_troca` (frase pronta, vazia se não for hora), `tem_treino_ativo` e `fila` (o cartão "Fila de treino":
+    ver `filas.fila_do_aluno`).
     """
     aluno = conn.execute(
         "SELECT id, nome, cpf, whatsapp, whatsapp_corrigido_no_app, data4u_id, situacao, provisorio"
@@ -310,6 +311,7 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
             }
         )
 
+    tem_treino_ativo = any(t["ativo"] for t in lista_de_treinos)
     return {
         "id": aluno["id"],
         "nome": aluno["nome"],
@@ -321,8 +323,11 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
         "situacao_nome": SITUACOES.get(aluno["situacao"]),
         "provisorio": bool(aluno["provisorio"]),
         "treinos": lista_de_treinos,
-        "tem_treino_ativo": any(t["ativo"] for t in lista_de_treinos),
+        "tem_treino_ativo": tem_treino_ativo,
         "aviso_de_troca": aviso_de_troca,
+        # é hora de sugerir o próximo treino da fila: o aluno não tem treino ativo (ex.: o professor clicou em
+        # "Concluído") ou o treino ativo chegou na hora de trocar
+        "fila": filas.fila_do_aluno(conn, aluno_id, hora_de_trocar=(not tem_treino_ativo) or bool(aviso_de_troca)),
     }
 
 

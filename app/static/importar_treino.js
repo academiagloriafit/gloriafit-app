@@ -1,6 +1,6 @@
 // Botão "Importar treino" da tela de lançar treino: o professor começa de um treino pronto em vez de
 // partir do zero. Duas origens (abas):
-//   - Treino padrão: os treinos guardados com "Salvar como treino padrão";
+//   - Treino padrão: os treinos guardados com "Salvar como treino padrão" (os de uma fila mostram "Mulher · Treino 3");
 //   - Treino de outro aluno: busca o aluno, escolhe um dos treinos dele.
 // O servidor só LÊ (nada é gravado para o aluno). O treino escolhido é entregue a quem chamou
 // (`aoCarregar`), que o coloca na tela de montar; o professor confere, ajusta e salva como sempre.
@@ -195,8 +195,11 @@ export function iniciarImportacao({ temTreinoNaTela, aoCarregar }) {
       .filter((parte) => typeof parte === "string" && parte)
       .join(" · ");
     const usarEsteTreino = botaoUsar(`/api/modelos/${encodeURIComponent(m.id)}`, m.nome);
+    // treino de uma fila: "Mulher · Treino 3" ao lado do nome
+    const selos = typeof m.posicao === "string" && m.posicao ? [{ classe: "selo-origem selo-fila-padrao", texto: m.posicao }] : [];
     return linhaDeLista({
       titulo: m.nome,
+      selos,
       detalhe,
       botoes: (acoes, voltar) => [
         ...usarEsteTreino(acoes, voltar),

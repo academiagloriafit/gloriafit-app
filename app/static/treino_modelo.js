@@ -23,6 +23,7 @@ export const MAXIMO_SESSOES_POR_FICHA = 999; // "Treinos por ficha": quantas vez
 export const ANO_MINIMO_DO_TREINO = 2020; // início/fim fora destes anos é erro de digitação
 export const ANO_MAXIMO_DO_TREINO = 2100;
 export const MAXIMO_FICHAS = 26; // uma letra de A a Z para cada
+export const MAXIMO_NUMERO_NA_FILA = 99; // "Treino 1" a "Treino 99" dentro de uma fila (mesma regra do servidor)
 export const MAXIMO_ITENS_POR_FICHA = 100; // trava de segurança do rascunho, não é regra da academia
 export const MINIMO_NO_BLOCO = 2;
 export const MAXIMO_NO_BLOCO = 3;
@@ -403,11 +404,22 @@ export function sugerirNomeDoTreino(estado, dataTexto) {
   } else {
     base = nomes.join(" + ");
   }
+  return nomeComData(base, dataTexto);
+}
+
+// Junta a base e a data ("07/10/26") e corta a BASE (nunca a data) para caber nas 40 letras do Data4U.
+function nomeComData(base, dataTexto) {
   const data = limparEspacos(dataTexto || "");
   const sufixo = data ? " " + data : "";
   const espaco = Math.max(0, LIMITE_NOME_TREINO - tamanho(sufixo));
   const cortada = [...base].slice(0, espaco).join("").trimEnd();
   return (cortada + sufixo).trim();
+}
+
+// Nome sugerido para o treino que o aluno recebe pela fila: "MULHER TREINO 3 13/10/26" (fila em maiúsculas, número do
+// treino na fila e a data). O professor pode trocar; o Data4U não aceita dois nomes iguais para o mesmo aluno.
+export function nomeDoTreinoDaFila(nomeDaFila, numero, dataTexto) {
+  return nomeComData(limparEspacos(`${nomeDaFila ?? ""} TREINO ${numero ?? ""}`).toUpperCase(), dataTexto);
 }
 
 // 'AAAA-MM-DD' (o que o campo de data entrega) -> o texto de volta se for uma data de verdade nos anos
@@ -473,7 +485,9 @@ export function validarDadosDoTreino({ nomeTreino, montadoPor, inicio = "", fim 
 }
 
 // O pedido completo que vai para o servidor ao salvar.
-export function montarPedido(estado, { nomeTreino, montadoPor, inicio = "", fim = "", sessoesPorFicha = "" }) {
+// `filaModeloId`: só quando o professor abriu o treino SUGERIDO pela fila (?fila=ID): vai como `fila_modelo_id` e o
+// servidor passa o aluno para esse número da fila ao salvar. Sem ele o pedido é o de sempre.
+export function montarPedido(estado, { nomeTreino, montadoPor, inicio = "", fim = "", sessoesPorFicha = "", filaModeloId = null }) {
   return {
     nome_treino: limparEspacos(nomeTreino),
     montado_por: limparEspacos(montadoPor),
@@ -481,6 +495,7 @@ export function montarPedido(estado, { nomeTreino, montadoPor, inicio = "", fim 
     fim: fim || null,
     sessoes_por_ficha: lerSessoesPorFicha(sessoesPorFicha) ?? null,
     fichas: paraEnvio(estado).fichas,
+    ...(ehInteiro(filaModeloId) ? { fila_modelo_id: filaModeloId } : {}),
   };
 }
 
@@ -532,7 +547,8 @@ export function metaDaImportacao(treino) {
 
 // A tela de montar abre em modo de edição por causa do endereço: `?editar=ID` (muda no lugar o treino ativo que o
 // professor criou no app) ou `?copiar=ID` (abre uma CÓPIA do treino, que ao salvar vira um treino novo; é o caminho
-// dos treinos que vieram do Data4U). Devolve { tipo: "editar" | "copiar", treinoId } ou null (tela de treino novo).
+// dos treinos que vieram do Data4U) ou `?fila=ID` (abre o treino padrão ID, da fila do aluno, para salvar como treino novo).
+// Devolve { tipo: "editar" | "copiar", treinoId }, { tipo: "fila", modeloId } ou null (tela de treino novo).
 // Só vale um número inteiro positivo; qualquer outra coisa no endereço é ignorada.
 export function modoDaTela(busca) {
   const parametros = new URLSearchParams(typeof busca === "string" ? busca : "");
@@ -540,6 +556,9 @@ export function modoDaTela(busca) {
     const valor = parametros.get(tipo);
     if (valor !== null && /^[1-9][0-9]{0,9}$/.test(valor)) return { tipo, treinoId: Number(valor) };
   }
+  // `?fila=ID`: abre o treino padrão ID (um treino da fila do aluno) para o professor conferir e salvar como treino novo.
+  const fila = parametros.get("fila");
+  if (fila !== null && /^[1-9][0-9]{0,9}$/.test(fila)) return { tipo: "fila", modeloId: Number(fila) };
   return null;
 }
 
@@ -573,6 +592,47 @@ export function contarExercicios(estado) {
   return estado.fichas.reduce((total, ficha) => total + ficha.itens.length, 0);
 }
 
+// ------------------------------------------------------------------ filas numeradas
+
+// Lê a fila e o número que o professor escolheu ao guardar um treino padrão (os dois vêm como texto dos campos).
+// Os dois vazios = treino padrão solto. Devolve { ok: true, filaId, numero } (ambos null se solto) ou
+// { ok: false, campo: "fila" | "numero", mensagem }.
+export function lerPosicaoNaFila({ filaId = "", numero = "" } = {}) {
+  const fila = limparEspacos(filaId ?? "");
+  const n = limparEspacos(numero ?? "");
+  if (fila === "" && n === "") return { ok: true, filaId: null, numero: null };
+  if (fila === "") return { ok: false, campo: "fila", mensagem: "Escolha a fila (ou apague o número do treino na fila)." };
+  if (!/^[1-9][0-9]{0,9}$/.test(fila)) return { ok: false, campo: "fila", mensagem: "A fila escolhida não existe." };
+  if (n === "") return { ok: false, campo: "numero", mensagem: "Digite o número do treino na fila (ou escolha \"Sem fila\")." };
+  if (!/^[0-9]{1,3}$/.test(n) || Number(n) < 1 || Number(n) > MAXIMO_NUMERO_NA_FILA) {
+    return { ok: false, campo: "numero", mensagem: `O número do treino na fila precisa ser um inteiro de 1 a ${MAXIMO_NUMERO_NA_FILA}.` };
+  }
+  return { ok: true, filaId: Number(fila), numero: Number(n) };
+}
+
+// O treino padrão que a tela de montar abriu por `?fila=ID` (GET /api/modelos/ID): precisa ser um treino que está numa
+// fila. Devolve { fila, numero } (nome da fila e número) ou null. O servidor confere de novo, ao salvar, que o aluno
+// está nessa fila.
+export function posicaoDoModelo(modelo) {
+  if (!modelo || typeof modelo !== "object") return null;
+  if (!ehInteiro(modelo.fila_id) || !ehInteiro(modelo.numero) || modelo.numero > MAXIMO_NUMERO_NA_FILA) return null;
+  if (typeof modelo.fila !== "string" || limparEspacos(modelo.fila) === "") return null;
+  return { fila: modelo.fila, numero: modelo.numero };
+}
+
+// "Mulher · Treino 3"
+export function textoDaPosicao({ fila, numero }) {
+  return `${fila} · Treino ${numero}`;
+}
+
+// Confere o nome de um professor digitado em outro lugar que não o alto da tela de montar (por exemplo, quem coloca
+// o aluno numa fila). Devolve a mensagem do problema ou null se está certo.
+export function problemaDoNomeDoProfessor(valor, mensagemSeVazio) {
+  const problemas = [];
+  conferirTexto(problemas, "professor", valor, mensagemSeVazio, "O nome do professor", LIMITE_QUEM_MONTOU, "");
+  return problemas.length ? problemas[0].mensagem : null;
+}
+
 // Confere o nome e o professor do treino padrão (a conferência das fichas é a de `validar`).
 // Cada problema: { campo: "nome-padrao" | "quem-montou", mensagem }.
 export function validarDadosDoPadrao({ nomePadrao, montadoPor }) {
@@ -583,11 +643,16 @@ export function validarDadosDoPadrao({ nomePadrao, montadoPor }) {
 }
 
 // O pedido que guarda o treino da tela como treino padrão (não grava nada para o aluno).
-export function montarPedidoDePadrao(estado, { nomePadrao, montadoPor, sessoesPorFicha = "" }) {
+// `filaId` e `numero` (opcionais, como vêm dos campos): o lugar do treino numa fila. Valores que não passam em
+// `lerPosicaoNaFila` não vão (quem chama confere antes e mostra o problema ao professor).
+export function montarPedidoDePadrao(estado, { nomePadrao, montadoPor, sessoesPorFicha = "", filaId = "", numero = "" }) {
+  const posicao = lerPosicaoNaFila({ filaId, numero });
   return {
     nome: limparEspacos(nomePadrao),
     montado_por: limparEspacos(montadoPor),
     sessoes_por_ficha: lerSessoesPorFicha(sessoesPorFicha) ?? null,
+    fila_id: posicao.ok ? posicao.filaId : null,
+    numero: posicao.ok ? posicao.numero : null,
     fichas: paraEnvio(estado).fichas,
   };
 }
