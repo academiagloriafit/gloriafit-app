@@ -1,0 +1,310 @@
+-- Banco de dados do app Glória Fit (SQLite).
+-- Versão 9 (13/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados e senha de administrador.
+-- Mudança da versão 8 para a 9 (senha de administrador): nasceram as tabelas `senha_administrador` (o hash da senha
+-- que protege adicionar e excluir treino padrão) e `senha_administrador_falha` (senhas erradas, para limitar tentativas).
+-- Bancos da versão 8 são atualizados sozinhos na subida.
+-- Mudança da versão 7 para a 8 (filas numeradas de treino): nasceram as tabelas `fila` (Homem, Mulher, Adolescente,
+-- Gestante, Grupos de risco) e `aluno_fila` (em que fila cada aluno está, em que número, e a liberação de quem precisa);
+-- o treino padrão (`modelo_treino`) ganhou `fila_id` e `numero`. Bancos da versão 7 são atualizados sozinhos na subida.
+-- Mudança da versão 6 para a 7 (treinos padrão): nasceu a tabela `modelo_treino` (treino pronto para copiar para
+-- qualquer aluno, pelo botão "Importar treino"). Bancos da versão 6 são atualizados sozinhos na subida do app.
+-- Mudança da versão 5 para a 6 (ciclo do treino): o treino ganhou `inicio`, `fim`,
+-- `concluido_em` e `sessoes_por_ficha`; só UM treino por aluno pode ficar ativo (índice
+-- `ux_treino_ativo_por_aluno`); nasceu a tabela `sessao` (cada vez que o aluno treinou uma ficha).
+-- Bancos da versão 5 são atualizados sozinhos na subida do app (ver app/db.py, função `migrar`).
+-- Mudança da versão 4 para a 5 (histórico de treinos do Data4U): o treino ganhou `origem`
+-- ('app' ou 'data4u') e `data4u_id`, e o índice de nome repetido passou a valer só para os
+-- treinos feitos no app (o histórico do Data4U tem nomes repetidos). Bancos da versão 4 são
+-- atualizados sozinhos na subida do app (ver app/db.py, função `migrar`).
+-- Mudança da versão 3 para a 4 (proteção da área do professor): entraram as tabelas
+-- codigo_de_autorizacao, dispositivo e autorizacao_falha (ver o fim do arquivo).
+-- Mudanças da versão 2 para a 3 (importação dos alunos do Data4U): o CPF do aluno
+-- pode ficar vazio (361 pessoas do Data4U não têm CPF cadastrado) e o aluno ganhou
+-- a coluna `situacao` (a letra da situação no Data4U).
+-- Mudança da versão 1 para a 2: saiu a tabela de professores. Os professores da
+-- academia mudam muito, então cada treino guarda o NOME de quem montou (digitado
+-- na hora de salvar), em treino.montado_por.
+-- Fora desta versão, de propósito: login do aluno, pendências da recepção e
+-- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
+
+PRAGMA user_version = 9;
+
+-- ---------------------------------------------------------------- exercícios
+
+-- Os 15 grupos musculares do quadro de exercícios.
+CREATE TABLE IF NOT EXISTS grupo_muscular (
+    id    INTEGER PRIMARY KEY,
+    nome  TEXT    NOT NULL UNIQUE,
+    ordem INTEGER NOT NULL UNIQUE
+);
+
+-- Um exercício da biblioteca do app.
+-- nome: sem diferença entre maiúsculas e minúsculas (só vale para letras sem acento).
+-- combinado: 1 = no Data4U já existe como um exercício só, "A + B".
+-- origem: de onde veio. 'app' = criado dentro do app, depois da importação.
+CREATE TABLE IF NOT EXISTS exercicio (
+    id               INTEGER PRIMARY KEY,
+    nome             TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    ativo            INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
+    combinado        INTEGER NOT NULL DEFAULT 0 CHECK (combinado IN (0, 1)),
+    origem           TEXT    NOT NULL CHECK (origem IN ('data4u_academia', 'data4u_catalogo', 'app')),
+    usos_ultimo_ano  INTEGER NOT NULL DEFAULT 0,
+    confianca_grupo  TEXT,
+    criado_em        TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Um exercício pode ter mais de um grupo (os combinados têm dois ou três).
+-- Exercício sem linha aqui = sem grupo ainda.
+CREATE TABLE IF NOT EXISTS exercicio_grupo (
+    exercicio_id INTEGER NOT NULL REFERENCES exercicio(id) ON DELETE CASCADE,
+    grupo_id     INTEGER NOT NULL REFERENCES grupo_muscular(id),
+    PRIMARY KEY (exercicio_id, grupo_id)
+);
+
+-- Todos os ids que o exercício tem no Data4U (o quadro juntou exercícios
+-- repetidos). Serve para devolver o treino ao Data4U. Qual deles usar na hora
+-- de gravar ainda não foi decidido.
+CREATE TABLE IF NOT EXISTS exercicio_data4u (
+    data4u_id    INTEGER PRIMARY KEY,
+    exercicio_id INTEGER NOT NULL REFERENCES exercicio(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_exercicio_data4u_exercicio ON exercicio_data4u(exercicio_id);
+
+-- ---------------------------------------------------------------------- alunos
+
+-- cpf: só os 11 dígitos, ou vazio (NULL) quando o Data4U não tem o CPF da pessoa.
+-- NÃO é único: na base do Data4U há CPFs em mais de uma pessoa. Como o login por
+-- CPF vai tratar isso ainda não foi decidido.
+-- whatsapp: só dígitos, com DDD (a base do Data4U tem números fora desse formato;
+-- esses ficam vazios).
+-- whatsapp_corrigido_no_app: 1 = a recepção corrigiu no app; a cópia diária do
+-- Data4U não pode sobrescrever.
+-- data4u_id: a MATRÍCULA do aluno (coluna ID da tabela PESSOA do Data4U; conferido
+-- pelo Thiago em 07/10/2026 com o cadastro de uma pessoa em que ID e CD_PESSOA diferem).
+-- situacao: letra do Data4U na data da cópia (A ativo, T trancado, P pendente,
+-- D desistente, I inativo, C cancelado). Vazia no aluno provisório.
+-- provisorio: 1 = aluno cadastrado no primeiro dia, ainda sem par no Data4U.
+CREATE TABLE IF NOT EXISTS aluno (
+    id                         INTEGER PRIMARY KEY,
+    nome                       TEXT    NOT NULL,
+    cpf                        TEXT
+        CHECK (cpf IS NULL OR (length(cpf) = 11 AND cpf NOT GLOB '*[^0-9]*')),
+    whatsapp                   TEXT
+        CHECK (whatsapp IS NULL OR (length(whatsapp) BETWEEN 10 AND 11 AND whatsapp NOT GLOB '*[^0-9]*')),
+    whatsapp_corrigido_no_app  INTEGER NOT NULL DEFAULT 0 CHECK (whatsapp_corrigido_no_app IN (0, 1)),
+    data4u_id                  INTEGER UNIQUE,
+    situacao                   TEXT
+        CHECK (situacao IS NULL OR situacao IN ('A', 'T', 'P', 'D', 'I', 'C')),
+    provisorio                 INTEGER NOT NULL DEFAULT 0 CHECK (provisorio IN (0, 1)),
+    criado_em                  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_aluno_cpf ON aluno(cpf);
+
+-- --------------------------------------------------------------------- treinos
+-- Mesma estrutura do Data4U: treino -> fichas (A, B, C) -> exercícios.
+
+-- nome: até 40 letras (limite de NM_TREINO no Data4U).
+-- montado_por: nome de quem montou, digitado na hora de salvar (até 60 letras).
+--   Treinos montados automaticamente (robô/Claude, no futuro) usam "Academia Glória Fit".
+--   Nos treinos do Data4U é o nome do professor registrado lá.
+-- origem: 'app' = montado aqui; 'data4u' = histórico copiado do Data4U (app/importar_treinos.py).
+--   Os 'data4u' são um espelho: cada importação apaga todos e grava de novo.
+-- data4u_id: ID_TREINO no Data4U (histórico importado; no futuro, também o treino do app
+--   depois de enviado ao Data4U). Único; vazio nos treinos que ainda não existem lá.
+-- criado_em: UTC. No histórico é o DT_LANCAMENTO do Data4U (horário de Brasília) convertido.
+-- ativo: 1 = o treino que o aluno está fazendo; 0 = inativo (concluído ou substituído), fica no
+--   histórico e o aluno não vê. Só um por aluno pode ser ativo (índice ux_treino_ativo_por_aluno).
+-- inicio, fim: dias 'AAAA-MM-DD' do calendário de Brasília. `fim` é opcional (sem fim = vazio) e,
+--   passando dele, o app avisa que está na hora de trocar o treino.
+-- concluido_em: UTC; quando o professor clicou em "Concluído" (ou o treino foi substituído por um novo).
+--   Vazio nos treinos inativados pela migração (não se sabe quando acabaram).
+-- sessoes_por_ficha: quantas vezes o aluno deve treinar CADA ficha neste ciclo (ex.: 15). Vazio = sem meta.
+-- Apagar um aluno que tem treino é recusado (não perde histórico sem querer).
+CREATE TABLE IF NOT EXISTS treino (
+    id           INTEGER PRIMARY KEY,
+    aluno_id     INTEGER NOT NULL REFERENCES aluno(id),
+    nome         TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
+    montado_por  TEXT    NOT NULL CHECK (length(montado_por) BETWEEN 1 AND 60),
+    ativo        INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
+    origem       TEXT    NOT NULL DEFAULT 'app' CHECK (origem IN ('app', 'data4u')),
+    data4u_id    INTEGER,
+    criado_em    TEXT    NOT NULL DEFAULT (datetime('now')),
+    inicio       TEXT    CHECK (inicio IS NULL OR inicio GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    fim          TEXT    CHECK (fim IS NULL OR fim GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    concluido_em TEXT,
+    sessoes_por_ficha INTEGER CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999)
+);
+CREATE INDEX IF NOT EXISTS ix_treino_aluno ON treino(aluno_id);
+-- Só um treino ativo por aluno: é a trava final da regra "um ativo por vez" (quem ativa um treino
+-- precisa inativar o outro ANTES; ver app/treinos.py e app/ciclo.py).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_ativo_por_aluno ON treino(aluno_id) WHERE ativo = 1;
+-- Um aluno não pode ter dois treinos do app com o mesmo nome (o Data4U também recusa). O índice
+-- só vale para os treinos do app: no histórico do Data4U há nomes repetidos, e o app precisa
+-- guardá-los como estão. A conferência contra TODOS os treinos do aluno (inclusive os do
+-- Data4U) está em app/treinos.py; este índice é a trava final contra dois "salvar" ao mesmo tempo.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_nome_por_aluno
+    ON treino(aluno_id, nome COLLATE NOCASE) WHERE origem = 'app';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_data4u ON treino(data4u_id);
+
+-- nome: até 15 letras (limite de NM_TREINO_FICHA no Data4U; corta sem avisar).
+-- ordem: posição da ficha dentro do treino (1 = A, 2 = B...).
+CREATE TABLE IF NOT EXISTS ficha (
+    id        INTEGER PRIMARY KEY,
+    treino_id INTEGER NOT NULL REFERENCES treino(id) ON DELETE CASCADE,
+    nome      TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 15),
+    ordem     INTEGER NOT NULL CHECK (ordem >= 1),
+    UNIQUE (treino_id, ordem)
+);
+
+-- Um exercício dentro de uma ficha.
+-- bloco: itens da mesma ficha com o mesmo número de bloco formam um bi-set
+--        (2 itens) ou tri-set (3 itens). NULL = exercício sozinho.
+-- series, repeticoes, carga: texto de até 11 caracteres (limite do Data4U).
+-- pausa: o "Intervalo", em segundos. No Data4U é um horário "hh:mm:ss" (o histórico importado é
+--        convertido). Na tela de montar o professor digita minutos e segundos (desde 08/10/2026).
+-- observacao: texto livre do Data4U (DS_PRESCRICAO_OBS); a tela de montar pede e grava (até 200 letras).
+-- Exercício já usado numa ficha não pode ser apagado: desative (ativo = 0).
+CREATE TABLE IF NOT EXISTS ficha_item (
+    id           INTEGER PRIMARY KEY,
+    ficha_id     INTEGER NOT NULL REFERENCES ficha(id) ON DELETE CASCADE,
+    ordem        INTEGER NOT NULL CHECK (ordem >= 1),
+    bloco        INTEGER CHECK (bloco IS NULL OR bloco >= 1),
+    exercicio_id INTEGER NOT NULL REFERENCES exercicio(id),
+    series       TEXT CHECK (series     IS NULL OR length(series)     <= 11),
+    repeticoes   TEXT CHECK (repeticoes IS NULL OR length(repeticoes) <= 11),
+    carga        TEXT CHECK (carga      IS NULL OR length(carga)      <= 11),
+    pausa        INTEGER CHECK (pausa IS NULL OR pausa >= 0),
+    observacao   TEXT,
+    UNIQUE (ficha_id, ordem)
+);
+CREATE INDEX IF NOT EXISTS ix_ficha_item_exercicio ON ficha_item(exercicio_id);
+
+-- Cada vez que o aluno treinou uma ficha do treino (quando o app do aluno existir, é ele quem
+-- registra). `ficha_ordem` (1 = A, 2 = B...) e não o id da ficha: a importação do Data4U
+-- apaga e recria as fichas dos treinos copiados, e a contagem não pode se perder.
+CREATE TABLE IF NOT EXISTS sessao (
+    id          INTEGER PRIMARY KEY,
+    treino_id   INTEGER NOT NULL REFERENCES treino(id) ON DELETE CASCADE,
+    ficha_ordem INTEGER NOT NULL CHECK (ficha_ordem >= 1),
+    feita_em    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_sessao_treino ON sessao(treino_id);
+
+-- ------------------------------------------------------------ filas numeradas
+-- Uma fila é uma sequência de treinos padrão numerados (Treino 1, 2, 3...) para um tipo de aluno. O app NÃO troca o
+-- treino do aluno sozinho: ele só SUGERE o próximo número da fila e o professor aprova (ver app/filas.py).
+-- exige_liberacao: 1 = o aluno só entra na fila depois que o professor registra que conferiu a liberação
+--   (atestado/triagem). Hoje: Gestante e Grupos de risco.
+-- ordem: a posição da fila nas telas.
+CREATE TABLE IF NOT EXISTS fila (
+    id              INTEGER PRIMARY KEY,
+    nome            TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
+    exige_liberacao INTEGER NOT NULL DEFAULT 0 CHECK (exige_liberacao IN (0, 1)),
+    ordem           INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_fila_nome ON fila(nome COLLATE NOCASE);
+INSERT OR IGNORE INTO fila (id, nome, exige_liberacao, ordem) VALUES
+    (1, 'Homem', 0, 1),
+    (2, 'Mulher', 0, 2),
+    (3, 'Adolescente', 0, 3),
+    (4, 'Gestante', 1, 4),
+    (5, 'Grupos de risco', 1, 5);
+
+-- A fila de cada aluno (no máximo uma). Quem coloca o aluno na fila é o professor (digita o próprio nome).
+-- numero_atual: o número do treino da fila em que o aluno está (vazio = ainda não começou a fila).
+-- definida_por, definida_em: o professor e o momento (UTC) em que o aluno foi colocado na fila.
+-- liberacao_em, liberacao_por: só nas filas que exigem liberação: o dia ('AAAA-MM-DD') em que o professor conferiu
+--   o atestado/triagem e o nome dele. É TUDO o que o app guarda: nem o atestado nem o motivo (dado de saúde).
+CREATE TABLE IF NOT EXISTS aluno_fila (
+    aluno_id      INTEGER PRIMARY KEY REFERENCES aluno(id),
+    fila_id       INTEGER NOT NULL REFERENCES fila(id),
+    numero_atual  INTEGER CHECK (numero_atual IS NULL OR numero_atual BETWEEN 1 AND 99),
+    definida_por  TEXT    NOT NULL CHECK (length(definida_por) BETWEEN 1 AND 60),
+    definida_em   TEXT    NOT NULL DEFAULT (datetime('now')),
+    liberacao_em  TEXT    CHECK (liberacao_em IS NULL OR liberacao_em GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    liberacao_por TEXT    CHECK (liberacao_por IS NULL OR length(liberacao_por) BETWEEN 1 AND 60)
+);
+
+-- ------------------------------------------------------------ treinos padrão
+-- Um treino pronto (fichas e exercícios) que o professor copia para um aluno pelo botão "Importar
+-- treino" da tela de lançar treino. Copiar NÃO liga o aluno ao padrão: depois de copiado, o treino do
+-- aluno é só dele (mexer ou apagar o padrão não muda os treinos que já foram copiados).
+-- nome: até 40 letras, como o do treino; não repete (sem diferença de maiúscula/minúscula).
+-- montado_por: o professor que montou (até 60 letras).
+-- sessoes_por_ficha: a meta "treinos por ficha" que vem junto na cópia (vazio = sem meta).
+-- conteudo: JSON {"fichas": [{"nome", "itens": [{"exercicio_id", "series", "repeticoes", "carga",
+--   "pausa" (segundos), "observacao", "bloco"}]}]}: o mesmo desenho do pedido de salvar treino, já conferido
+--   (app/modelos.py). Guarda só o id do exercício; na hora de copiar, o app confere se ele ainda está ativo.
+-- criado_em: UTC.
+-- fila_id, numero: o lugar do treino padrão numa fila numerada ("Mulher, Treino 3"); os dois vazios = treino padrão
+-- solto, sem fila. Cada número aparece uma vez por fila (índice ux_modelo_fila_numero). Não mudam depois de guardados.
+CREATE TABLE IF NOT EXISTS modelo_treino (
+    id                INTEGER PRIMARY KEY,
+    nome              TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
+    montado_por       TEXT    NOT NULL CHECK (length(montado_por) BETWEEN 1 AND 60),
+    sessoes_por_ficha INTEGER CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999),
+    conteudo          TEXT    NOT NULL,
+    criado_em         TEXT    NOT NULL DEFAULT (datetime('now')),
+    fila_id           INTEGER REFERENCES fila(id),
+    numero            INTEGER CHECK (numero IS NULL OR (numero BETWEEN 1 AND 99 AND fila_id IS NOT NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_modelo_treino_nome ON modelo_treino(nome COLLATE NOCASE);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_modelo_fila_numero ON modelo_treino(fila_id, numero) WHERE fila_id IS NOT NULL;
+
+-- ------------------------------------------------------------ acesso do professor
+-- A área do professor só abre em computadores AUTORIZADOS (hoje: o dos professores e o
+-- da recepção). Quem tem acesso ao servidor gera um código de uso único; digitado na
+-- tela /autorizar do computador, ele vira um "dispositivo" reconhecido por um cookie.
+-- Nada aqui guarda o código nem o cookie em texto: só o hash SHA-256 de cada um.
+-- Datas em UTC, no formato 'AAAA-MM-DD HH:MM:SS' (dá para comparar como texto).
+
+-- Código de uso único, válido por poucos minutos.
+-- codigo_hash: SHA-256 do código normalizado (maiúsculas, sem hífen).
+-- nome_do_dispositivo: o nome que o computador receberá ao ser autorizado.
+-- usado_em: preenchido quando o código é usado (só pode ser usado uma vez).
+CREATE TABLE IF NOT EXISTS codigo_de_autorizacao (
+    id                  INTEGER PRIMARY KEY,
+    codigo_hash         TEXT    NOT NULL UNIQUE,
+    nome_do_dispositivo TEXT    NOT NULL CHECK (length(nome_do_dispositivo) BETWEEN 1 AND 40),
+    criado_em           TEXT    NOT NULL,
+    expira_em           TEXT    NOT NULL,
+    usado_em            TEXT
+);
+
+-- Um computador autorizado.
+-- token_hash: SHA-256 do valor guardado no cookie do navegador.
+-- ultimo_uso_em: renovado, no máximo uma vez por hora, enquanto o computador é usado.
+--   Computador parado por muito tempo perde a autorização (ver app/acesso.py).
+-- revogado_em: preenchido quando alguém revoga o computador (não apagamos a linha).
+CREATE TABLE IF NOT EXISTS dispositivo (
+    id            INTEGER PRIMARY KEY,
+    nome          TEXT    NOT NULL CHECK (length(nome) BETWEEN 1 AND 40),
+    token_hash    TEXT    NOT NULL UNIQUE,
+    criado_em     TEXT    NOT NULL,
+    ultimo_uso_em TEXT    NOT NULL,
+    revogado_em   TEXT
+);
+
+-- Cada código errado digitado em /autorizar. Serve para limitar tentativas.
+CREATE TABLE IF NOT EXISTS autorizacao_falha (
+    id INTEGER PRIMARY KEY,
+    em TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_autorizacao_falha_em ON autorizacao_falha(em);
+
+-- ------------------------------------------------------------ senha de administrador
+-- Adicionar ou excluir um treino padrão só vale com a senha de administrador (ver app/administrador.py). A senha é
+-- definida no terminal do servidor: python -m app.administrador definir-senha.
+-- Uma linha só (id = 1). senha_hash: 'scrypt$N$r$p$sal$chave' (nunca a senha). definida_em: UTC.
+CREATE TABLE IF NOT EXISTS senha_administrador (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    senha_hash  TEXT    NOT NULL,
+    definida_em TEXT    NOT NULL
+);
+
+-- Cada senha de administrador errada. Serve para limitar tentativas (5 em 15 minutos).
+CREATE TABLE IF NOT EXISTS senha_administrador_falha (
+    id INTEGER PRIMARY KEY,
+    em TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_senha_administrador_falha_em ON senha_administrador_falha(em);

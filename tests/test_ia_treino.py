@@ -1,0 +1,1068 @@
+"""Treino sob medida (app/ia_treino.py): o Claude monta um rascunho, o professor confere. Dados inventados.
+
+Nenhum teste fala com a internet: a API da Anthropic é sempre trocada por uma falsa (`urlopen` ou `chamar`).
+"""
+
+import io
+import json
+import os
+import stat
+import threading
+import time
+import urllib.error
+from datetime import datetime, timedelta, timezone
+from email.message import Message
+
+import pytest
+
+from app import db, ia_treino
+from app.db import conectar, criar_tabelas
+from app.ia_treino import (
+    ChaveNaoConfigurada,
+    ErroDaIA,
+    LimiteDaIA,
+    Pedido,
+    PedidoBloqueado,
+    PedidoInvalido,
+    PedidoNaoEncontrado,
+)
+
+CHAVE = "sk-ant-chave-de-teste-0123456789abcdef"
+AGORA = datetime(2026, 10, 13, 15, 0, tzinfo=timezone.utc)  # 12:00 em Brasília
+
+
+# ------------------------------------------------------------------ banco de teste
+
+
+@pytest.fixture
+def conn():
+    c = conectar()
+    criar_tabelas(c)
+    c.execute("INSERT INTO aluno (id, nome, cpf, whatsapp) VALUES (1, 'MARIANA FERREIRA COSTA', '12345678909', '27988887777')")
+    c.execute("INSERT INTO aluno (id, nome) VALUES (2, 'BRUNO LI')")
+    yield c
+    c.close()
+
+
+def _exercicios(c):
+    """Os ids: 1..4 muito usados (1 e 2 peito, 3 costas, 4 cardio), 5 pouco usado, 6 pouco usado mas está num padrão,
+    7 desativado, 8 com o mesmo nome do 1 sem o número da máquina."""
+    c.executemany("INSERT INTO grupo_muscular (id, nome, ordem) VALUES (?, ?, ?)", [(1, "Peito", 1), (2, "Costas", 2), (3, "Cardio", 3), (4, "Tríceps", 4)])
+    c.executemany(
+        "INSERT INTO exercicio (id, nome, origem, ativo, usos_ultimo_ano) VALUES (?, ?, 'app', ?, ?)",
+        [
+            (1, "(6) SUPINO MAQUINA", 1, 400),
+            (2, "CRUCIFIXO", 1, 300),
+            (3, "REMADA BAIXA", 1, 200),
+            (4, "ESTEIRA", 1, 100),
+            (5, "EXERCICIO RARO", 1, 2),
+            (6, "EXERCICIO DO PADRAO", 1, 1),
+            (7, "EXERCICIO DESATIVADO", 0, 900),
+            (8, "SUPINO MAQUINA", 1, 50),
+        ],
+    )
+    c.executemany(
+        "INSERT INTO exercicio_grupo (exercicio_id, grupo_id) VALUES (?, ?)",
+        [(1, 1), (2, 1), (2, 4), (3, 2), (4, 3)],
+    )
+    conteudo = {
+        "fichas": [
+            {
+                "nome": "A - PEITO",
+                "itens": [
+                    {"exercicio_id": 1, "series": "3", "repeticoes": "12"},
+                    {"exercicio_id": 6, "series": "4", "repeticoes": "10"},
+                    {"exercicio_id": 4, "series": None, "repeticoes": None},
+                    {"exercicio_id": 7, "series": "3", "repeticoes": "8"},
+                ],
+            }
+        ]
+    }
+    c.execute(
+        "INSERT INTO modelo_treino (id, nome, montado_por, conteudo, fila_id, numero) VALUES (1, 'TREINO MULHER 1', 'Academia', ?, 2, 1)",
+        (json.dumps(conteudo),),
+    )
+    c.commit()
+
+
+@pytest.fixture
+def base(conn):
+    _exercicios(conn)
+    return conn
+
+
+def _pedido(**extras):
+    campos = {"objetivo": "hipertrofia", "nivel": "iniciante", "dias": 3, "minutos": 60, "observacoes": "", "fila": None}
+    campos.update(extras)
+    return Pedido(**campos)
+
+
+def _dados(**extras):
+    corpo = {"objetivo": "hipertrofia", "nivel": "iniciante", "dias": 3, "minutos": 60}
+    corpo.update(extras)
+    return corpo
+
+
+# ------------------------------------------------------------------ conferir o pedido do professor
+
+
+def test_pedido_certo_vira_um_pedido_limpo(conn):
+    pedido = ia_treino.conferir_pedido(conn, 1, _dados(observacoes="  dor   no joelho  direito "))
+
+    assert pedido == Pedido("hipertrofia", "iniciante", 3, 60, "dor no joelho direito", None)
+
+
+def test_pedido_leva_o_nome_da_fila_do_aluno_mas_so_o_nome_da_fila(conn):
+    conn.execute("INSERT INTO aluno_fila (aluno_id, fila_id, numero_atual, definida_por) VALUES (1, 2, 1, 'Ana')")
+
+    assert ia_treino.conferir_pedido(conn, 1, _dados()).fila == "Mulher"
+
+
+@pytest.mark.parametrize(
+    "mudanca",
+    [
+        {"objetivo": "virar-o-hulk"},
+        {"objetivo": None},
+        {"nivel": "mestre"},
+        {"dias": 1},
+        {"dias": 7},
+        {"dias": "3"},
+        {"dias": True},
+        {"dias": 3.0},
+        {"minutos": 50},
+        {"minutos": "60"},
+        {"observacoes": 123},
+        {"observacoes": "x" * 301},
+    ],
+)
+def test_campo_fora_da_lista_e_recusado_com_o_motivo_em_portugues(conn, mudanca):
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(**mudanca))
+
+    assert erro.value.problemas and all(isinstance(p, str) and p.endswith(".") for p in erro.value.problemas)
+
+
+def test_pedido_que_nao_e_um_objeto_e_recusado(conn):
+    for corpo in (None, [], "texto", 3):
+        with pytest.raises(PedidoInvalido):
+            ia_treino.conferir_pedido(conn, 1, corpo)
+
+
+def test_aluno_que_nao_existe(conn):
+    with pytest.raises(ia_treino.AlunoNaoEncontrado):
+        ia_treino.conferir_pedido(conn, 99, _dados())
+
+
+def test_todos_os_problemas_vem_juntos(conn):
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, {"objetivo": "x", "nivel": "y", "dias": 0, "minutos": 1})
+
+    assert len(erro.value.problemas) == 4
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["cpf 123.456.789-09", "meu zap 27 98888-7777", "123456789", "doc 12 345 678 9", "tel (27)98888-7777"],
+)
+def test_numero_de_documento_ou_telefone_nas_observacoes_e_recusado(conn, texto):
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(observacoes=texto))
+
+    assert "CPF" in erro.value.problemas[0]
+
+
+@pytest.mark.parametrize("texto", ["faz 3 series de 12", "treina ha 10 anos, 2 dias", "peso 80 kg, 1,75 m", "dor 7 de 10"])
+def test_numeros_normais_de_treino_passam(conn, texto):
+    assert ia_treino.conferir_pedido(conn, 1, _dados(observacoes=texto)).observacoes == texto
+
+
+def test_email_nas_observacoes_e_recusado(conn):
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(observacoes="manda para ana@exemplo.com"))
+
+    assert "e-mail" in erro.value.problemas[0]
+
+
+@pytest.mark.parametrize("texto", ["a Mariana tem dor", "MARIANA", "ferreira prefere maquinas", "dor, COSTA.", "mariána com acento"])
+def test_nome_do_aluno_nas_observacoes_e_recusado(conn, texto):
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(observacoes=texto))
+
+    assert "nome do aluno" in erro.value.problemas[0]
+
+
+def test_pedaco_de_nome_com_menos_de_4_letras_nao_conta(conn):
+    # o aluno 2 se chama BRUNO LI: "li" é pedaço de palavra comum ("lista", "alivio") e nunca identifica ninguém
+    assert ia_treino.conferir_pedido(conn, 2, _dados(observacoes="li sobre lista de alivio")).observacoes
+
+
+@pytest.mark.parametrize("texto", ["gestante de 3 meses", "ela está GRÁVIDA", "gravidez de risco", "gestação", "gestando"])
+def test_observacao_que_fala_de_gravidez_bloqueia_o_pedido(conn, texto):
+    with pytest.raises(PedidoBloqueado) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(observacoes=texto))
+
+    assert erro.value.motivo == "gravidez"
+    assert "Gestante" in erro.value.mensagem
+
+
+def test_palavra_parecida_com_gravidez_nao_bloqueia(conn):
+    assert ia_treino.conferir_pedido(conn, 1, _dados(observacoes="gosta de gravitacao e de pesos")).observacoes
+
+
+@pytest.mark.parametrize("fila_id", [4, 5])  # Gestante, Grupos de risco: as filas que exigem liberação
+def test_aluno_de_fila_com_liberacao_nao_recebe_rascunho(conn, fila_id):
+    conn.execute(
+        "INSERT INTO aluno_fila (aluno_id, fila_id, definida_por, liberacao_em, liberacao_por) VALUES (1, ?, 'Ana', '2026-10-01', 'Ana')",
+        (fila_id,),
+    )
+
+    with pytest.raises(PedidoBloqueado) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados())
+
+    assert erro.value.motivo == "fila_com_liberacao"
+    assert ia_treino.bloqueio_do_aluno(conn, 1) == erro.value.mensagem
+
+
+@pytest.mark.parametrize("fila_id", [1, 2, 3])  # Homem, Mulher, Adolescente
+def test_filas_comuns_recebem_rascunho(conn, fila_id):
+    conn.execute("INSERT INTO aluno_fila (aluno_id, fila_id, definida_por) VALUES (1, ?, 'Ana')", (fila_id,))
+
+    assert ia_treino.bloqueio_do_aluno(conn, 1) is None
+    assert ia_treino.conferir_pedido(conn, 1, _dados()).fila
+
+
+# ------------------------------------------------------------------ o que o Claude recebe
+
+
+def test_catalogo_so_tem_o_que_a_academia_usa(base):
+    lista = ia_treino.catalogo(base)
+
+    ids = [e["id"] for e in lista]
+    assert ids == [1, 2, 3, 4, 6]  # 5 (pouco usado) fora; 6 entra por estar num padrão; 7 (desativado) e 8 (nome repetido) fora
+    por_id = {e["id"]: e for e in lista}
+    assert por_id[1]["nome"] == "SUPINO MAQUINA"  # sem o número da máquina
+    assert por_id[2]["grupos"] == "Peito + Tríceps"
+    assert por_id[6]["grupos"] == ""
+
+
+def test_catalogo_com_padrao_estragado_segue_com_o_resto(base):
+    base.execute("INSERT INTO modelo_treino (id, nome, montado_por, conteudo) VALUES (2, 'QUEBRADO', 'x', 'isto não é json')")
+
+    assert [e["id"] for e in ia_treino.catalogo(base)] == [1, 2, 3, 4, 6]
+
+
+def test_conversa_leva_regras_exercicios_padroes_e_o_pedido(base):
+    conversa = ia_treino.montar_conversa(base, _pedido(dias=4, minutos=45, observacoes="evitar agachamento", fila="Mulher"))
+
+    assert "montar_treino" in conversa.sistema
+    assert "1 | SUPINO MAQUINA | Peito" in conversa.sistema
+    assert "EXERCICIO RARO" not in conversa.sistema
+    assert 'Mulher · Treino 1 (TREINO MULHER 1): ficha "A - PEITO": 1:3x12 6:4x10 4:-' in conversa.sistema  # o 7 (desativado) não aparece
+    assert conversa.permitidos == {1, 2, 3, 4, 6}
+    assert "por semana: 4 (então 4 fichas)" in conversa.usuario
+    assert "45 minutos" in conversa.usuario and "de 5 a 7 exercícios" in conversa.usuario
+    assert "Fila do aluno na academia: Mulher" in conversa.usuario
+    assert "evitar agachamento" in conversa.usuario
+
+
+def test_conversa_nunca_leva_quem_e_o_aluno(base):
+    conversa = ia_treino.montar_conversa(base, _pedido(observacoes="dor no ombro"))
+    tudo = conversa.sistema + conversa.usuario
+
+    for segredo in ("MARIANA", "FERREIRA", "COSTA", "12345678909", "27988887777", "Mariana"):
+        assert segredo not in tudo
+
+
+def test_conversa_sem_observacoes_e_sem_fila_diz_isso(base):
+    conversa = ia_treino.montar_conversa(base, _pedido())
+
+    assert "Observações do professor sobre o aluno: nenhuma." in conversa.usuario
+    assert "Fila do aluno" not in conversa.usuario
+
+
+def test_conversa_sem_padroes_guardados(conn):
+    _exercicios(conn)
+    conn.execute("DELETE FROM modelo_treino")
+
+    assert "ainda não guardou treinos padrão" in ia_treino.montar_conversa(conn, _pedido()).sistema
+
+
+def test_corpo_do_pedido_obriga_a_ferramenta_e_nao_manda_ajuste_proibido(base):
+    conversa = ia_treino.montar_conversa(base, _pedido())
+
+    corpo = ia_treino.corpo_do_pedido(conversa, "claude-modelo-x")
+
+    assert corpo["model"] == "claude-modelo-x"
+    assert corpo["tool_choice"] == {"type": "tool", "name": "montar_treino"}
+    assert corpo["tools"] == [ia_treino.FERRAMENTA]
+    assert corpo["messages"] == [{"role": "user", "content": conversa.usuario}]
+    assert 0 < corpo["max_tokens"] <= 8000
+    assert "temperature" not in corpo and "top_p" not in corpo  # modelos novos não aceitam
+
+
+# ------------------------------------------------------------------ falar com a API (urlopen falso)
+
+
+class _Resposta:
+    def __init__(self, corpo: bytes):
+        self._corpo = corpo
+
+    def read(self):
+        return self._corpo
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+def _erro_http(codigo, corpo, **cabecalhos):
+    h = Message()
+    for nome, valor in cabecalhos.items():
+        h[nome.replace("_", "-")] = valor
+    return urllib.error.HTTPError(ia_treino.URL_DA_API, codigo, "erro", h, io.BytesIO(json.dumps(corpo).encode()))
+
+
+def _erro_da_api(tipo, mensagem, **extras):
+    return {"type": "error", "error": {"type": tipo, "message": mensagem, **extras}, "request_id": "req_123"}
+
+
+@pytest.fixture
+def internet(monkeypatch):
+    """Troca a internet por uma fila de respostas: cada item é um dict (200), uma exceção ou um HTTPError."""
+
+    class Falsa:
+        def __init__(self):
+            self.fila = []
+            self.pedidos = []
+            self.esperas = []
+
+    falsa = Falsa()
+
+    def urlopen(requisicao, timeout=None):
+        falsa.pedidos.append((requisicao, timeout))
+        proximo = falsa.fila.pop(0)
+        if isinstance(proximo, BaseException):
+            raise proximo
+        return _Resposta(proximo if isinstance(proximo, bytes) else json.dumps(proximo).encode())
+
+    monkeypatch.setattr(ia_treino.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(ia_treino, "_dormir", falsa.esperas.append)
+    return falsa
+
+
+def test_chamada_manda_chave_versao_e_corpo_certos(internet):
+    internet.fila = [{"ok": True}]
+
+    resposta = ia_treino.chamar_claude(CHAVE, {"model": "m", "mensagem": "olá ação"})
+
+    assert resposta == {"ok": True}
+    requisicao, tempo = internet.pedidos[0]
+    assert requisicao.full_url == "https://api.anthropic.com/v1/messages"
+    assert requisicao.get_method() == "POST"
+    cabecalhos = {k.lower(): v for k, v in requisicao.header_items()}
+    assert cabecalhos["x-api-key"] == CHAVE
+    assert cabecalhos["anthropic-version"] == "2023-06-01"
+    assert cabecalhos["content-type"] == "application/json"
+    assert json.loads(requisicao.data.decode("utf-8")) == {"model": "m", "mensagem": "olá ação"}
+    assert tempo == ia_treino.TEMPO_LIMITE_DA_CHAMADA
+
+
+@pytest.mark.parametrize(
+    "erro",
+    [
+        _erro_da_api("invalid_request_error", "You have reached your specified workspace API usage limits. You will regain access on 2026-11-01"),
+        _erro_da_api("rate_limit_error", "Você atingiu o limite", details={"error_code": "enforced_spend_limit_reached"}),
+    ],
+)
+def test_limite_de_gasto_acabou_vira_aviso_claro_e_nao_se_repete(internet, erro):
+    codigo = 429 if erro["error"]["type"] == "rate_limit_error" else 400
+    internet.fila = [_erro_http(codigo, erro)]
+
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.chamar_claude(CHAVE, {})
+
+    assert "limite de gasto" in falha.value.mensagem
+    assert len(internet.pedidos) == 1 and internet.esperas == []
+
+
+def test_chave_recusada_nao_se_repete_e_nao_vaza_a_chave(internet):
+    internet.fila = [_erro_http(401, _erro_da_api("authentication_error", "invalid x-api-key"), request_id="req_9")]
+
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.chamar_claude(CHAVE, {})
+
+    assert "chave" in falha.value.mensagem
+    assert CHAVE not in falha.value.mensagem + falha.value.detalhe
+    assert "req_9" in falha.value.detalhe  # o número do pedido ajuda no suporte
+    assert len(internet.pedidos) == 1
+
+
+def test_pedido_recusado_pela_api_nao_se_repete(internet):
+    internet.fila = [_erro_http(400, _erro_da_api("invalid_request_error", "campo estranho"))]
+
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.chamar_claude(CHAVE, {})
+
+    assert "400" in falha.value.mensagem and len(internet.pedidos) == 1
+
+
+def test_servidor_ocupado_repete_e_depois_funciona(internet):
+    internet.fila = [_erro_http(529, _erro_da_api("overloaded_error", "Overloaded")), {"ok": 1}]
+
+    assert ia_treino.chamar_claude(CHAVE, {}) == {"ok": 1}
+    assert len(internet.pedidos) == 2 and len(internet.esperas) == 1
+
+
+def test_servidor_ocupado_sempre_desiste_depois_das_tentativas(internet):
+    internet.fila = [_erro_http(529, _erro_da_api("overloaded_error", "Overloaded")) for _ in range(5)]
+
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.chamar_claude(CHAVE, {})
+
+    assert "fora do ar ou ocupada" in falha.value.mensagem
+    assert len(internet.pedidos) == ia_treino.TENTATIVAS_DA_CHAMADA
+
+
+def test_pedidos_demais_com_espera_curta_espera_e_repete(internet):
+    internet.fila = [_erro_http(429, _erro_da_api("rate_limit_error", "devagar"), retry_after="5"), {"ok": 1}]
+
+    assert ia_treino.chamar_claude(CHAVE, {}) == {"ok": 1}
+    assert internet.esperas == [5.0]
+
+
+def test_pedidos_demais_com_espera_longa_ou_sem_aviso_nao_repete(internet):
+    internet.fila = [_erro_http(429, _erro_da_api("rate_limit_error", "devagar"), retry_after="300")]
+
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.chamar_claude(CHAVE, {})
+
+    assert "pedidos demais" in falha.value.mensagem and len(internet.pedidos) == 1
+
+
+def test_falha_de_rede_repete_e_depois_desiste(internet):
+    internet.fila = [urllib.error.URLError("sem rede"), TimeoutError("demorou"), ConnectionResetError("caiu")]
+
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.chamar_claude(CHAVE, {})
+
+    assert "rede ou demora" in falha.value.mensagem
+    assert len(internet.pedidos) == 3
+
+
+def test_resposta_que_nao_e_json_vira_erro_em_portugues(internet):
+    internet.fila = [b"<html>bad gateway</html>"]
+
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.chamar_claude(CHAVE, {})
+
+    assert "não entendeu" in falha.value.mensagem
+
+
+def test_erro_com_corpo_que_nao_e_json_tambem_vira_erro_em_portugues(internet):
+    h = Message()
+    internet.fila = [urllib.error.HTTPError(ia_treino.URL_DA_API, 502, "x", h, io.BytesIO(b"<html>"))] * 3
+
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.chamar_claude(CHAVE, {})
+
+    assert "fora do ar" in falha.value.mensagem
+
+
+# ------------------------------------------------------------------ ler a resposta
+
+
+def _resposta_da_api(entrada, **extras):
+    corpo = {
+        "stop_reason": "tool_use",
+        "content": [{"type": "text", "text": "ok"}, {"type": "tool_use", "id": "t1", "name": "montar_treino", "input": entrada}],
+        "usage": {"input_tokens": 9000, "output_tokens": 1500},
+    }
+    corpo.update(extras)
+    return corpo
+
+
+def test_le_o_treino_da_ferramenta_e_os_tokens():
+    lida = ia_treino.ler_resposta(_resposta_da_api({"fichas": []}))
+
+    assert lida.entrada == {"fichas": []} and (lida.tokens_entrada, lida.tokens_saida) == (9000, 1500)
+
+
+def test_tokens_estranhos_viram_zero():
+    lida = ia_treino.ler_resposta(_resposta_da_api({}, usage={"input_tokens": "muitos", "output_tokens": True}))
+
+    assert (lida.tokens_entrada, lida.tokens_saida) == (0, 0)
+
+
+@pytest.mark.parametrize(
+    "resposta, trecho",
+    [
+        (_resposta_da_api({}, stop_reason="refusal"), "não quis montar"),
+        (_resposta_da_api({}, stop_reason="max_tokens"), "cortada"),
+        ({"stop_reason": "end_turn", "content": [{"type": "text", "text": "só texto"}]}, "formato certo"),
+        ({"content": [{"type": "tool_use", "name": "outra_ferramenta", "input": {}}]}, "formato certo"),
+        ({"content": [{"type": "tool_use", "name": "montar_treino", "input": "texto"}]}, "formato certo"),
+        ({"content": None}, "formato certo"),
+        ([], "não entendeu"),
+    ],
+)
+def test_resposta_sem_treino_vira_erro_claro(resposta, trecho):
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.ler_resposta(resposta)
+
+    assert trecho in falha.value.mensagem
+
+
+# ------------------------------------------------------------------ conferir o que o Claude devolveu
+
+
+def _item(exercicio_id, series="3", repeticoes="12", **extras):
+    return {"exercicio_id": exercicio_id, "series": series, "repeticoes": repeticoes, **extras}
+
+
+def _rascunho(*fichas, **extras):
+    return {"fichas": [{"nome": nome, "itens": itens} for nome, itens in fichas], "resumo": "Divisão simples.", **extras}
+
+
+PERMITIDOS = {1, 2, 3, 4, 6}
+
+
+def test_rascunho_certo_vai_para_a_tela_sem_carga(base):
+    entrada = _rascunho(
+        ("A - PEITO", [_item(1, pausa=60, observacao="devagar"), _item(2), _item(4, series="", repeticoes="", observacao="10 min")]),
+        ("B - COSTAS", [_item(3, "4", "8 a 10")]),
+        alertas=["Joelho: o professor deve avaliar."],
+    )
+
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=2))
+
+    assert resultado["removidos"] == 0 and resultado["resumo"] == "Divisão simples."
+    assert resultado["alertas"] == ["Joelho: o professor deve avaliar."]
+    treino = resultado["treino"]
+    assert [f["nome"] for f in treino["fichas"]] == ["A - PEITO", "B - COSTAS"]
+    primeiro = treino["fichas"][0]["itens"][0]
+    assert primeiro["nome"] == "SUPINO MAQUINA" and primeiro["exercicio_id"] == 1  # sem o número da máquina
+    assert (primeiro["series"], primeiro["repeticoes"], primeiro["carga"], primeiro["pausa"], primeiro["observacao"]) == ("3", "12", "", 60, "devagar")
+    cardio = treino["fichas"][0]["itens"][2]
+    assert (cardio["series"], cardio["repeticoes"], cardio["observacao"]) == ("", "", "10 min")
+    assert treino["indisponiveis"] == 0 and treino["sessoes_por_ficha"] is None
+
+
+def test_carga_que_a_ia_mandar_e_ignorada(base):
+    entrada = _rascunho(("A", [_item(1, carga="80kg", peso="80")]))
+
+    item = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=3))["treino"]["fichas"][0]["itens"][0]
+
+    assert item["carga"] == ""
+
+
+def test_exercicio_inventado_ou_repetido_e_descartado_e_contado(base):
+    entrada = _rascunho(("A", [_item(1), _item(999), _item(1), _item(5), _item("2"), _item(None), "texto", _item(2)]))
+
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=3))
+
+    ids = [i["exercicio_id"] for i in resultado["treino"]["fichas"][0]["itens"]]
+    assert ids == [1, 2]  # 999 e 5 não estão na lista enviada; o segundo 1 é repetido; "2" e None não são inteiros
+    assert resultado["removidos"] == 6
+
+
+def test_exercicio_fora_da_lista_enviada_e_descartado_mesmo_existindo_no_banco(base):
+    # 5 existe e está ativo, mas a IA não recebeu: só pode ter sido inventado ou adivinhado
+    resultado = ia_treino.conferir_rascunho(base, _rascunho(("A", [_item(1), _item(5)])), PERMITIDOS, _pedido(dias=3))
+
+    assert [i["exercicio_id"] for i in resultado["treino"]["fichas"][0]["itens"]] == [1]
+
+
+def test_textos_sao_cortados_nos_limites_do_data4u(base):
+    entrada = _rascunho(("FICHA COM NOME MUITO MAIS LONGO QUE O LIMITE", [_item(1, "3 series cheias", "12 a 15 repeticoes", observacao="o" * 500)]))
+
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=3))
+
+    ficha = resultado["treino"]["fichas"][0]
+    assert len(ficha["nome"]) <= 15
+    item = ficha["itens"][0]
+    assert len(item["series"]) <= 11 and len(item["repeticoes"]) <= 11 and len(item["observacao"]) <= 200
+
+
+def test_quebra_de_linha_e_caractere_de_controle_no_texto_somem(base):
+    entrada = _rascunho(("A\nB", [_item(1, observacao="linha 1\nlinha 2\x00\x07")]))
+
+    ficha = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=3))["treino"]["fichas"][0]
+
+    assert ficha["nome"] == "A B" and ficha["itens"][0]["observacao"] == "linha 1 linha 2"
+
+
+@pytest.mark.parametrize("pausa, esperado", [(60, 60), ("90", 90), (0, None), (-5, None), (4000, None), (None, None), ("x", None), (True, None)])
+def test_pausa_so_vale_dentro_do_limite(base, pausa, esperado):
+    item = ia_treino.conferir_rascunho(base, _rascunho(("A", [_item(1, pausa=pausa)])), PERMITIDOS, _pedido(dias=3))["treino"]["fichas"][0]["itens"][0]
+
+    assert item["pausa"] == esperado
+
+
+def test_bi_set_certo_fica(base):
+    entrada = _rascunho(("A", [_item(1, bloco=1), _item(2, bloco=1), _item(3)]))
+
+    itens = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=3))["treino"]["fichas"][0]["itens"]
+
+    assert [i["bloco"] for i in itens] == [1, 1, None]
+
+
+def test_bi_set_errado_tira_so_os_bi_sets_e_guarda_o_resto(base):
+    entrada = _rascunho(("A", [_item(1, bloco=1), _item(2), _item(3, bloco=2)]), ("B", [_item(4)]))
+
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=2))
+
+    assert [[i["bloco"] for i in f["itens"]] for f in resultado["treino"]["fichas"]] == [[None, None, None], [None]]
+
+
+@pytest.mark.parametrize(
+    "entrada",
+    [
+        {},
+        {"fichas": "texto"},
+        {"fichas": []},
+        {"fichas": [{"nome": "A", "itens": []}]},
+        {"fichas": [{"nome": "", "itens": [_item(1)]}]},
+        {"fichas": [{"itens": [_item(1)]}]},
+        {"fichas": [{"nome": "A", "itens": [_item(999)]}]},
+        {"fichas": ["texto", None, 3]},
+    ],
+)
+def test_resposta_sem_treino_aproveitavel_vira_erro(base, entrada):
+    with pytest.raises(ErroDaIA) as falha:
+        ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=3))
+
+    assert "Tente de novo" in falha.value.mensagem
+
+
+def test_ficha_sem_exercicio_valido_some_mas_as_outras_ficam(base):
+    entrada = _rascunho(("A", [_item(999)]), ("B", [_item(1)]))
+
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=2))
+
+    assert [f["nome"] for f in resultado["treino"]["fichas"]] == ["B"]
+    assert any("2 dias" in a and "1 fichas" in a for a in resultado["alertas"])  # quem pediu 2 dias vê que veio 1 ficha
+
+
+def test_quantidade_de_fichas_diferente_do_pedido_vira_alerta(base):
+    resultado = ia_treino.conferir_rascunho(base, _rascunho(("A", [_item(1)])), PERMITIDOS, _pedido(dias=4))
+
+    assert resultado["alertas"] == ["Você pediu 4 dias por semana e o rascunho veio com 1 fichas: confira."]
+
+
+def test_alertas_viram_no_maximo_5_textos_curtos(base):
+    entrada = _rascunho(("A", [_item(1)]), alertas=["a" * 300, "", 5, None, "b", "c", "d", "e", "f"])
+
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=1))
+
+    assert len(resultado["alertas"]) == 5 and len(resultado["alertas"][0]) == 200
+
+
+def test_resumo_estranho_vira_vazio(base):
+    entrada = _rascunho(("A", [_item(1)]))
+    entrada["resumo"] = {"x": 1}
+
+    assert ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=1))["resumo"] == ""
+
+
+def test_exercicio_desativado_depois_de_enviado_derruba_o_treino(base):
+    # a lista foi montada, o exercício foi desativado antes de a resposta chegar: a conferência de verdade pega
+    base.execute("UPDATE exercicio SET ativo = 0 WHERE id = 1")
+
+    with pytest.raises(ErroDaIA):
+        ia_treino.conferir_rascunho(base, _rascunho(("A", [_item(1)])), PERMITIDOS, _pedido(dias=1))
+
+
+# ------------------------------------------------------------------ a chave da API
+
+
+def test_chave_com_cara_de_chave():
+    assert ia_treino.validar_chave("  " + CHAVE + "\n") == CHAVE
+
+
+@pytest.mark.parametrize("texto", ["", "curta", "x" * 301, CHAVE + " com espaço", "chave-com-acento-ação-0123456789", CHAVE + "\nsegunda linha", None, 5])
+def test_chave_que_nao_serve_e_recusada(texto):
+    with pytest.raises(ValueError):
+        ia_treino.validar_chave(texto)
+
+
+def test_guardar_e_ler_a_chave_com_permissao_so_do_dono(tmp_path):
+    arquivo = tmp_path / "ia_chave"
+
+    ia_treino.guardar_chave(arquivo, CHAVE)
+
+    assert ia_treino.ler_chave(arquivo) == CHAVE
+    assert stat.S_IMODE(os.stat(arquivo).st_mode) == 0o600
+    assert not list(tmp_path.glob("*.novo"))  # o arquivo temporário não fica para trás
+
+
+def test_trocar_a_chave_substitui_a_antiga(tmp_path):
+    arquivo = tmp_path / "ia_chave"
+    ia_treino.guardar_chave(arquivo, CHAVE)
+
+    ia_treino.guardar_chave(arquivo, CHAVE + "-nova")
+
+    assert ia_treino.ler_chave(arquivo) == CHAVE + "-nova"
+
+
+def test_chave_ausente_ou_estragada_nao_esta_configurada(tmp_path):
+    arquivo = tmp_path / "ia_chave"
+    assert not ia_treino.chave_configurada(arquivo)
+    with pytest.raises(ChaveNaoConfigurada):
+        ia_treino.ler_chave(arquivo)
+    arquivo.write_text("isto não é uma chave!", encoding="utf-8")
+    assert not ia_treino.chave_configurada(arquivo)
+    arquivo.write_bytes(b"\xff\xfe\x00")
+    assert not ia_treino.chave_configurada(arquivo)
+
+
+def test_arquivo_da_chave_fica_ao_lado_do_banco_ou_onde_a_variavel_mandar(tmp_path, monkeypatch):
+    monkeypatch.delenv(ia_treino.VARIAVEL_DO_ARQUIVO_DA_CHAVE, raising=False)
+    assert ia_treino.caminho_da_chave(tmp_path / "dados" / "app.db") == tmp_path / "dados" / "ia_chave"
+    monkeypatch.setenv(ia_treino.VARIAVEL_DO_ARQUIVO_DA_CHAVE, str(tmp_path / "outra"))
+    assert ia_treino.caminho_da_chave(tmp_path / "dados" / "app.db") == tmp_path / "outra"
+
+
+def test_modelo_padrao_e_troca_so_por_nome_de_modelo(monkeypatch):
+    monkeypatch.delenv(ia_treino.VARIAVEL_DO_MODELO, raising=False)
+    assert ia_treino.modelo_em_uso() == ia_treino.MODELO_PADRAO
+    monkeypatch.setenv(ia_treino.VARIAVEL_DO_MODELO, "claude-haiku-4-5-20251001")
+    assert ia_treino.modelo_em_uso() == "claude-haiku-4-5-20251001"
+    monkeypatch.setenv(ia_treino.VARIAVEL_DO_MODELO, "gpt-quatro; rm -rf /")
+    assert ia_treino.modelo_em_uso() == ia_treino.MODELO_PADRAO
+
+
+# ------------------------------------------------------------------ pedidos: criar, executar, consultar
+
+
+@pytest.fixture
+def servidor(tmp_path):
+    """Um banco em arquivo (os pedidos abrem as próprias conexões), com exercícios e a chave guardada ao lado."""
+    caminho = tmp_path / "app.db"
+    c = conectar(caminho)
+    criar_tabelas(c)
+    c.execute("INSERT INTO aluno (id, nome, cpf) VALUES (1, 'MARIANA FERREIRA COSTA', '12345678909')")
+    c.execute("INSERT INTO aluno (id, nome) VALUES (2, 'BRUNO LIMA')")
+    _exercicios(c)
+    c.close()
+    ia_treino.guardar_chave(tmp_path / "ia_chave", CHAVE)
+    return caminho
+
+
+class IAFalsa:
+    """Uma `chamar` falsa: devolve a resposta combinada, ou levanta o erro combinado, e guarda o que recebeu."""
+
+    def __init__(self, devolve=None, levanta=None):
+        self.devolve = devolve if devolve is not None else _resposta_da_api(_rascunho(("A - PEITO", [_item(1), _item(2)]), ("B - COSTAS", [_item(3)])))
+        self.levanta = levanta
+        self.recebidos = []
+
+    def __call__(self, chave, corpo, *_args, **_kw):
+        self.recebidos.append((chave, corpo))
+        if self.levanta:
+            raise self.levanta
+        return self.devolve
+
+
+def _pedir(servidor, ia, aluno_id=1, pedido=None, **extras):
+    return ia_treino.criar_pedido(servidor, aluno_id, pedido or _pedido(dias=2), chamar=ia, em_segundo_plano=False, agora=AGORA, **extras)
+
+
+def _consultar(servidor, pedido_id, aluno_id=1, agora=AGORA):
+    c = conectar(servidor)
+    try:
+        return ia_treino.consultar_pedido(c, aluno_id, pedido_id, agora)
+    finally:
+        c.close()
+
+
+def _linhas(servidor, sql, *args):
+    c = conectar(servidor)
+    try:
+        return [tuple(r) for r in c.execute(sql, args)]
+    finally:
+        c.close()
+
+
+def test_pedido_que_da_certo_guarda_o_rascunho_e_os_tokens(servidor):
+    ia = IAFalsa()
+
+    pedido_id = _pedir(servidor, ia)
+
+    resultado = _consultar(servidor, pedido_id)
+    assert resultado["situacao"] == "pronto"
+    assert [f["nome"] for f in resultado["treino"]["fichas"]] == ["A - PEITO", "B - COSTAS"]
+    assert resultado["alertas"] == [] and resultado["removidos"] == 0
+    assert _linhas(servidor, "SELECT situacao, tokens_entrada, tokens_saida, dia, modelo FROM ia_pedido") == [
+        ("pronto", 9000, 1500, "2026-10-13", ia_treino.MODELO_PADRAO)
+    ]
+
+
+def test_a_ia_recebe_a_chave_e_so_a_conversa_da_academia(servidor):
+    ia = IAFalsa()
+
+    _pedir(servidor, ia, pedido=_pedido(dias=2, observacoes="evitar impacto", fila="Mulher"))
+
+    chave, corpo = ia.recebidos[0]
+    assert chave == CHAVE
+    tudo = json.dumps(corpo, ensure_ascii=False)
+    assert "evitar impacto" in tudo and "tool_choice" in tudo
+    for segredo in ("MARIANA", "FERREIRA", "12345678909", CHAVE):
+        assert segredo not in tudo
+
+
+def test_o_que_o_professor_escreveu_nas_observacoes_nao_fica_no_banco(servidor):
+    _pedir(servidor, IAFalsa(), pedido=_pedido(dias=2, observacoes="TEXTO-SECRETO-DE-SAUDE joelho operado"))
+
+    c = conectar(servidor)
+    try:
+        tudo = "\n".join(c.iterdump())
+    finally:
+        c.close()
+    assert "TEXTO-SECRETO-DE-SAUDE" not in tudo and "joelho operado" not in tudo
+
+
+def test_falha_da_ia_vira_erro_em_portugues_e_nao_gasta_o_dia(servidor):
+    ia = IAFalsa(levanta=ErroDaIA("A IA está fora do ar ou ocupada agora.", "HTTP 529"))
+
+    pedido_id = _pedir(servidor, ia)
+
+    assert _consultar(servidor, pedido_id) == {"situacao": "erro", "erro": "A IA está fora do ar ou ocupada agora."}
+    c = conectar(servidor)
+    try:
+        assert ia_treino.pedidos_de_hoje(c, AGORA) == 0  # nada foi gasto: não conta para o limite do dia
+    finally:
+        c.close()
+
+
+def test_resposta_que_nao_passa_na_conferencia_conta_no_dia_porque_custou(servidor):
+    ia = IAFalsa(devolve=_resposta_da_api({"fichas": [{"nome": "A", "itens": [_item(999)]}], "resumo": ""}))
+
+    pedido_id = _pedir(servidor, ia)
+
+    assert _consultar(servidor, pedido_id)["situacao"] == "erro"
+    c = conectar(servidor)
+    try:
+        assert ia_treino.pedidos_de_hoje(c, AGORA) == 1
+    finally:
+        c.close()
+
+
+def test_erro_inesperado_nosso_nunca_deixa_o_pedido_andando(servidor):
+    pedido_id = _pedir(servidor, IAFalsa(levanta=RuntimeError("bug")))
+
+    resultado = _consultar(servidor, pedido_id)
+
+    assert resultado["situacao"] == "erro" and "inesperado" in resultado["erro"]
+
+
+def test_sem_chave_nao_registra_pedido_nenhum(servidor):
+    (servidor.parent / "ia_chave").unlink()
+
+    with pytest.raises(ChaveNaoConfigurada):
+        _pedir(servidor, IAFalsa())
+
+    assert _linhas(servidor, "SELECT COUNT(*) FROM ia_pedido") == [(0,)]
+
+
+def test_limite_de_pedidos_por_dia(servidor):
+    for _ in range(ia_treino.LIMITE_DE_PEDIDOS_POR_DIA):
+        _pedir(servidor, IAFalsa())
+
+    with pytest.raises(LimiteDaIA) as erro:
+        _pedir(servidor, IAFalsa())
+
+    assert str(ia_treino.LIMITE_DE_PEDIDOS_POR_DIA) in erro.value.mensagem
+    # no dia seguinte (Brasília) o contador recomeça
+    ia_treino.criar_pedido(servidor, 1, _pedido(dias=2), chamar=IAFalsa(), em_segundo_plano=False, agora=AGORA + timedelta(days=1))
+
+
+def test_limite_do_dia_respeita_o_dia_de_brasilia_e_nao_o_do_utc(servidor):
+    # 01:30 UTC de 14/10 ainda é 22:30 de 13/10 em Brasília: é o mesmo dia do pedido das 12:00 de 13/10
+    tarde = datetime(2026, 10, 14, 1, 30, tzinfo=timezone.utc)
+    for _ in range(ia_treino.LIMITE_DE_PEDIDOS_POR_DIA):
+        _pedir(servidor, IAFalsa())
+
+    with pytest.raises(LimiteDaIA):
+        ia_treino.criar_pedido(servidor, 1, _pedido(dias=2), chamar=IAFalsa(), em_segundo_plano=False, agora=tarde)
+
+
+def _andando(servidor, quantos, criado_em="2026-10-13 14:59:00"):
+    c = conectar(servidor)
+    for _ in range(quantos):
+        c.execute("INSERT INTO ia_pedido (aluno_id, criado_em, dia, situacao, modelo) VALUES (1, ?, '2026-10-13', 'andando', 'm')", (criado_em,))
+    c.commit()
+    c.close()
+
+
+def test_limite_de_pedidos_ao_mesmo_tempo(servidor):
+    _andando(servidor, ia_treino.LIMITE_DE_PEDIDOS_AO_MESMO_TEMPO)
+
+    with pytest.raises(LimiteDaIA) as erro:
+        _pedir(servidor, IAFalsa())
+
+    assert "montando outros treinos" in erro.value.mensagem
+
+
+def test_pedido_travado_ha_muito_tempo_vira_erro_e_libera_o_botao(servidor):
+    _andando(servidor, ia_treino.LIMITE_DE_PEDIDOS_AO_MESMO_TEMPO, criado_em="2026-10-13 14:50:00")  # 10 min atrás
+
+    pedido_id = _pedir(servidor, IAFalsa())  # não levanta: os travados viraram erro
+
+    assert _consultar(servidor, pedido_id)["situacao"] == "pronto"
+    assert _linhas(servidor, "SELECT COUNT(*) FROM ia_pedido WHERE situacao = 'erro' AND erro LIKE '%demorou demais%'") == [(2,)]
+
+
+def test_consultar_pedido_andando(servidor):
+    _andando(servidor, 1)
+
+    assert _consultar(servidor, 1) == {"situacao": "andando"}
+
+
+def test_consultar_pedido_andando_passou_de_4_minutos_vira_erro(servidor):
+    _andando(servidor, 1, criado_em="2026-10-13 14:50:00")
+
+    resultado = _consultar(servidor, 1)
+
+    assert resultado["situacao"] == "erro" and "demorou demais" in resultado["erro"]
+
+
+def test_um_aluno_nao_le_o_rascunho_de_outro(servidor):
+    pedido_id = _pedir(servidor, IAFalsa(), aluno_id=1)
+
+    with pytest.raises(PedidoNaoEncontrado):
+        _consultar(servidor, pedido_id, aluno_id=2)
+    with pytest.raises(PedidoNaoEncontrado):
+        _consultar(servidor, 999)
+
+
+def test_resultado_antigo_e_apagado_mas_a_contagem_fica(servidor):
+    pedido_id = _pedir(servidor, IAFalsa())
+    quatro_dias_depois = AGORA + timedelta(days=4)
+
+    c = conectar(servidor)
+    try:
+        ia_treino.limpar_pedidos_antigos(c, quatro_dias_depois)
+        resultado = ia_treino.consultar_pedido(c, 1, pedido_id, quatro_dias_depois)
+    finally:
+        c.close()
+
+    assert resultado["situacao"] == "erro" and "apagado" in resultado["erro"]
+    assert _linhas(servidor, "SELECT COUNT(*), SUM(tokens_entrada) FROM ia_pedido") == [(1, 9000)]  # a linha (o gasto) continua
+
+
+def test_em_segundo_plano_a_resposta_chega_pelo_fio(servidor):
+    liberar = threading.Event()
+
+    def devagar(chave, corpo):
+        liberar.wait(5)
+        return IAFalsa().devolve
+
+    pedido_id = ia_treino.criar_pedido(servidor, 1, _pedido(dias=2), chamar=devagar, em_segundo_plano=True, agora=datetime.now(timezone.utc))
+    agora = datetime.now(timezone.utc)
+
+    assert _consultar(servidor, pedido_id, agora=agora) == {"situacao": "andando"}  # voltou na hora, sem esperar a IA
+    liberar.set()
+    for _ in range(100):
+        if _consultar(servidor, pedido_id, agora=datetime.now(timezone.utc))["situacao"] == "pronto":
+            break
+        time.sleep(0.05)
+    assert _consultar(servidor, pedido_id, agora=datetime.now(timezone.utc))["situacao"] == "pronto"
+
+
+def test_situacao_para_a_tela(servidor):
+    c = conectar(servidor)
+    try:
+        assert ia_treino.situacao_para_tela(c, 1, servidor) == {"configurada": True, "bloqueio": None}
+        c.execute("INSERT INTO aluno_fila (aluno_id, fila_id, definida_por) VALUES (1, 4, 'Ana')")
+        assert "Gestante" in ia_treino.situacao_para_tela(c, 1, servidor)["bloqueio"]
+        (servidor.parent / "ia_chave").unlink()
+        assert ia_treino.situacao_para_tela(c, 2, servidor) == {"configurada": False, "bloqueio": None}
+    finally:
+        c.close()
+
+
+# ------------------------------------------------------------------ terminal do servidor
+
+
+def _rodar(servidor, *comando):
+    return ia_treino.principal([*comando, "--banco", str(servidor)])
+
+
+def test_comando_definir_chave_guarda_sem_mostrar_a_chave(servidor, monkeypatch, capsys):
+    (servidor.parent / "ia_chave").unlink()
+    monkeypatch.setattr(ia_treino.getpass, "getpass", lambda *_a, **_k: "  " + CHAVE + "  ")
+
+    assert _rodar(servidor, "definir-chave") == 0
+
+    assert ia_treino.ler_chave(servidor.parent / "ia_chave") == CHAVE
+    saida = capsys.readouterr().out
+    assert CHAVE not in saida and "guardada" in saida
+
+
+def test_comando_definir_chave_recusa_chave_estranha_e_nao_altera_nada(servidor, monkeypatch, capsys):
+    monkeypatch.setattr(ia_treino.getpass, "getpass", lambda *_a, **_k: "isto não é uma chave")
+
+    assert _rodar(servidor, "definir-chave") == 1
+
+    assert ia_treino.ler_chave(servidor.parent / "ia_chave") == CHAVE  # a chave antiga continua
+    assert "Nada foi alterado" in capsys.readouterr().out
+
+
+def test_comando_situacao_conta_pedidos_sem_mostrar_a_chave(servidor, capsys):
+    _pedir(servidor, IAFalsa())
+
+    assert _rodar(servidor, "situacao") == 0
+
+    saida = capsys.readouterr().out
+    assert CHAVE not in saida and "guardada" in saida
+    assert "Pedidos hoje:" in saida and "Neste mês:" in saida
+
+
+def test_comando_situacao_sem_chave(servidor, capsys):
+    (servidor.parent / "ia_chave").unlink()
+
+    assert _rodar(servidor, "situacao") == 0
+
+    assert "NÃO configurada" in capsys.readouterr().out
+
+
+def test_comando_testar_com_chave_que_funciona(servidor, monkeypatch, capsys):
+    visto = {}
+
+    def falsa(chave, corpo, tempo_limite=0):
+        visto["chave"], visto["corpo"] = chave, corpo
+        return {"model": "claude-x", "content": [{"type": "text", "text": "ok"}]}
+
+    monkeypatch.setattr(ia_treino, "chamar_claude", falsa)
+
+    assert _rodar(servidor, "testar") == 0
+
+    assert visto["chave"] == CHAVE and visto["corpo"]["max_tokens"] <= 50  # uma chamada mínima: centavos nunca
+    saida = capsys.readouterr().out
+    assert "Funcionou" in saida and CHAVE not in saida
+
+
+def test_comando_testar_mostra_o_motivo_da_falha(servidor, monkeypatch, capsys):
+    def falsa(chave, corpo, tempo_limite=0):
+        raise ErroDaIA("O servidor não conseguiu entrar na IA.", "HTTP 401")
+
+    monkeypatch.setattr(ia_treino, "chamar_claude", falsa)
+
+    assert _rodar(servidor, "testar") == 1
+
+    saida = capsys.readouterr().out
+    assert "FALHOU" in saida and "HTTP 401" in saida and CHAVE not in saida
+
+
+def test_comando_testar_sem_chave(servidor, capsys):
+    (servidor.parent / "ia_chave").unlink()
+
+    assert _rodar(servidor, "testar") == 1
+
+    assert "definir-chave" in capsys.readouterr().out
+
+
+def test_o_modulo_confere_o_banco_da_versao_certa():
+    assert db.VERSAO_DO_BANCO >= 10  # a tabela ia_pedido nasce na versão 10

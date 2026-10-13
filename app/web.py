@@ -23,13 +23,13 @@ from app import (
     db,
     exercicios,
     filas,
+    ia_treino,
     importar_alunos,
     importar_treinos,
     modelos,
     provisorios,
     treinos,
 )
-
 
 # Um treino enorme (26 fichas x 100 exercícios) tem poucas dezenas de KB. Acima disto o
 # pedido é recusado antes de ser lido inteiro: ninguém precisa mandar megabytes para salvar.
@@ -126,6 +126,10 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     # ainda não existe) = o cupom não fala do app. Defina GLORIAFIT_ENDERECO_DO_APP quando existir.
     app.config["ENDERECO_DO_APP"] = os.environ.get("GLORIAFIT_ENDERECO_DO_APP", "").strip() or None
     app.json.ensure_ascii = False  # acentos legíveis no JSON
+    # Treino sob medida (IA): quem fala com a API da Anthropic e se o trabalho roda em segundo plano. Os testes trocam os dois
+    # (API falsa, sem fio) para nunca chamar a API de verdade.
+    app.config["IA_CHAMADA"] = ia_treino.chamar_claude
+    app.config["IA_EM_SEGUNDO_PLANO"] = True
 
     def conexao():
         # Uma conexão por pedido: o SQLite não deve ser compartilhado entre
@@ -361,6 +365,12 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             grupos=exercicios.listar_grupos(conn),
             total_exercicios=exercicios.contar_exercicios(conn),
             filas=filas.listar_filas(conn),  # o seletor "Fila" do "Salvar como treino padrão"
+            ia=ia_treino.situacao_para_tela(conn, aluno_id, app.config["CAMINHO_BANCO"]),  # o cartão "Treino sob medida"
+            ia_objetivos=ia_treino.ROTULOS_DOS_OBJETIVOS,
+            ia_niveis=ia_treino.ROTULOS_DOS_NIVEIS,
+            ia_dias=range(ia_treino.MINIMO_DE_DIAS, ia_treino.MAXIMO_DE_DIAS + 1),
+            ia_minutos=list(ia_treino.EXERCICIOS_POR_FICHA),
+            ia_limite_das_observacoes=ia_treino.LIMITE_DAS_OBSERVACOES,
         )
 
     @app.get("/alunos")
@@ -646,5 +656,48 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         except alunos.WhatsappInvalido as erro:
             return jsonify(erro=str(erro)), 400
         return jsonify(whatsapp=formatado)
+
+    # ------------------------------------------------- treino sob medida (IA) (ver app/ia_treino.py)
+
+    @app.post("/api/alunos/<int:aluno_id>/treino-ia")
+    def api_pedir_treino_ia(aluno_id: int):
+        """O professor pede um RASCUNHO de treino ao Claude. Nada é salvo para o aluno.
+
+        Corpo: {"objetivo", "nivel", "dias", "minutos", "observacoes" (opcional)}.
+        202 {"pedido_id"} (a resposta demora: a tela pergunta de tempos em tempos em GET .../treino-ia/<pedido_id>);
+        400 {"erros"}; 404 aluno inexistente; 409 {"erro", "bloqueio"} (aluno de fila com liberação, ou gravidez nas
+        observações); 429 {"erro"} (pedidos demais); 503 {"erro", "configurada": false} (o servidor ainda não tem a chave).
+        """
+        dados = corpo_json()
+        conn = conexao()
+        try:
+            pedido = ia_treino.conferir_pedido(conn, aluno_id, dados)
+            pedido_id = ia_treino.criar_pedido(
+                app.config["CAMINHO_BANCO"],
+                aluno_id,
+                pedido,
+                chamar=app.config["IA_CHAMADA"],
+                em_segundo_plano=app.config["IA_EM_SEGUNDO_PLANO"],
+            )
+        except ia_treino.AlunoNaoEncontrado:
+            return jsonify(erro="Aluno não encontrado."), 404
+        except ia_treino.PedidoInvalido as erro:
+            return jsonify(erros=erro.problemas), 400
+        except ia_treino.PedidoBloqueado as erro:
+            return jsonify(erro=erro.mensagem, bloqueio=erro.motivo), 409
+        except ia_treino.ChaveNaoConfigurada:
+            return jsonify(erro="O treino sob medida ainda não está ligado neste servidor (falta a chave da IA). Avise o Thiago.", configurada=False), 503
+        except ia_treino.LimiteDaIA as erro:
+            return jsonify(erro=erro.mensagem), 429
+        return jsonify(pedido_id=pedido_id), 202
+
+    @app.get("/api/alunos/<int:aluno_id>/treino-ia/<int:pedido_id>")
+    def api_ver_treino_ia(aluno_id: int, pedido_id: int):
+        """Como está o pedido de rascunho. {"situacao": "andando"} | {"situacao": "pronto", "treino", "resumo", "alertas",
+        "removidos"} | {"situacao": "erro", "erro"}. 404 se o pedido não existe ou é de outro aluno."""
+        try:
+            return jsonify(ia_treino.consultar_pedido(conexao(), aluno_id, pedido_id))
+        except ia_treino.PedidoNaoEncontrado:
+            return jsonify(erro="Pedido não encontrado."), 404
 
     return app

@@ -8,6 +8,8 @@ import { el } from "./dom.js";
 import { ligarSeletorDeFila } from "./fila_padrao.js";
 import { iniciarImportacao } from "./importar_treino.js";
 import { iniciarSalvar } from "./salvar.js";
+import { iniciarTreinoIa } from "./treino_ia.js";
+import { avisoDoRascunho } from "./treino_ia_modelo.js";
 import * as M from "./treino_modelo.js";
 
 const raiz = document.querySelector("[data-aluno]");
@@ -62,6 +64,7 @@ let nomeEditadoPeloProfessor = false; // se sim, não trocamos o nome por outra 
 let erroDeBloco = "";
 let origemImportada = null; // de onde veio o treino copiado por "Importar treino" ou por "Editar treino" de um do Data4U (ou null)
 let textoDaEdicao = null; // a faixa de aviso de quem está editando um treino no lugar (ou null)
+let rascunhoIa = null; // { resumo, alertas, removidos } do rascunho que o "Treino sob medida" (IA) colocou na tela (ou null)
 let posicaoDaFila = null; // { fila, numero } do treino aberto por "?fila=ID" (ou null)
 let editandoUmaCopia = false; // "?copiar=": ao salvar vira treino novo e o atual é concluído
 let focoPendente = null; // onde devolver o foco depois de redesenhar
@@ -639,6 +642,7 @@ const salvar = iniciarSalvar({
   aoSalvar: () => {
     origemImportada = null;
     textoDaEdicao = null;
+    rascunhoIa = null;
     apagarRascunho();
   },
   aoTravar: (travado) => {
@@ -745,11 +749,13 @@ const plural = (n, singular, pluralTexto) => `${n} ${n === 1 ? singular : plural
 // A faixa verde (ou laranja, se falta trocar exercício) que lembra de onde veio o treino. Fica certa mesmo depois
 // que o professor remove os exercícios marcados.
 function atualizarAvisoImportado() {
-  elAvisoImportado.hidden = origemImportada === null && textoDaEdicao === null;
+  elAvisoImportado.hidden = origemImportada === null && textoDaEdicao === null && rascunhoIa === null;
   if (elAvisoImportado.hidden) return;
   const fora = M.contarIndisponiveis(estado);
+  const faixaIa = rascunhoIa !== null && textoDaEdicao === null ? avisoDoRascunho({ treino: estado, ...rascunhoIa }) : null;
   let texto =
     textoDaEdicao ??
+    faixaIa?.texto ??
     `Treino copiado de "${origemImportada}" (${plural(estado.fichas.length, "ficha", "fichas")}, ` +
       `${plural(M.contarExercicios(estado), "exercício", "exercícios")}). Confira tudo e ajuste antes de salvar.` +
       (editandoUmaCopia ? " Ao salvar, ele vira um treino NOVO deste aluno e o treino atual é concluído." : "");
@@ -760,7 +766,7 @@ function atualizarAvisoImportado() {
         : ` ${fora} exercícios saíram da lista de exercícios e estão em vermelho: remova-os e escolha outros.`;
   }
   elAvisoImportado.textContent = texto;
-  elAvisoImportado.classList.toggle("aviso-importado-atencao", fora > 0);
+  elAvisoImportado.classList.toggle("aviso-importado-atencao", fora > 0 || faixaIa?.atencao === true);
 }
 
 // Põe na tela o treino que "Importar treino" buscou. Devolve null se deu certo ou o texto do problema.
@@ -775,6 +781,7 @@ function carregarTreinoImportado(treino, origem) {
   errosDoServidor = [];
   campoSessoes.value = M.metaDaImportacao(treino);
   origemImportada = origem;
+  rascunhoIa = null;
   // com exercício fora da lista, a conferência já aparece: o professor vê o que falta trocar
   mostrarProblemas = M.contarIndisponiveis(novo) > 0;
   guardarRascunho();
@@ -787,6 +794,34 @@ function carregarTreinoImportado(treino, origem) {
 iniciarImportacao({
   temTreinoNaTela: () => M.contarExercicios(estado) > 0,
   aoCarregar: carregarTreinoImportado,
+});
+
+// Põe na tela o rascunho que o "Treino sob medida" (IA) montou. Devolve null se deu certo ou o texto do problema.
+// Nada é gravado: o professor confere, ajusta e salva como qualquer outro treino.
+function carregarRascunhoDaIa(resultado) {
+  const novo = M.estadoDeImportacao(resultado.treino);
+  if (novo === null) return "Não consegui abrir o rascunho (o servidor mandou um formato inesperado). Nada foi alterado.";
+  estado = novo;
+  fichaAtual = 0;
+  selecionados.clear();
+  confirmandoExclusao = false;
+  erroDeBloco = "";
+  errosDoServidor = [];
+  campoSessoes.value = "";
+  origemImportada = null;
+  rascunhoIa = { resumo: resultado.resumo, alertas: resultado.alertas, removidos: resultado.removidos };
+  mostrarProblemas = M.contarIndisponiveis(novo) > 0;
+  guardarRascunho();
+  desenhar();
+  anunciar("Rascunho da IA colocado na tela. Confira tudo antes de salvar.");
+  elAvisoImportado.scrollIntoView({ block: "nearest" });
+  return null;
+}
+
+iniciarTreinoIa({
+  alunoId: raiz.dataset.aluno,
+  temTreinoNaTela: () => M.contarExercicios(estado) > 0,
+  aoCarregar: carregarRascunhoDaIa,
 });
 
 // ------------------------------------------------------------------ salvar como treino padrão
@@ -977,6 +1012,7 @@ function carregarTreinoParaEditar(treino) {
       `${plural(M.contarExercicios(estado), "exercício", "exercícios")}). Ao salvar, as mudanças valem na hora para o aluno. ` +
       "Escreva o seu nome em Professor.";
     document.querySelector(".barra-importar").hidden = true; // "Importar treino" não faz sentido aqui
+    document.getElementById("cartao-ia").hidden = true; // nem o rascunho da IA: o treino já existe
     document.getElementById("aviso-treino-ativo")?.setAttribute("hidden", ""); // o treino não será concluído
     botaoSalvar.textContent = textoDoBotaoSalvar();
   } else {
@@ -1032,6 +1068,7 @@ function carregarTreinoDaFila(modelo) {
     "Confira e ajuste o que precisar. Ao clicar em \"Salvar treino\", ele vira o treino novo do aluno " +
     `(o atual será concluído) e o aluno passa para o Treino ${posicao.numero} da fila. Escreva o seu nome em Professor.`;
   document.querySelector(".barra-importar").hidden = true; // "Importar treino" não combina com o treino da fila
+  document.getElementById("cartao-ia").hidden = true; // o treino já veio da fila: nada de rascunho da IA por cima
   areaMontagem.hidden = false;
   mostrarProblemas = M.contarIndisponiveis(novo) > 0; // exercício que saiu da lista já aparece em vermelho
   desenhar();

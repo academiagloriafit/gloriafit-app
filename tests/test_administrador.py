@@ -18,7 +18,7 @@ from app.administrador import (
     SenhaInvalida,
     SenhaNaoDefinida,
 )
-from app.db import conectar, criar_tabelas
+from app.db import VERSAO_DO_BANCO, conectar, criar_tabelas
 
 SENHA = "senha-de-teste-1"
 AGORA = datetime(2026, 10, 13, 12, 0, 0, tzinfo=timezone.utc)
@@ -373,6 +373,6 @@ def test_comando_atualiza_banco_da_versao_8_ao_abrir(tmp_path):
     assert _comando(caminho, "definir-senha", digitando=_digitando(SENHA, SENHA)) == 0
 
     c = conectar(caminho)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 9
+    assert c.execute("PRAGMA user_version").fetchone()[0] == VERSAO_DO_BANCO
     administrador.conferir_senha(c, SENHA)
     c.close()

@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 9
+VERSAO_DO_BANCO = 10
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -224,8 +224,36 @@ def _de_8_para_9(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS ix_senha_administrador_falha_em ON senha_administrador_falha(em)")
 
 
+
+def _de_9_para_10(conn: sqlite3.Connection) -> None:
+    """Treino sob medida (IA): nasce `ia_pedido` (os rascunhos de treino pedidos ao Claude e o contador do limite por dia).
+
+    Só acrescenta uma tabela vazia: nenhum dado que já existe é tocado. Os comandos são "IF NOT EXISTS" de propósito:
+    se um dia o número da versão for baixado à mão (para abrir o banco com o app antigo, que ignora o que é novo), subir
+    de novo com este app não falha por a tabela já existir, e os pedidos já guardados continuam lá.
+    """
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS ia_pedido (
+            id             INTEGER PRIMARY KEY,
+            aluno_id       INTEGER NOT NULL REFERENCES aluno(id),
+            criado_em      TEXT    NOT NULL,
+            dia            TEXT    NOT NULL CHECK (dia GLOB {_PADRAO_DE_DIA}),
+            situacao       TEXT    NOT NULL CHECK (situacao IN ('andando', 'pronto', 'erro')),
+            modelo         TEXT    NOT NULL,
+            resultado      TEXT,
+            erro           TEXT,
+            tokens_entrada INTEGER CHECK (tokens_entrada IS NULL OR tokens_entrada >= 0),
+            tokens_saida   INTEGER CHECK (tokens_saida IS NULL OR tokens_saida >= 0),
+            terminado_em   TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_ia_pedido_dia ON ia_pedido(dia)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_ia_pedido_aluno ON ia_pedido(aluno_id)")
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
-MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9}
+MIGRACOES = {4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10}
 
 
 def _arquivo_do_banco(conn: sqlite3.Connection) -> Path | None:

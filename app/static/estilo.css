@@ -868,3 +868,42 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .linha-marcar input { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--escuro); }
 .aviso-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .aviso-fila strong { flex: 1 1 100%; }
+
+/* ---- treino sob medida (IA) na tela de lançar treino ---- */
+.selo-ia {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 9px;
+  border-radius: 10px;
+  background: var(--escuro);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+.form-ia { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.form-ia .campo-largo { grid-column: 1 / -1; }
+.campo textarea {
+  width: 100%;
+  min-height: 84px;
+  border: 1.5px solid #8c8b83;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 18px;
+  color: var(--escuro);
+  background: var(--branco);
+  resize: vertical;
+}
+.campo textarea::placeholder { color: #6b6a63; }
+.campo textarea:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+.campo textarea[aria-invalid="true"] { border-color: #b00020; background: #fff1f1; }
+.campo select:disabled, .campo textarea:disabled { background: #ecebe5; cursor: not-allowed; }
+.botoes-ia { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media (max-width: 900px) {
+  .form-ia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .form-ia { grid-template-columns: minmax(0, 1fr); }
+}

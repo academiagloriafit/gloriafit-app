@@ -1,5 +1,8 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 9 (13/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados e senha de administrador.
+-- Versão 10 (13/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador e pedidos de treino sob medida (IA).
+-- Mudança da versão 9 para a 10 (treino sob medida): nasceu a tabela `ia_pedido` (cada rascunho de treino que o Claude
+-- foi chamado para montar: andando, pronto ou com erro; serve de fila de espera da tela e de contador do limite por dia).
+-- Bancos da versão 9 são atualizados sozinhos na subida.
 -- Mudança da versão 8 para a 9 (senha de administrador): nasceram as tabelas `senha_administrador` (o hash da senha
 -- que protege adicionar e excluir treino padrão) e `senha_administrador_falha` (senhas erradas, para limitar tentativas).
 -- Bancos da versão 8 são atualizados sozinhos na subida.
@@ -27,7 +30,7 @@
 -- Fora desta versão, de propósito: login do aluno, pendências da recepção e
 -- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 9;
+PRAGMA user_version = 10;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -308,3 +311,28 @@ CREATE TABLE IF NOT EXISTS senha_administrador_falha (
     em TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_senha_administrador_falha_em ON senha_administrador_falha(em);
+
+-- ------------------------------------------------------------ treino sob medida (IA)
+-- Cada vez que o professor pede um RASCUNHO de treino ao Claude (app/ia_treino.py). O rascunho nunca vira treino do aluno
+-- sozinho: o professor confere na tela e salva como qualquer outro treino.
+-- aluno_id: para quem foi pedido (um pedido só pode ser lido pelo mesmo aluno da tela).
+-- dia: o dia de Brasília 'AAAA-MM-DD' do pedido (limite de pedidos por dia).
+-- situacao: 'andando' (esperando a resposta), 'pronto' (resultado guardado) ou 'erro' (erro guarda o motivo em português).
+-- resultado: o rascunho em JSON (formato da tela de montar). Nunca guarda o que o professor escreveu em "observações".
+-- tokens_entrada / tokens_saida: o que a Anthropic informou ter usado (para acompanhar o gasto). Vazios se deu erro antes.
+-- Os resultados são apagados depois de alguns dias (ia_treino.limpar_pedidos_antigos); a contagem do dia fica.
+CREATE TABLE IF NOT EXISTS ia_pedido (
+    id             INTEGER PRIMARY KEY,
+    aluno_id       INTEGER NOT NULL REFERENCES aluno(id),
+    criado_em      TEXT    NOT NULL,
+    dia            TEXT    NOT NULL CHECK (dia GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    situacao       TEXT    NOT NULL CHECK (situacao IN ('andando', 'pronto', 'erro')),
+    modelo         TEXT    NOT NULL,
+    resultado      TEXT,
+    erro           TEXT,
+    tokens_entrada INTEGER CHECK (tokens_entrada IS NULL OR tokens_entrada >= 0),
+    tokens_saida   INTEGER CHECK (tokens_saida IS NULL OR tokens_saida >= 0),
+    terminado_em   TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_ia_pedido_dia ON ia_pedido(dia);
+CREATE INDEX IF NOT EXISTS ix_ia_pedido_aluno ON ia_pedido(aluno_id);

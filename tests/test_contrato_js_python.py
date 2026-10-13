@@ -300,3 +300,127 @@ def test_pedido_de_treino_padrao_com_senha_montado_pelo_navegador_passa_pelo_ser
     conn = conectar(caminho)
     assert [tuple(l) for l in conn.execute("SELECT nome, fila_id, numero FROM modelo_treino")] == [("Homem 6", 1, 6)]
     conn.close()
+
+
+# ------------------------------------------------------------------ treino sob medida (IA)
+
+MODULO_IA = (RAIZ / "app" / "static" / "treino_ia_modelo.js").as_uri()
+
+
+def test_ia_o_limite_das_observacoes_e_o_mesmo_nos_dois_lados():
+    from app import ia_treino
+
+    js = _node(f"""
+        import * as m from "{MODULO_IA}";
+        console.log(JSON.stringify({{ limite: m.LIMITE_DAS_OBSERVACOES }}));
+    """)
+
+    assert js["limite"] == ia_treino.LIMITE_DAS_OBSERVACOES
+
+
+# Textos para o JavaScript e o Python julgarem. Onde um recusa e o outro não, ou o professor vê um aviso que o
+# servidor não daria (confusão), ou passa na tela e é barrado depois de esperar (pior).
+_OBSERVACOES = [
+    "",
+    "dor no joelho direito; prefere máquinas",
+    "faz 3 series de 12",
+    "treina ha 10 anos, 2 dias",
+    "peso 80 kg, 1,75 m",
+    "dor 7 de 10",
+    "cpf 123.456.789-09",
+    "zap 27 98888-7777",
+    "123456789",
+    "tel (27)98888-7777",
+    "doc 12 345 678 9",
+    "1234567",
+    "12345678",
+    "1234 5678",
+    "123-4567",
+    "ano 2026 e 2027",
+    "manda para ana@exemplo.com",
+    "a" * 300,
+    "a" * 301,
+    "💪" * 300,
+    "💪" * 301,
+    "dor   no\n\njoelho" + " " * 400,
+]
+
+
+def test_ia_o_navegador_e_o_servidor_recusam_as_mesmas_observacoes(tmp_path):
+    from app import ia_treino
+
+    js = _node(f"""
+        import * as m from "{MODULO_IA}";
+        const textos = {json.dumps(_OBSERVACOES)};
+        const base = {{ objetivo: "hipertrofia", nivel: "iniciante", dias: "3", minutos: "60" }};
+        console.log(JSON.stringify(textos.map((t) => m.validarPedido({{ ...base, observacoes: t }}).length > 0)));
+    """)
+
+    caminho = tmp_path / "ia.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ZULEICA FICTICIA')")
+    conn.commit()
+    python = []
+    for texto in _OBSERVACOES:
+        try:
+            ia_treino.conferir_pedido(
+                conn, 1, {"objetivo": "hipertrofia", "nivel": "iniciante", "dias": 3, "minutos": 60, "observacoes": texto}
+            )
+            python.append(False)
+        except ia_treino.PedidoInvalido:
+            python.append(True)
+    conn.close()
+
+    assert js == python, [(t, j, p) for t, j, p in zip(_OBSERVACOES, js, python) if j != p]
+
+
+def test_ia_o_pedido_que_o_navegador_monta_e_aceito_pelo_servidor_em_todas_as_combinacoes(tmp_path):
+    """As opções do cartão (objetivo, nível, dias, minutos) saem do servidor para o HTML; o que o navegador devolve tem de passar."""
+    import html
+    import re
+
+    from app import ia_treino
+
+    caminho = tmp_path / "ia.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ZULEICA FICTICIA')")
+    conn.commit()
+    token = acesso.autorizar(conn, acesso.gerar_codigo(conn, "Computador de teste").codigo).token
+    conn.close()
+    app = criar_app(caminho)
+    cliente = app.test_client()
+    cliente.set_cookie(acesso.NOME_DO_COOKIE, token)
+
+    pagina = html.unescape(cliente.get("/alunos/1/montar").get_data(as_text=True))
+
+    def opcoes(id_do_campo):
+        trecho = re.search(rf'<select id="{id_do_campo}".*?</select>', pagina, re.DOTALL)
+        assert trecho, id_do_campo
+        return [v for v in re.findall(r'<option value="([^"]*)"', trecho.group(0)) if v]
+
+    objetivos, niveis, dias, minutos = (opcoes(i) for i in ("ia-objetivo", "ia-nivel", "ia-dias", "ia-minutos"))
+    assert set(objetivos) == set(ia_treino.OBJETIVOS)
+    assert set(niveis) == set(ia_treino.NIVEIS)
+    assert [int(d) for d in dias] == list(range(ia_treino.MINIMO_DE_DIAS, ia_treino.MAXIMO_DE_DIAS + 1))
+    assert {int(m) for m in minutos} == set(ia_treino.EXERCICIOS_POR_FICHA)
+
+    combinacoes = [
+        {"objetivo": o, "nivel": n, "dias": d, "minutos": m, "observacoes": "  dor   no joelho \n"}
+        for o in objetivos for n in niveis for d in dias for m in minutos
+    ]
+    montados = _node(f"""
+        import * as m from "{MODULO_IA}";
+        const escolhas = {json.dumps(combinacoes)};
+        console.log(JSON.stringify(escolhas.map((e) => ({{ problemas: m.validarPedido(e), pedido: m.montarPedido(e) }}))));
+    """)
+
+    conn = conectar(caminho)
+    try:
+        for resultado in montados:
+            assert resultado["problemas"] == []
+            pedido = ia_treino.conferir_pedido(conn, 1, resultado["pedido"])
+            assert pedido.observacoes == "dor no joelho"
+    finally:
+        conn.close()

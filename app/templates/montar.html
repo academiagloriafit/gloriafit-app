@@ -68,6 +68,72 @@
         </div>
       </section>
 
+      {# Treino sob medida: o Claude monta um RASCUNHO só com os exercícios da academia (ver app/ia_treino.py). Nada é gravado
+         aqui: o rascunho entra na tela, o professor confere, ajusta e salva como sempre. Fica desligado (botão cinza, com o
+         motivo) se o servidor ainda não tem a chave da IA ou se o aluno é de uma fila que exige liberação (Gestante, Grupos de risco). #}
+      <section class="cartao cartao-ia" id="cartao-ia" aria-labelledby="titulo-ia">
+        <div class="barra-importar">
+          <h2 id="titulo-ia">Treino sob medida <span class="selo-ia">IA</span></h2>
+          <button type="button" id="abrir-ia" class="botao-escuro" aria-expanded="false" aria-controls="painel-ia" aria-describedby="dica-ia"{% if ia.bloqueio or not ia.configurada %} disabled{% endif %}>Montar rascunho com IA</button>
+          <p id="dica-ia" class="dica">
+            {%- if ia.bloqueio %}{{ ia.bloqueio }}
+            {%- elif not ia.configurada %}Ainda não está ligado: falta a chave da IA no servidor. Avise o Thiago.
+            {%- else %}A IA monta um rascunho só com os exercícios da academia. Você confere e ajusta antes de salvar.{% endif -%}
+          </p>
+        </div>
+
+        <div id="painel-ia" class="painel-importar" hidden>
+          <div class="form-ia">
+            <div class="campo">
+              <label for="ia-objetivo">Objetivo</label>
+              <select id="ia-objetivo" aria-required="true">
+                <option value="">Escolha</option>
+                {% for chave, rotulo in ia_objetivos.items() %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="campo">
+              <label for="ia-nivel">Nível do aluno</label>
+              <select id="ia-nivel" aria-required="true">
+                <option value="">Escolha</option>
+                {% for chave, rotulo in ia_niveis.items() %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="campo">
+              <label for="ia-dias">Dias por semana</label>
+              <select id="ia-dias" aria-required="true">
+                <option value="">Escolha</option>
+                {% for n in ia_dias %}<option value="{{ n }}">{{ n }} dias</option>{% endfor %}
+              </select>
+            </div>
+            <div class="campo">
+              <label for="ia-minutos">Tempo de cada treino</label>
+              <select id="ia-minutos" aria-required="true">
+                <option value="">Escolha</option>
+                {% for n in ia_minutos %}<option value="{{ n }}">{{ n }} minutos</option>{% endfor %}
+              </select>
+            </div>
+            <div class="campo campo-largo">
+              <label for="ia-observacoes">Observações sobre o aluno <span class="opcional">(opcional)</span></label>
+              <textarea id="ia-observacoes" rows="3" maxlength="{{ ia_limite_das_observacoes }}" aria-describedby="dica-ia-observacoes" placeholder="Ex.: dor no joelho direito; não gosta de esteira; prefere máquinas"></textarea>
+              <p id="dica-ia-observacoes" class="dica">Lesões, o que evitar, preferências. <strong>Não escreva o nome, CPF nem telefone do aluno:</strong> a IA recebe só o que está neste cartão, nunca quem é o aluno.</p>
+            </div>
+          </div>
+          <p class="dica">O rascunho pode ter erro. Quem confere e responde pelo treino é você. Para gestante e grupos de risco, monte à mão.</p>
+          <div class="rodape-importar">
+            <p id="aviso-ia" class="aviso-campo" role="status" aria-live="polite"></p>
+            <span id="confirmar-ia" class="confirmacao" hidden>
+              <span>Já há exercícios na tela. O rascunho da IA vai substituí-los. Continuar?</span>
+              <button type="button" id="confirmar-gerar-ia" class="botao-perigo">Sim, substituir</button>
+              <button type="button" id="cancelar-gerar-ia" class="botao-discreto">Não</button>
+            </span>
+            <span class="botoes-ia">
+              <button type="button" id="gerar-ia" class="botao-principal">Gerar rascunho</button>
+              <button type="button" id="fechar-ia" class="botao-discreto">Fechar</button>
+            </span>
+          </div>
+        </div>
+      </section>
+
       {# Nome do treino e professor ficam no alto, como no Data4U: nada de segunda tela para salvar. #}
       <section class="cartao cabecalho-treino" aria-label="Dados do treino">
         <div class="campo campo-treino">
