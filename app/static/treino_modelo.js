@@ -528,6 +528,41 @@ export function metaDaImportacao(treino) {
   return Number.isInteger(n) && n >= 1 && n <= MAXIMO_SESSOES_POR_FICHA ? String(n) : "";
 }
 
+// ------------------------------------------------------------------ editar treino
+
+// A tela de montar abre em modo de edição por causa do endereço: `?editar=ID` (muda no lugar o treino ativo que o
+// professor criou no app) ou `?copiar=ID` (abre uma CÓPIA do treino, que ao salvar vira um treino novo; é o caminho
+// dos treinos que vieram do Data4U). Devolve { tipo: "editar" | "copiar", treinoId } ou null (tela de treino novo).
+// Só vale um número inteiro positivo; qualquer outra coisa no endereço é ignorada.
+export function modoDaTela(busca) {
+  const parametros = new URLSearchParams(typeof busca === "string" ? busca : "");
+  for (const tipo of ["editar", "copiar"]) {
+    const valor = parametros.get(tipo);
+    if (valor !== null && /^[1-9][0-9]{0,9}$/.test(valor)) return { tipo, treinoId: Number(valor) };
+  }
+  return null;
+}
+
+// Quem pode ser aberto em cada modo (o servidor confere de novo ao salvar): editar no lugar = treino do app,
+// ativo e deste aluno; copiar = treino deste aluno (qualquer origem).
+export function treinoServeParaOModo(modo, treino, alunoId) {
+  if (!treino || typeof treino !== "object" || String(treino.aluno_id) !== String(alunoId)) return false;
+  return modo.tipo === "copiar" || (treino.origem === "app" && treino.ativo === true);
+}
+
+// Os campos do alto da tela (nome, datas, meta) de um treino que já existe, como texto para os campos.
+// O professor NÃO vem preenchido: quem edita escreve o próprio nome (`professorAnterior` só vai na dica).
+export function camposDoTreinoExistente(treino) {
+  const dia = (valor) => (typeof valor === "string" && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(valor) ? valor : "");
+  return {
+    nome: typeof treino?.nome === "string" ? treino.nome : "",
+    professorAnterior: typeof treino?.montado_por === "string" ? treino.montado_por : "",
+    inicio: dia(treino?.inicio),
+    fim: dia(treino?.fim),
+    sessoes: metaDaImportacao(treino),
+  };
+}
+
 // Quantos exercícios do treino ainda precisam ser trocados (saíram da lista de exercícios).
 export function contarIndisponiveis(estado) {
   return estado.fichas.reduce((total, ficha) => total + ficha.itens.filter((i) => i.indisponivel).length, 0);

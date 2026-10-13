@@ -17,6 +17,9 @@
       <a class="voltar" href="{{ url_for('pagina_ficha', aluno_id=aluno.id) }}">&larr; Ficha do aluno</a>
     </div>
 
+    {# Só aparece se o treino pedido para editar (?editar= ou ?copiar=) não puder ser aberto. #}
+    <p id="erro-edicao" class="aviso-importado aviso-importado-atencao" role="alert" hidden></p>
+
     <div class="area-montagem" id="area-montagem">
       {# Começar de um treino pronto: um treino padrão da academia ou o treino de outro aluno. Nada é gravado
          aqui: o treino escolhido entra na tela, o professor confere e salva como sempre. #}
@@ -122,7 +125,7 @@
           <button type="button" id="salvar" class="botao-principal">Salvar treino</button>
           <button type="button" id="cancelar" class="botao-discreto">Cancelar</button>
           <span id="confirmar-descarte" class="confirmacao" hidden>
-            <span>Descartar este treino sem salvar?</span>
+            <span id="texto-descartar">Descartar este treino sem salvar?</span>
             <button type="button" id="descartar" class="botao-perigo">Sim, descartar</button>
             <button type="button" id="continuar-editando" class="botao-discreto">Não, continuar</button>
           </span>

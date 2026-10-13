@@ -216,6 +216,8 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 | `POST /api/treinos/<id>/modelo` | "Salvar como treino padrão" de um treino que já existe. Corpo JSON: `{"nome": "..."}`. Fica com o professor e a meta do treino original. `201 {"id"}`; `400 {"erros"}` (inclui treino com exercício que saiu da lista); `404`; `409` nome repetido; `415` |
 | `GET /api/alunos/<id>/treinos-para-copiar` | `{"treinos": [{id, nome, ativo, do_data4u, inicio, montado_por, fichas, exercicios, resumo}]}`: os treinos do aluno que têm exercício (o ativo primeiro). `404` aluno inexistente |
 | `GET /api/treinos/<id>/para-montar` | Um treino de aluno no formato da tela de montar (igual ao de `/api/modelos/<id>`). **Não grava nada.** `404` |
+| `GET /api/treinos/<id>/para-editar` | Igual a `/api/treinos/<id>/para-montar`, mais `{id, aluno_id, montado_por, inicio, fim, ativo, origem}` (a tela de editar precisa dos dados do treino). **Não grava nada.** `404` |
+| `POST /api/treinos/<id>/editar` | Edita **no lugar** o treino ATIVO criado no app. Corpo JSON igual ao de salvar treino (`nome_treino`, `montado_por`, `inicio`, `fim`, `sessoes_por_ficha`, `fichas`), com a mesma conferência. Troca os dados e **recria as fichas e os exercícios** na mesma gravação (tudo ou nada); o id, o `ativo` e o `criado_em` do treino não mudam. `200 {"id": N}`; `400 {"erros"}`; `404` treino inexistente; `409` treino do Data4U, treino já concluído, ou nome já usado em outro treino do aluno; `413`; `415` |
 | `GET /saude` | `{"ok": true}` se o app está de pé e enxerga o banco. **Pública** |
 
 **Todas as rotas acima, menos `/autorizar`, `/api/autorizar`, `/saude` e os arquivos de
@@ -281,6 +283,29 @@ aluno de perfil parecido.
   bons são renumerados.
 - **Ainda não existe** (planejado, pedido do Thiago): trocar o treino do aluno sozinho, ao concluir, pelo próximo de uma sequência de
   treinos padrão (básico, intermediário...), e montar um treino sob medida a partir de uma descrição.
+
+## Editar treino: como funciona
+
+Pedido do Thiago (09/10/2026): o professor precisa poder abrir o treino do aluno e corrigi-lo (e, no futuro, agir sobre os comentários
+que o aluno fizer no app dele).
+
+- **Onde fica:** botão **Editar treino** dentro do treino **ativo** na ficha do aluno (treino concluído não tem o botão; para usar um
+  treino antigo, "Importar treino").
+- **Treino criado no app** (`origem` = app): a tela de montar abre com tudo preenchido (`/alunos/<id>/montar?editar=<treino>`) e
+  **Salvar alterações** muda o MESMO treino (mesmo id, continua ativo, mantém a data em que foi montado). As mudanças valem na hora
+  para o aluno.
+- **Treino vindo do Data4U** (`origem` = data4u): a atualização de alunos recopia esses treinos do Data4U e desfaria a edição. Por
+  isso o botão abre uma **cópia** (`?copiar=<treino>`); ao salvar, ela vira um treino **novo** do app e o antigo é **concluído**
+  (decisão do Thiago: "Criar treino novo").
+- **Professor:** o campo começa vazio; quem está editando digita o próprio nome e ele **substitui** o professor do treino (a dica
+  mostra quem era o anterior).
+- **Sem rascunho:** na edição o rascunho do navegador fica desligado (não mistura com um treino novo do mesmo aluno). Se a página for
+  recarregada, volta ao que está salvo; sair com alteração pergunta antes de descartar.
+- **Endereço ruim** (`?editar=abc`, treino de outro aluno, treino concluído ou do Data4U, treino inexistente): `?editar=abc` cai na
+  tela normal de lançar treino; os outros mostram uma faixa vermelha explicando e **não** mostram a área de montagem (nada é alterado).
+- **Cuidado para o futuro:** editar no lugar apaga e recria as fichas e os exercícios, então os **ids de ficha e de exercício do
+  treino mudam**. As sessões já feitas (`sessao`) ficam ligadas pelo número da ficha, e continuam valendo. Os comentários do aluno
+  (ainda não existem) devem apontar para o treino, o número da ficha e o exercício, nunca para o id do item da ficha.
 
 ## Histórico de treinos: como funciona
 

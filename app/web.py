@@ -525,6 +525,29 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(erro="Treino não encontrado."), 404
         return jsonify(treino)
 
+    @app.get("/api/treinos/<int:treino_id>/para-editar")
+    def api_treino_para_editar(treino_id: int):
+        """O treino no formato da tela de montar, com professor, datas, ativo e origem (botão "Editar treino")."""
+        treino = modelos.treino_para_editar(conexao(), treino_id)
+        if treino is None:
+            return jsonify(erro="Treino não encontrado."), 404
+        return jsonify(treino)
+
+    @app.post("/api/treinos/<int:treino_id>/editar")
+    def api_editar_treino(treino_id: int):
+        """Muda no lugar o treino ativo criado no app. Corpo: o mesmo JSON de salvar treino (ver treinos.editar_treino).
+
+        200 {"id"}; 400 {"erros"} (dado inválido); 404; 409 {"erros"} (treino do Data4U, concluído ou nome repetido).
+        """
+        dados = corpo_json()
+        try:
+            treinos.editar_treino(conexao(), treino_id, dados)
+        except treinos.TreinoNaoEncontrado:
+            return jsonify(erro="Treino não encontrado."), 404
+        except treinos.TreinoInvalido as erro:
+            return jsonify(erros=erro.problemas), erro.status
+        return jsonify(id=treino_id)
+
     @app.post("/api/alunos/<int:aluno_id>/whatsapp")
     def api_corrigir_whatsapp(aluno_id: int):
         """Corrige o WhatsApp do aluno. Corpo: {"whatsapp": "(27) 98888-7766"}."""

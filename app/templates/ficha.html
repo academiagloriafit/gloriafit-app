@@ -57,6 +57,14 @@
           <div class="treino-conteudo">
             <p class="acoes-treino">
               <a class="botao-link" href="{{ url_for('pagina_imprimir_treino', treino_id=treino.id) }}">Visualizar e imprimir</a>
+              {# Editar o treino ATIVO: o do app muda no lugar; o do Data4U abre uma cópia que vira treino novo (a atualização de alunos recopia os do Data4U). #}
+              {% if treino.ativo %}
+              {% if treino.do_data4u %}
+              <a class="botao-link botao-editar" href="{{ url_for('pagina_montar', aluno_id=ficha.id, copiar=treino.id) }}" title="Abre uma cópia deste treino do Data4U; ao salvar, ela vira o treino novo do aluno e este é concluído">Editar treino</a>
+              {% else %}
+              <a class="botao-link botao-editar" href="{{ url_for('pagina_montar', aluno_id=ficha.id, editar=treino.id) }}">Editar treino</a>
+              {% endif %}
+              {% endif %}
               {# Guarda este treino como treino padrão: ele passa a aparecer em "Importar treino" na tela de lançar treino. #}
               <button type="button" class="botao-link botao-padrao">Salvar como treino padrão</button>
               <span class="confirmacao form-padrao-ficha" hidden>

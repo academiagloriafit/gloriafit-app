@@ -12,10 +12,17 @@ const pegar = (id) => document.getElementById(id);
 // aoTravar(travado): a tela desliga (ou religa) os campos e o botão enquanto envia.
 // aoErros(mensagens, { nomeJaUsado }): a tela mostra o que deu errado.
 // aoSalvar(): chamada depois que o servidor confirmou (a tela apaga o rascunho).
-export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoTravar, aoErros, aoSalvar }) {
+// edicao: null para treino NOVO (POST em /api/alunos/<id>/treinos) ou { treinoId } para mudar no lugar o treino
+// ativo que o professor criou no app (POST em /api/treinos/<id>/editar, que responde 200).
+export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoTravar, aoErros, aoSalvar, edicao = null }) {
   const areaMontagem = pegar("area-montagem");
   const painelSalvo = pegar("treino-salvo");
   let salvando = false;
+
+  const endereco = () =>
+    edicao
+      ? `/api/treinos/${encodeURIComponent(edicao.treinoId)}/editar`
+      : `/api/alunos/${encodeURIComponent(alunoId)}/treinos`;
 
   function travar(travado) {
     salvando = travado;
@@ -31,20 +38,23 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
     travar(true);
     let resposta;
     try {
-      resposta = await enviarJson(`/api/alunos/${encodeURIComponent(alunoId)}/treinos`, M.montarPedido(obterEstado(), dados));
+      resposta = await enviarJson(endereco(), M.montarPedido(obterEstado(), dados));
     } catch {
       travar(false);
       aoErros(
         [
-          "Não consegui confirmar com o servidor se o treino foi salvo (sem resposta ou sem rede). " +
-            "Confira a rede e clique em Salvar treino de novo: se ele já tiver sido salvo, o app avisará que o nome já existe.",
+          edicao
+            ? "Não consegui confirmar com o servidor se as mudanças foram salvas (sem resposta ou sem rede). " +
+              "Confira a rede e clique em Salvar alterações de novo: salvar duas vezes é seguro."
+            : "Não consegui confirmar com o servidor se o treino foi salvo (sem resposta ou sem rede). " +
+              "Confira a rede e clique em Salvar treino de novo: se ele já tiver sido salvo, o app avisará que o nome já existe.",
         ],
         { nomeJaUsado: false },
       );
       return [];
     }
 
-    if (resposta.status === 201) {
+    if (resposta.status === (edicao ? 200 : 201)) {
       sucesso(
         M.limparEspacos(dados.nomeTreino),
         M.limparEspacos(dados.montadoPor),
@@ -75,8 +85,11 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
     const linkImprimir = pegar("imprimir-treino");
     if (enderecoDeImpressao) linkImprimir.href = enderecoDeImpressao;
     linkImprimir.hidden = !enderecoDeImpressao;
-    pegar("texto-salvo").textContent =
-      `O treino "${nomeTreino}" foi salvo para ${alunoNome}. Professor: ${montadoPor}.`;
+    pegar("titulo-salvo").textContent = edicao ? "Treino atualizado" : "Treino salvo";
+    pegar("texto-salvo").textContent = edicao
+      ? `O treino "${nomeTreino}" de ${alunoNome} foi atualizado. Professor: ${montadoPor}.`
+      : `O treino "${nomeTreino}" foi salvo para ${alunoNome}. Professor: ${montadoPor}.`;
+    pegar("montar-outro").hidden = Boolean(edicao); // recarregar abriria de novo a edição deste mesmo treino
     const textoConcluido = pegar("texto-concluido");
     const houveConclusao = typeof concluidoAnterior === "string" && concluidoAnterior !== "";
     textoConcluido.textContent = houveConclusao

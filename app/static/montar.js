@@ -2,7 +2,7 @@
 // (testada à parte); aqui só desenhamos a tela e ligamos os botões.
 // Palavras do Data4U: o TREINO tem um nome e várias FICHAS (A, B, C...); cada ficha
 // tem exercícios com séries, repetições, peso, intervalo e observações.
-import { enviarJson, textoDoErro } from "./api.js";
+import { buscarJson, enviarJson, textoDoErro } from "./api.js";
 import { iniciarBiblioteca } from "./biblioteca.js";
 import { el } from "./dom.js";
 import { iniciarImportacao } from "./importar_treino.js";
@@ -10,6 +10,10 @@ import { iniciarSalvar } from "./salvar.js";
 import * as M from "./treino_modelo.js";
 
 const raiz = document.querySelector("[data-aluno]");
+// Editar treino (botão da ficha do aluno): "?editar=ID" muda no lugar o treino ativo criado no app; "?copiar=ID" abre uma
+// cópia que, ao salvar, vira um treino NOVO (é o caminho dos treinos que vieram do Data4U). Sem isso, é treino novo.
+const modo = M.modoDaTela(window.location.search);
+const editandoNoLugar = modo?.tipo === "editar";
 const CHAVE_RASCUNHO = "rascunho-treino-" + raiz.dataset.aluno;
 const CHAVE_DADOS = "rascunho-dados-" + raiz.dataset.aluno;
 
@@ -34,12 +38,14 @@ const elFormPadrao = document.getElementById("form-padrao");
 const campoNomePadrao = document.getElementById("nome-padrao");
 const botaoConfirmarPadrao = document.getElementById("confirmar-padrao");
 const elAvisoPadrao = document.getElementById("aviso-padrao");
+const elErroEdicao = document.getElementById("erro-edicao");
 
 // ------------------------------------------------------------------ estado da tela
 
 const MAXIMO_DE_MENSAGENS = 4; // problemas escritos na lista antes de "E mais N"
 
-let estado = lerRascunhoGuardado() || M.criarEstado();
+// Em modo de edição não há rascunho: o treino vem do servidor e o rascunho de um treino NOVO não pode se misturar.
+let estado = (!modo && lerRascunhoGuardado()) || M.criarEstado();
 let fichaAtual = 0;
 let selecionados = new Set(); // uids marcados para juntar em bi-set
 let confirmandoExclusao = false;
@@ -47,7 +53,9 @@ let mostrarProblemas = false; // vira true depois de clicar em "Salvar treino"
 let errosDoServidor = []; // o que o servidor recusou (ex.: nome de treino repetido)
 let nomeEditadoPeloProfessor = false; // se sim, não trocamos o nome por outra sugestão
 let erroDeBloco = "";
-let origemImportada = null; // de onde veio o treino copiado por "Importar treino" (ou null)
+let origemImportada = null; // de onde veio o treino copiado por "Importar treino" ou por "Editar treino" de um do Data4U (ou null)
+let textoDaEdicao = null; // a faixa de aviso de quem está editando um treino no lugar (ou null)
+let editandoUmaCopia = false; // "?copiar=": ao salvar vira treino novo e o atual é concluído
 let focoPendente = null; // onde devolver o foco depois de redesenhar
 let refs = {}; // pedaços da tela que atualizamos sem redesenhar tudo
 
@@ -65,6 +73,7 @@ function lerRascunhoGuardado() {
 }
 
 function guardarRascunho() {
+  if (modo) return;
   try {
     sessionStorage.setItem(CHAVE_RASCUNHO, M.serializar(estado));
     sessionStorage.setItem(
@@ -87,6 +96,7 @@ function guardarRascunho() {
 // Nome do treino e professor guardados junto com o rascunho (qualquer coisa fora do
 // formato é ignorada).
 function lerDadosGuardados() {
+  if (modo) return;
   try {
     const dados = JSON.parse(sessionStorage.getItem(CHAVE_DADOS) || "null");
     if (!dados || typeof dados !== "object") return;
@@ -107,6 +117,7 @@ function lerDadosGuardados() {
 // Depois que o servidor confirmou o treino (ou o professor descartou), o rascunho não
 // serve mais: o próximo treino começa em branco.
 function apagarRascunho() {
+  if (modo) return;
   try {
     sessionStorage.removeItem(CHAVE_RASCUNHO);
     sessionStorage.removeItem(CHAVE_DADOS);
@@ -606,19 +617,23 @@ function atualizarProblemas() {
 
 // ------------------------------------------------------------------ salvar e cancelar
 
+const textoDoBotaoSalvar = () => (editandoNoLugar ? "Salvar alterações" : "Salvar treino");
+
 const salvar = iniciarSalvar({
+  edicao: editandoNoLugar ? { treinoId: modo.treinoId } : null,
   alunoId: raiz.dataset.aluno,
   alunoNome: document.querySelector(".aluno-nome strong").textContent,
   obterEstado: () => estado,
   obterDados: dadosDoAlto,
   aoSalvar: () => {
     origemImportada = null;
+    textoDaEdicao = null;
     apagarRascunho();
   },
   aoTravar: (travado) => {
     areaMontagem.inert = travado; // nada se edita enquanto o servidor responde
     botaoSalvar.disabled = travado;
-    botaoSalvar.textContent = travado ? "Salvando…" : "Salvar treino";
+    botaoSalvar.textContent = travado ? "Salvando…" : textoDoBotaoSalvar();
     if (!travado) botaoSalvar.focus();
   },
   aoErros: (mensagens, { nomeJaUsado }) => {
@@ -654,6 +669,7 @@ botaoSalvar.addEventListener("click", () => {
 });
 
 function temAlgoParaPerder() {
+  if (modo) return true; // treino vindo do servidor: descartar sempre pede confirmação
   return (
     estado.fichas.some((f) => f.itens.length > 0) ||
     campoQuem.value.trim() !== "" ||
@@ -718,12 +734,14 @@ const plural = (n, singular, pluralTexto) => `${n} ${n === 1 ? singular : plural
 // A faixa verde (ou laranja, se falta trocar exercício) que lembra de onde veio o treino. Fica certa mesmo depois
 // que o professor remove os exercícios marcados.
 function atualizarAvisoImportado() {
-  elAvisoImportado.hidden = origemImportada === null;
-  if (origemImportada === null) return;
+  elAvisoImportado.hidden = origemImportada === null && textoDaEdicao === null;
+  if (elAvisoImportado.hidden) return;
   const fora = M.contarIndisponiveis(estado);
   let texto =
+    textoDaEdicao ??
     `Treino copiado de "${origemImportada}" (${plural(estado.fichas.length, "ficha", "fichas")}, ` +
-    `${plural(M.contarExercicios(estado), "exercício", "exercícios")}). Confira tudo e ajuste antes de salvar.`;
+      `${plural(M.contarExercicios(estado), "exercício", "exercícios")}). Confira tudo e ajuste antes de salvar.` +
+      (editandoUmaCopia ? " Ao salvar, ele vira um treino NOVO deste aluno e o treino atual é concluído." : "");
   if (fora > 0) {
     texto +=
       fora === 1
@@ -864,5 +882,81 @@ iniciarBiblioteca(document.querySelector("[data-biblioteca]"), {
   },
 });
 
+// ------------------------------------------------------------------ editar treino (?editar=ID ou ?copiar=ID)
+
+function falhaDaEdicao(texto) {
+  areaMontagem.hidden = true; // nada de salvar por engano um treino NOVO quando o professor queria editar
+  elErroEdicao.textContent = `${texto} Nada foi alterado. Volte à ficha do aluno e tente de novo.`;
+  elErroEdicao.hidden = false;
+}
+
+// Põe na tela o treino que o servidor devolveu (GET /api/treinos/<id>/para-editar). Devolve null se deu certo ou o
+// texto do problema.
+function carregarTreinoParaEditar(treino) {
+  if (!M.treinoServeParaOModo(modo, treino, raiz.dataset.aluno)) {
+    return editandoNoLugar
+      ? 'Só dá para editar no lugar o treino ATIVO que foi criado no app e que é deste aluno. Na ficha, use "Editar treino" do treino ativo.'
+      : "Este treino não é deste aluno.";
+  }
+  const novo = M.estadoDeImportacao(treino);
+  if (novo === null) return "Não consegui abrir este treino (o servidor mandou um formato inesperado).";
+  const campos = M.camposDoTreinoExistente(treino);
+
+  estado = novo;
+  fichaAtual = 0;
+  selecionados.clear();
+  confirmandoExclusao = false;
+  erroDeBloco = "";
+  errosDoServidor = [];
+  campoSessoes.value = campos.sessoes;
+  document.querySelector(".titulo-pagina").textContent = "Editar treino";
+  document.title = "Editar treino · Glória Fit";
+  document.getElementById("texto-descartar").textContent = editandoNoLugar
+    ? "Descartar as mudanças sem salvar?"
+    : "Descartar esta cópia sem salvar?";
+
+  if (editandoNoLugar) {
+    // o treino continua o mesmo: nome, datas e meta vêm preenchidos; o professor escreve o próprio nome
+    campoNome.value = campos.nome;
+    nomeEditadoPeloProfessor = true;
+    campoInicio.value = campos.inicio;
+    campoFim.value = campos.fim;
+    campoQuem.value = "";
+    document.getElementById("dica-quem-montou").textContent =
+      `Quem está editando. Passa a ser o professor deste treino (antes: ${campos.professorAnterior}).`;
+    textoDaEdicao =
+      `Editando o treino ATIVO "${campos.nome}" (${plural(estado.fichas.length, "ficha", "fichas")}, ` +
+      `${plural(M.contarExercicios(estado), "exercício", "exercícios")}). Ao salvar, as mudanças valem na hora para o aluno. ` +
+      "Escreva o seu nome em Professor.";
+    document.querySelector(".barra-importar").hidden = true; // "Importar treino" não faz sentido aqui
+    document.getElementById("aviso-treino-ativo")?.setAttribute("hidden", ""); // o treino não será concluído
+    botaoSalvar.textContent = textoDoBotaoSalvar();
+  } else {
+    // cópia: nome sugerido novo, início hoje, sem fim; a meta vem junto, como em "Importar treino"
+    origemImportada = campos.nome;
+    editandoUmaCopia = true;
+  }
+
+  areaMontagem.hidden = false;
+  mostrarProblemas = M.contarIndisponiveis(novo) > 0; // exercício que saiu da lista já aparece em vermelho
+  desenhar();
+  anunciar(editandoNoLugar ? `Editando o treino ${campos.nome}.` : `Cópia do treino ${campos.nome} aberta.`);
+  return null;
+}
+
+async function abrirTreinoParaEditar() {
+  areaMontagem.hidden = true; // só aparece quando o treino chegar
+  let resposta;
+  try {
+    resposta = await buscarJson(`/api/treinos/${encodeURIComponent(modo.treinoId)}/para-editar`);
+  } catch {
+    return falhaDaEdicao("Não consegui falar com o servidor para abrir o treino (sem resposta ou sem rede).");
+  }
+  if (resposta.status !== 200) return falhaDaEdicao(textoDoErro(resposta, "Não consegui abrir o treino"));
+  const problema = carregarTreinoParaEditar(resposta.corpo);
+  if (problema !== null) falhaDaEdicao(problema);
+}
+
 lerDadosGuardados();
 desenhar();
+if (modo) abrirTreinoParaEditar();

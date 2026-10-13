@@ -231,11 +231,14 @@ def test_aluno_sem_treino_tem_lista_vazia(cliente):
 PASTA_ESTATICA = Path(__file__).resolve().parent.parent / "app" / "static"
 # ids que o próprio JavaScript cria na hora (não estão na página recém-aberta)
 IDS_CRIADOS_PELO_JS = {"titulo-exercicios"}
+# ids que a página só traz em certos casos (o aviso "este aluno já tem treino ativo" só existe se ele tem); o
+# JavaScript os procura com `?.`, então a ausência não quebra. Cada um tem o seu teste de presença mais abaixo.
+IDS_QUE_SO_EXISTEM_AS_VEZES = {"aviso-treino-ativo"}
 
 
 def _ids_que_o_js_procura(arquivo: str) -> set[str]:
     codigo = (PASTA_ESTATICA / arquivo).read_text(encoding="utf-8")
-    return set(re.findall(r'(?:pegar|getElementById)\("([^"]+)"\)', codigo)) - IDS_CRIADOS_PELO_JS
+    return set(re.findall(r'(?:pegar|getElementById)\("([^"]+)"\)', codigo)) - IDS_CRIADOS_PELO_JS - IDS_QUE_SO_EXISTEM_AS_VEZES
 
 
 @pytest.mark.parametrize("arquivo", ["montar.js", "importar_treino.js"])
@@ -246,6 +249,15 @@ def test_a_tela_de_montar_tem_todos_os_ids_que_o_javascript_procura(cliente, arq
     assert ids, "o teste não achou nenhum id: o jeito de procurar mudou?"
     faltando = {i for i in ids if f'id="{i}"' not in html}
     assert faltando == set(), f"{arquivo} procura ids que a tela não tem: {sorted(faltando)}"
+
+
+def test_o_aviso_de_treino_ativo_existe_quando_o_aluno_tem_treino_ativo(cliente, caminho):
+    _treino_do_aluno(caminho, aluno=1)
+
+    html = cliente.get("/alunos/1/montar").get_data(as_text=True)
+
+    assert 'id="aviso-treino-ativo"' in html
+    assert 'id="erro-edicao"' in html  # a faixa de "não consegui abrir o treino para editar" (sempre na página, escondida)
 
 
 def test_a_tela_de_montar_tem_os_botoes_novos_e_carrega_o_javascript(cliente):

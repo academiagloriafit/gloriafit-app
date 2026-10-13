@@ -37,6 +37,10 @@ class AlunoNaoEncontrado(Exception):
     pass
 
 
+class TreinoNaoEncontrado(Exception):
+    pass
+
+
 class TreinoInvalido(Exception):
     """O treino não pode ser salvo. `problemas` é a lista de motivos, em português."""
 
@@ -226,6 +230,71 @@ def validar_fichas(conn, fichas, problemas: list[str]) -> list[dict] | None:
 # ------------------------------------------------------------------ salvar e ler
 
 
+def _conferir_dados_do_treino(conn: sqlite3.Connection, dados, agora: datetime) -> dict:
+    """Confere os campos de um treino (nome, professor, datas, meta e fichas), serve para salvar e para editar.
+
+    Devolve {"nome", "montado_por", "inicio", "fim", "sessoes", "fichas"} já limpos. Se algo estiver errado,
+    levanta TreinoInvalido (400) com TODOS os problemas.
+    """
+    if not isinstance(dados, dict):
+        raise TreinoInvalido(["Formato do pedido inválido."])
+
+    problemas: list[str] = []
+    nome_treino = validar_texto(dados.get("nome_treino"), "O nome do treino", LIMITE_NOME_TREINO, True, problemas)
+    montado_por = validar_texto(dados.get("montado_por"), "O nome de quem montou", LIMITE_QUEM_MONTOU, True, problemas)
+    inicio = _dia(dados.get("inicio"), "Início", problemas)
+    fim = _dia(dados.get("fim"), "Fim", problemas)
+    sessoes = validar_sessoes_por_ficha(dados.get("sessoes_por_ficha"), problemas)
+    if inicio is None:
+        inicio = hoje(agora)  # sem data de início = começa hoje (como no Data4U)
+    if inicio is not False and fim not in (None, False) and fim < inicio:  # 'AAAA-MM-DD' compara como texto
+        problemas.append("A data do fim não pode ser antes da data do início.")
+    fichas = validar_fichas(conn, dados.get("fichas"), problemas)
+    if problemas:
+        raise TreinoInvalido(problemas)
+    return {
+        "nome": nome_treino,
+        "montado_por": montado_por,
+        "inicio": inicio,
+        "fim": fim,
+        "sessoes": sessoes,
+        "fichas": fichas,
+    }
+
+
+def _nome_ja_usado(conn: sqlite3.Connection, aluno_id: int, nome: str, ignorar_treino_id: int | None = None) -> bool:
+    """O Data4U recusa dois treinos com o mesmo nome para o mesmo aluno; o app segue a mesma regra.
+
+    Vale contra TODOS os treinos do aluno, inclusive o histórico copiado do Data4U. `ignorar_treino_id` é o
+    treino que está sendo editado (ele pode manter o próprio nome).
+    """
+    usados = {
+        normalizar(r[0])
+        for r in conn.execute("SELECT nome FROM treino WHERE aluno_id = ? AND id IS NOT ?", (aluno_id, ignorar_treino_id))
+    }
+    return normalizar(nome) in usados
+
+
+def _erro_nome_repetido(nome: str) -> TreinoInvalido:
+    return TreinoInvalido([f'Este aluno já tem um treino chamado "{nome}". Escolha outro nome.'], status=409)
+
+
+def _gravar_fichas(conn: sqlite3.Connection, treino_id: int, fichas: list[dict]) -> None:
+    """Grava as fichas e os exercícios do treino (chamar dentro de uma transação)."""
+    for ordem_ficha, ficha in enumerate(fichas, start=1):
+        ficha_id = conn.execute(
+            "INSERT INTO ficha (treino_id, nome, ordem) VALUES (?, ?, ?)",
+            (treino_id, ficha["nome"], ordem_ficha),
+        ).lastrowid
+        for ordem_item, item in enumerate(ficha["itens"], start=1):
+            conn.execute(
+                "INSERT INTO ficha_item (ficha_id, ordem, bloco, exercicio_id, series, repeticoes, carga,"
+                " pausa, observacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (ficha_id, ordem_item, item["bloco"], item["exercicio_id"],
+                 item["series"], item["repeticoes"], item["carga"], item["pausa"], item["observacao"]),
+            )
+
+
 def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetime | None = None) -> int:
     """Grava um treino novo para o aluno. Devolve o id do treino.
 
@@ -244,31 +313,10 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
     """
     if conn.execute("SELECT 1 FROM aluno WHERE id = ?", (aluno_id,)).fetchone() is None:
         raise AlunoNaoEncontrado(aluno_id)
-    if not isinstance(dados, dict):
-        raise TreinoInvalido(["Formato do pedido inválido."])
-
-    problemas: list[str] = []
-    nome_treino = validar_texto(dados.get("nome_treino"), "O nome do treino", LIMITE_NOME_TREINO, True, problemas)
-    montado_por = validar_texto(dados.get("montado_por"), "O nome de quem montou", LIMITE_QUEM_MONTOU, True, problemas)
     agora = agora or agora_utc()
-    inicio = _dia(dados.get("inicio"), "Início", problemas)
-    fim = _dia(dados.get("fim"), "Fim", problemas)
-    sessoes = validar_sessoes_por_ficha(dados.get("sessoes_por_ficha"), problemas)
-    if inicio is None:
-        inicio = hoje(agora)  # sem data de início = começa hoje (como no Data4U)
-    if inicio is not False and fim not in (None, False) and fim < inicio:  # 'AAAA-MM-DD' compara como texto
-        problemas.append("A data do fim não pode ser antes da data do início.")
-    fichas = validar_fichas(conn, dados.get("fichas"), problemas)
-    if problemas:
-        raise TreinoInvalido(problemas)
-
-    # O Data4U recusa dois treinos com o mesmo nome para o mesmo aluno; o app segue a mesma regra.
-    # Vale contra TODOS os treinos do aluno, inclusive o histórico copiado do Data4U.
-    usados = {normalizar(r[0]) for r in conn.execute("SELECT nome FROM treino WHERE aluno_id = ?", (aluno_id,))}
-    if normalizar(nome_treino) in usados:
-        raise TreinoInvalido(
-            [f'Este aluno já tem um treino chamado "{nome_treino}". Escolha outro nome.'], status=409
-        )
+    treino = _conferir_dados_do_treino(conn, dados, agora)
+    if _nome_ja_usado(conn, aluno_id, treino["nome"]):
+        raise _erro_nome_repetido(treino["nome"])
 
     try:
         with conn:  # uma transação: ou grava tudo, ou nada
@@ -280,20 +328,9 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
             treino_id = conn.execute(
                 "INSERT INTO treino (aluno_id, nome, montado_por, inicio, fim, sessoes_por_ficha)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
-                (aluno_id, nome_treino, montado_por, inicio, fim, sessoes),
+                (aluno_id, treino["nome"], treino["montado_por"], treino["inicio"], treino["fim"], treino["sessoes"]),
             ).lastrowid
-            for ordem_ficha, ficha in enumerate(fichas, start=1):
-                ficha_id = conn.execute(
-                    "INSERT INTO ficha (treino_id, nome, ordem) VALUES (?, ?, ?)",
-                    (treino_id, ficha["nome"], ordem_ficha),
-                ).lastrowid
-                for ordem_item, item in enumerate(ficha["itens"], start=1):
-                    conn.execute(
-                        "INSERT INTO ficha_item (ficha_id, ordem, bloco, exercicio_id, series, repeticoes, carga,"
-                        " pausa, observacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (ficha_id, ordem_item, item["bloco"], item["exercicio_id"],
-                         item["series"], item["repeticoes"], item["carga"], item["pausa"], item["observacao"]),
-                    )
+            _gravar_fichas(conn, treino_id, treino["fichas"])
     except sqlite3.IntegrityError as erro:
         # Dois "salvar" ao mesmo tempo com o mesmo nome: o índice único do banco barra o segundo.
         # Só ESTE erro (violação de "único") vira 409. Qualquer outra violação (regra CHECK,
@@ -301,10 +338,59 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
         # mascarada como "nome repetido".
         if erro.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
             raise
-        raise TreinoInvalido(
-            [f'Este aluno já tem um treino chamado "{nome_treino}". Escolha outro nome.'], status=409
-        ) from None
+        raise _erro_nome_repetido(treino["nome"]) from None
     return treino_id
+
+
+def editar_treino(conn: sqlite3.Connection, treino_id: int, dados, agora: datetime | None = None) -> None:
+    """Muda, no lugar, um treino que o professor montou no app (botão "Editar treino" da ficha do aluno).
+
+    `dados` tem o mesmo formato de `salvar_treino` e vale a mesma conferência. Regras:
+    - só se edita o treino ATIVO do aluno (o histórico concluído não muda);
+    - só se edita treino criado no app (`origem = 'app'`): os do Data4U são um espelho que a atualização
+      de alunos apaga e recria, e a mudança se perderia; para mudar um deles, a tela abre uma CÓPIA que
+      vira um treino novo (`salvar_treino`);
+    - o treino continua ativo e mantém o dia em que foi criado; as fichas e os exercícios são trocados pelos
+      novos, e o professor e as datas passam a ser os que vieram no pedido;
+    - as sessões já feitas (tabela `sessao`) ficam: elas guardam o NÚMERO da ficha (A = 1, B = 2...) e não o id.
+    Tudo ou nada.
+    """
+    treino = conn.execute("SELECT aluno_id, ativo, origem FROM treino WHERE id = ?", (treino_id,)).fetchone()
+    if treino is None:
+        raise TreinoNaoEncontrado(treino_id)
+    if treino["origem"] != "app":
+        raise TreinoInvalido(
+            [
+                "Este treino veio do Data4U e é recopiado a cada atualização de alunos, então não dá para "
+                'mudá-lo no lugar. Use "Editar treino" na ficha do aluno: ele abre uma cópia que vira um treino novo.'
+            ],
+            status=409,
+        )
+    if not treino["ativo"]:
+        raise TreinoInvalido(["Este treino está concluído (inativo). Só dá para editar o treino ativo do aluno."], status=409)
+
+    novo = _conferir_dados_do_treino(conn, dados, agora or agora_utc())
+    if _nome_ja_usado(conn, treino["aluno_id"], novo["nome"], ignorar_treino_id=treino_id):
+        raise _erro_nome_repetido(novo["nome"])
+
+    try:
+        with conn:  # uma transação: ou grava tudo, ou nada
+            # "ativo = 1 AND origem = 'app'" de novo: se outro computador concluiu o treino neste meio-tempo, nada muda.
+            alterados = conn.execute(
+                "UPDATE treino SET nome = ?, montado_por = ?, inicio = ?, fim = ?, sessoes_por_ficha = ?"
+                " WHERE id = ? AND ativo = 1 AND origem = 'app'",
+                (novo["nome"], novo["montado_por"], novo["inicio"], novo["fim"], novo["sessoes"], treino_id),
+            ).rowcount
+            if alterados == 0:
+                raise TreinoInvalido(
+                    ["Este treino acabou de ser concluído (ou mudou). Atualize a página e confira."], status=409
+                )
+            conn.execute("DELETE FROM ficha WHERE treino_id = ?", (treino_id,))  # apaga os exercícios junto
+            _gravar_fichas(conn, treino_id, novo["fichas"])
+    except sqlite3.IntegrityError as erro:
+        if erro.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+            raise
+        raise _erro_nome_repetido(novo["nome"]) from None
 
 
 def _item_para_exibir(linha: sqlite3.Row) -> dict:

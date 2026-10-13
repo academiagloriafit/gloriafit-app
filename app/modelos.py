@@ -331,3 +331,29 @@ def treino_para_montar(conn: sqlite3.Connection, treino_id: int) -> dict | None:
     if treino is None:
         return None
     return para_montar(conn, treino["nome"], treino["sessoes_por_ficha"], _fichas_cruas_do_treino(conn, treino_id))
+
+
+def treino_para_editar(conn: sqlite3.Connection, treino_id: int) -> dict | None:
+    """O treino no formato da tela de montar MAIS os dados do ciclo, para o botão "Editar treino". None se não existe.
+
+    Além das chaves de `para_montar`: `id`, `aluno_id`, `montado_por`, `inicio`, `fim` (None = sem fim), `ativo`
+    (True/False) e `origem` ('app' = dá para editar no lugar; 'data4u' = a tela abre uma cópia que vira treino novo).
+    Não grava nada.
+    """
+    treino = conn.execute(
+        "SELECT id, aluno_id, nome, montado_por, inicio, fim, ativo, origem, sessoes_por_ficha FROM treino WHERE id = ?",
+        (treino_id,),
+    ).fetchone()
+    if treino is None:
+        return None
+    resultado = para_montar(conn, treino["nome"], treino["sessoes_por_ficha"], _fichas_cruas_do_treino(conn, treino_id))
+    resultado.update(
+        id=treino["id"],
+        aluno_id=treino["aluno_id"],
+        montado_por=treino["montado_por"],
+        inicio=treino["inicio"],
+        fim=treino["fim"],
+        ativo=bool(treino["ativo"]),
+        origem=treino["origem"],
+    )
+    return resultado
