@@ -1,5 +1,8 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 10 (13/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador e pedidos de treino sob medida (IA).
+-- Versão 11 (14/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA) e o registro de quando os alunos e o histórico de treinos foram atualizados.
+-- Mudança da versão 10 para a 11 (atualização automática dos alunos): nasceu a tabela `importacao` (de quando é a última cópia do
+-- Data4U aplicada, para os alunos e para o histórico de treinos; serve para avisar na tela quando a atualização parar).
+-- Bancos da versão 10 são atualizados sozinhos na subida.
 -- Mudança da versão 9 para a 10 (treino sob medida): nasceu a tabela `ia_pedido` (cada rascunho de treino que o Claude
 -- foi chamado para montar: andando, pronto ou com erro; serve de fila de espera da tela e de contador do limite por dia).
 -- Bancos da versão 9 são atualizados sozinhos na subida.
@@ -30,7 +33,7 @@
 -- Fora desta versão, de propósito: login do aluno, pendências da recepção e
 -- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 10;
+PRAGMA user_version = 11;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -336,3 +339,14 @@ CREATE TABLE IF NOT EXISTS ia_pedido (
 );
 CREATE INDEX IF NOT EXISTS ix_ia_pedido_dia ON ia_pedido(dia);
 CREATE INDEX IF NOT EXISTS ix_ia_pedido_aluno ON ia_pedido(aluno_id);
+
+-- ------------------------------------------------------- quando os alunos foram atualizados
+-- Uma linha por assunto ('alunos' = a tela/robô que traz os alunos; 'treinos' = o histórico de treinos do Data4U),
+-- sempre a ÚLTIMA cópia aplicada (app/importacoes.py). Serve só para avisar na tela quando a atualização parar.
+-- extraido_em: quando o PC da recepção tirou a cópia do Data4U (UTC, como o resto do banco).
+-- recebida_em: quando o app terminou de aplicá-la (UTC).
+CREATE TABLE IF NOT EXISTS importacao (
+    tipo        TEXT PRIMARY KEY CHECK (tipo IN ('alunos', 'treinos')),
+    extraido_em TEXT NOT NULL CHECK (extraido_em GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]'),
+    recebida_em TEXT NOT NULL CHECK (recebida_em GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]')
+);

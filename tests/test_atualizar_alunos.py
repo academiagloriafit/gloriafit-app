@@ -517,3 +517,38 @@ def test_a_rota_esta_protegida_por_padrao(app, anonimo):
 
     assert "api_importar_alunos" not in ENDPOINTS_PUBLICOS
     assert "pagina_atualizar_alunos" not in ENDPOINTS_PUBLICOS
+
+
+# ------------------------------------------------------------------ registro de quando foi atualizado
+
+
+def _registros(caminho):
+    conn = conectar(caminho)
+    try:
+        return [tuple(l) for l in conn.execute("SELECT tipo, extraido_em FROM importacao ORDER BY tipo")]
+    finally:
+        conn.close()
+
+
+def test_rota_registra_de_quando_e_a_copia_dos_alunos(cliente, caminho, pacote_de_hoje):
+    from datetime import timedelta
+
+    from app.alunos import FUSO_DA_ACADEMIA
+
+    uma_hora_atras = datetime.now(timezone.utc).astimezone(FUSO_DA_ACADEMIA).replace(microsecond=0) - timedelta(hours=1)
+    pacote_de_hoje["extracao"] = f"{uma_hora_atras:%d/%m/%Y %H:%M:%S}"  # horário de Brasília, como o Data4U
+
+    resposta = cliente.post("/api/alunos/importar", json=pacote_de_hoje)
+
+    assert resposta.status_code == 200
+    em_utc = uma_hora_atras.astimezone(timezone.utc)
+    assert _registros(caminho) == [("alunos", f"{em_utc:%Y-%m-%d %H:%M:%S}")]  # o banco guarda em UTC
+
+
+def test_copia_recusada_nao_deixa_registro(cliente, caminho, pacote_de_hoje):
+    pacote_de_hoje["tabelas"]["PESSOA"]["colunas"].append("EXTRA")
+
+    resposta = cliente.post("/api/alunos/importar", json=pacote_de_hoje)
+
+    assert resposta.status_code == 400
+    assert _registros(caminho) == []

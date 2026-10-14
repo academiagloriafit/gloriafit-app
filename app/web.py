@@ -24,6 +24,7 @@ from app import (
     exercicios,
     filas,
     ia_treino,
+    importacoes,
     importar_alunos,
     importar_treinos,
     modelos,
@@ -376,7 +377,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     @app.get("/alunos")
     def pagina_alunos():
         """Tela de buscar aluno."""
-        return render_template("alunos.html")
+        return render_template("alunos.html", avisos_de_atraso=importacoes.avisos_de_atraso(conexao()))
 
     @app.get("/api/alunos")
     def api_alunos():
@@ -390,7 +391,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     @app.get("/alunos/atualizar")
     def pagina_atualizar_alunos():
         """Tela onde a recepção escolhe o base_total.zip e atualiza os alunos do app."""
-        return render_template("atualizar_alunos.html")
+        return render_template("atualizar_alunos.html", atualizacoes=importacoes.resumo_para_a_tela(conexao()))
 
     @app.post("/api/alunos/importar")
     def api_importar_alunos():
@@ -405,6 +406,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         except importar_alunos.CopiaInvalida as erro:
             return jsonify(erro=str(erro)), 400
         relatorio = importar_alunos.importar(conexao(), copia)
+        importacoes.registrar(conexao(), "alunos", relatorio.extraido_em)
         return jsonify(relatorio.como_dicionario())
 
     @app.post("/api/treinos/importar")
@@ -421,6 +423,8 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         except importar_alunos.CopiaInvalida as erro:
             return jsonify(erro=str(erro)), 400
         relatorio = importar_treinos.importar(conexao(), copia, simular=pacote.get("simular") is True)
+        if not relatorio.simulado:
+            importacoes.registrar(conexao(), "treinos", relatorio.extraido_em)
         return jsonify(relatorio.como_dicionario())
 
     @app.get("/alunos/novo")

@@ -1302,3 +1302,39 @@ def test_rota_nao_mexe_no_limite_das_outras(cliente, pacote_de_hoje):
     # Um pedido grande para outra rota continua recusado (o limite maior era só da importação).
     grande = cliente.post("/api/alunos/1/whatsapp", json={"whatsapp": "x" * (TAMANHO_MAXIMO_DO_PEDIDO + 10)})
     assert grande.status_code == 413
+
+
+def _registros_de_importacao(caminho):
+    conn = conectar(caminho)
+    try:
+        return [tuple(l) for l in conn.execute("SELECT tipo, extraido_em FROM importacao ORDER BY tipo")]
+    finally:
+        conn.close()
+
+
+def test_rota_registra_de_quando_e_o_historico_de_treinos(cliente, caminho, pacote_de_hoje):
+    from app.alunos import FUSO_DA_ACADEMIA
+
+    resposta = cliente.post("/api/treinos/importar", json=pacote_de_hoje)
+
+    assert resposta.status_code == 200
+    esperado = datetime.strptime(pacote_de_hoje["extracao"], "%d/%m/%Y %H:%M:%S").replace(tzinfo=FUSO_DA_ACADEMIA)
+    assert _registros_de_importacao(caminho) == [("treinos", f"{esperado.astimezone(timezone.utc):%Y-%m-%d %H:%M:%S}")]
+
+
+def test_simulacao_nao_deixa_registro(cliente, caminho, pacote_de_hoje):
+    pacote_de_hoje["simular"] = True
+
+    resposta = cliente.post("/api/treinos/importar", json=pacote_de_hoje)
+
+    assert resposta.status_code == 200 and resposta.get_json()["simulado"] is True
+    assert _registros_de_importacao(caminho) == []
+
+
+def test_copia_recusada_nao_deixa_registro_dos_treinos(cliente, caminho, pacote_de_hoje):
+    pacote_de_hoje["extracao"] = "isto não é uma data"
+
+    resposta = cliente.post("/api/treinos/importar", json=pacote_de_hoje)
+
+    assert resposta.status_code == 400
+    assert _registros_de_importacao(caminho) == []

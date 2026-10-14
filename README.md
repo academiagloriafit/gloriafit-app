@@ -48,6 +48,9 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
    O servidor confere o pacote de novo (colunas exatamente iguais às esperadas, tipos dos valores,
    cópia de no máximo 5 dias) e grava tudo ou nada. A resposta traz só contagens, nunca nome ou CPF.
    Enviar de novo não duplica ninguém. O `base_total.zip` inteiro **nunca chega ao servidor**.
+   **Envio automático (desde 14/10/2026):** o PC da recepção roda sozinho, todo dia, o programa
+   `app/static/recepcao/enviar_alunos.py`, que faz o mesmo que a tela sem ninguém clicar, e o app avisa se a
+   atualização parar (ver "Atualização automática dos alunos" abaixo). A tela continua valendo para atualizar na hora.
 7. **Imprimir o treino** (`/treinos/<id>/imprimir`): cupom para a impressora térmica (Bematech
    MP-4200 TH, papel de 80 mm) no formato do desenho: academia, aluno, treino, data, professor e,
    por ficha, os exercícios com etiqueta (A1, A2 de bi-set; 3, 4... dos soltos), séries X
@@ -78,7 +81,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 
 | Arquivo | Para quê |
 |---|---|
-| `app/schema.sql` | Desenho das tabelas (versão 8): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) e os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`). Não há tabela de professores: o nome é digitado a cada treino |
+| `app/schema.sql` | Desenho das tabelas (versão 11): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) e `importacao` (de quando é a última cópia do Data4U aplicada). Não há tabela de professores: o nome é digitado a cada treino |
 | `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco da versão 4, 5, 6 ou 7 até a 8 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
 | `app/importar_exercicios.py` | Lê a planilha `dados/quadro_exercicios_v2.xlsx` e grava no banco |
 | `app/texto.py` | `normalizar`: minúsculas e sem acento ("Bíceps" → "biceps") |
@@ -100,6 +103,8 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/templates/`, `app/static/` | Páginas, estilo e JavaScript |
 | `app/static/zip_leitor.js` | Lê o `.zip` no navegador sem biblioteca: acha uma entrada pelo índice e descompacta só ela (deflate ou sem compressão); recusa senha, ZIP64, arquivo cortado, tamanho que não bate e "bomba de zip" |
 | `app/static/copia_modelo.js` | Prepara o que a tela "Atualizar alunos" envia, em dois pacotes (alunos e treinos): confere o manifesto, reduz às colunas necessárias, só celular (tipo 30), CPF/telefone como texto; envia um depois do outro; textos de aviso e leitura da resposta do servidor |
+| `app/importacoes.py` | De quando é a última atualização dos alunos e do histórico de treinos (tabela `importacao`) e o aviso de atraso (mais de 48 h) que aparece na busca de alunos e na tela "Atualizar alunos" |
+| `app/static/recepcao/enviar_alunos.py` | O programa do **PC da recepção** (Windows, Python 3.12, só biblioteca padrão): lê o `base_total.zip`, monta os mesmos dois pacotes do navegador e os envia sozinho; `--autorizar`, `--conferir`, `--instalar`. Fica em `/static/` só para o PC poder baixá-lo (não tem segredo) |
 | `app/static/atualizar_alunos.js` | A tela em si (escolher arquivo, mostrar resumo, enviar os dois pacotes, mostrar o relatório). Usa só `textContent`. Com `?simular_treinos=1` na página, o histórico é só simulado |
 | `app/static/treino_modelo.js` | Lógica do treino (fichas, bi-set, validação, rascunho, nome sugerido, pedido de salvar), sem nada de tela |
 | `app/static/montar.js`, `salvar.js`, `biblioteca.js` | Desenho da tela Lançar treino (nome, professor, fichas, tabela), envio do treino ao servidor e lista de exercícios |
@@ -112,7 +117,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/static/alunos.js`, `ficha.js` | Busca de alunos (espera 200 ms depois de digitar e cancela a busca anterior) e a edição do WhatsApp na ficha |
 | `app/static/fila_ficha.js`, `filas_modelo.js`, `fila_padrao.js` | Cartão **Fila de treino** da ficha (escolher a fila, liberação, tirar da fila), a lógica pura de conferir o que o professor digitou (`filas_modelo.js`, testada à parte) e os campos **Fila** e **Número** do "Salvar como treino padrão" (sugere o próximo número livre) |
 | `app/static/ciclo_ficha.js` | Botões **Concluído** (com confirmação) e **Reativar** da ficha do aluno |
-| `tests/` | Testes do Python (pytest). `schema_v4.sql`, `schema_v5.sql`, `schema_v6.sql` e `schema_v7.sql` são cópias dos desenhos antigos, usadas para provar as migrações; `test_contrato_js_python.py` roda o JavaScript (Node) e entrega o pacote dele ao servidor |
+| `tests/` | Testes do Python (pytest). `schema_v4.sql` a `schema_v10.sql` são cópias dos desenhos antigos, usadas para provar as migrações; `test_contrato_js_python.py` roda o JavaScript (Node) e entrega o pacote dele ao servidor; `test_enviar_alunos.py` confere que o programa do PC monta pacotes **iguais** aos do navegador e roda o envio contra um servidor de verdade |
 | `tests_js/` | Testes do JavaScript (Vitest) |
 
 ## Como rodar
@@ -204,6 +209,7 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 | `GET /api/alunos?q=&limite=` | `{"total": N, "alunos": [{id, nome, provisorio, matricula, situacao, situacao_nome, ultimo_treino, atualizado_em}]}`. `q`: nome (palavras em qualquer ordem) ou só números = pedaço do CPF **ou** matrícula igual (a matrícula vem primeiro); com texto, quem está em uso (ativo, trancado, pendente, provisório) vem antes dos demais; sem `q`, vem primeiro quem tem treino salvo (o mais recente), depois provisórios sem treino, depois o resto. `limite`: 1 a 200 (padrão 50). **Não devolve CPF nem WhatsApp** |
 | `GET /alunos/<id>` | A ficha do aluno (404 se não existe) |
 | `POST /api/alunos/<id>/whatsapp` | Corrige o WhatsApp. Corpo JSON: `whatsapp` (10 ou 11 algarismos com DDD; aceita espaço, parênteses, ponto e hífen; **sem +55**). Devolve `200 {"whatsapp": "(27) 98888-7766"}`; `400 {"erro"}`; `404`; `415`. Marca o número como corrigido no app (a cópia diária do Data4U não pode mais sobrescrevê-lo) |
+| `GET /static/recepcao/enviar_alunos.py` | O programa do PC da recepção (público, como o resto de `/static/`; não tem segredo) |
 | `GET /alunos/atualizar` | A tela "Atualizar alunos" (a recepção escolhe o `base_total.zip`). Com `?simular_treinos=1` mostra "MODO TESTE" e o histórico de treinos não é gravado |
 | `POST /api/alunos/importar` | Recebe o pacote de alunos montado pelo navegador (até 25 MB; só esta rota e a de treinos aceitam isso, as demais param em 512 KB). `200` com contagens; `400 {"erro"}` se o pacote não serve (nada é gravado) |
 | `POST /api/treinos/importar` | Recebe o pacote do histórico de treinos. `200 {"extraido_em", "simulado", "treinos", "novos", "atualizados", "removidos", "texto"}` (só contagens, nunca nome ou CPF); `400 {"erro"}`. Com `"simular": true` no pacote roda tudo e desfaz |
@@ -454,6 +460,49 @@ que o aluno fizer no app dele).
 - **Modo teste:** abrir `/alunos/atualizar?simular_treinos=1`: o servidor faz toda a importação e **desfaz**, devolvendo as contagens
   ("SIMULAÇÃO: nada foi gravado"). Os alunos continuam sendo gravados normalmente nesse envio; só o histórico é simulado.
 
+## Atualização automática dos alunos: como funciona
+
+Pedido do Thiago de 14/10/2026 ("atualizar os alunos todo dia sem ninguém clicar"). Antes, alguém da recepção escolhia o
+`base_total.zip` na tela todo dia; agora o PC da recepção manda sozinho.
+
+- **Quem faz o quê:** a extração do Data4U (tarefa `GloriaFit-ExtracaoDiaria`, 05:00, 08:00 e 12:00) continua igual. Uma
+  segunda tarefa, `GloriaFit-EnvioDiario`, roda `enviar_alunos.py` **15 minutos depois** de cada uma (05:15, 08:15 e 12:15), sem
+  janela (`pythonw`), só com o usuário logado e, se o PC estava desligado na hora, assim que ligar (`StartWhenAvailable`).
+- **O que o programa faz:** espera a extração terminar, se ela estiver rodando (arquivo `base_total_nova.zip` recente, até 25 min);
+  abre só 4 a 9 entradas do `.zip` (as outras 250 tabelas nem são lidas); confere contra o `_manifesto.json`; monta os **mesmos
+  dois pacotes** da tela (`copia_modelo.js` é a referência; `tests/test_enviar_alunos.py` roda os dois sobre o mesmo `.zip` e exige
+  resultado igual); manda primeiro os alunos e depois o histórico de treinos para as mesmas rotas da tela.
+  **Só envia cópia mais nova que a última enviada** (por isso o das 08:15 e o das 12:15 quase sempre são "nada novo"); cada
+  assunto tem o seu registro (`enviar_alunos_estado.json`), então se o histórico falhar os alunos não vão de novo.
+  Sem internet, tenta 3 vezes (1 min entre elas); resposta do servidor nunca é repetida na hora (a próxima chance é o próximo horário).
+- **Onde ficam os arquivos (na pasta NFSE do PC):** `enviar_alunos.py`, `enviar_alunos_dispositivo.txt` (a chave do PC),
+  `enviar_alunos_estado.json` e `enviar_alunos_log.txt` (o que aconteceu em cada rodada; vira `.antigo.txt` aos 300 KB).
+- **Autorização:** o PC é um "dispositivo" como o navegador: uma vez, `python enviar_alunos.py --autorizar` troca um código de
+  uso único (`python -m app.dispositivos codigo --nome "PC da recepção (envio automático)"`) pela chave, que o servidor guarda só
+  como hash. Dá para ver e cortar: `python -m app.dispositivos listar` / `revogar N`. **Risco aceito:** a chave abre a área do
+  professor inteira, não só a importação, e fica num arquivo da pasta NFSE; mas ali já está o `base_total.zip` com o banco inteiro do
+  Data4U, e o Chrome da recepção já tem o cookie de acesso. Se um dia isso incomodar, o caminho é uma chave que só vale para as
+  duas rotas de importação (exige mudança no servidor e nos testes).
+- **Segurança:** só `https://` (a chave não viaja aberta; `http://localhost` só para teste); redirecionamento do servidor é erro,
+  não é seguido (um POST redirecionado perderia o corpo em silêncio); a chave nunca vai para o log nem para a tela; o programa
+  **não se atualiza sozinho** (instalar uma versão nova é baixar de novo à mão), para que um servidor comprometido não mande código
+  para o PC.
+- **Se parar, o app avisa:** cada importação bem-sucedida grava em `importacao` a hora da cópia (tabela nova, banco versão 11). Passando
+  de 48 horas, a busca de alunos mostra uma faixa laranja e a tela "Atualizar alunos" marca "atrasado". 48 h cobre um fim de semana
+  de PC desligado; um dia inteiro sem cópia nova já aparece. Assunto nunca registrado não avisa (o aviso vale a partir da primeira cópia).
+- **Instalar no PC** (uma vez; o programa vem do próprio app): na pasta NFSE, baixar
+  `https://app.gloriafit.com.br/static/recepcao/enviar_alunos.py`; `python enviar_alunos.py --conferir` (monta os pacotes e mostra o
+  resumo, sem enviar nada); `python enviar_alunos.py --autorizar` (o Thiago digita o código); `python enviar_alunos.py` (primeiro envio, à mão);
+  `python enviar_alunos.py --instalar` (cria a tarefa agendada). Para desfazer: `schtasks /Delete /TN GloriaFit-EnvioDiario /F`.
+- **Medido com tabelas do tamanho real (sintéticas, 176 mil lançamentos e 129 mil exercícios prescritos):** ~2,6 s e até ~0,5 GB de memória para montar
+  os dois pacotes (2 + 7 MB); o programa guarda só as colunas usadas, então na prática gasta menos. O servidor leva 2 a 2,5 s para gravar o
+  histórico. Em Python de 32 bits o limite é de 2 a 4 GB: folgado.
+- **Voltar atrás:** o banco versão 11 só acrescenta a tabela `importacao`. Para a imagem anterior (`e9c6961`, que conhece até a versão 10): app parado,
+  `PRAGMA user_version = 10` (a tabela fica lá, sem atrapalhar), ou restaurar a cópia feita antes da migração. O PC continua tentando enviar e
+  acusando erro no log; nada se perde (enviar de novo não duplica).
+- **Não testado ainda no PC de verdade:** `--instalar` (criar a tarefa com `schtasks`) e a execução com `pythonw` só podem ser provados no
+  Windows; o XML da tarefa tem teste de formato, mas não de execução.
+
 ## Cuidados
 
 - **Cardio e exercícios sem dose:** séries e repetições podem ficar em branco (pedido do Thiago,
@@ -533,10 +582,8 @@ que o aluno fizer no app dele).
 - A busca de alunos mostra o **último treino** (o mais novo, do app ou do histórico), que normalmente é o ativo; ainda falta o app do aluno.
 - A **situação** mostrada é a letra do Data4U (Ativo, Pendente...), no lugar do "Em dia" do
   desenho. "Em dia" não foi verificado (o desenho dizia "pagou nos últimos 30 dias").
-- Importar todo dia, **sozinho**: hoje é manual, pela tela "Atualizar alunos" (alguém da recepção
-  escolhe o `base_total.zip` depois das 05:00). Automatizar exigiria mandar os dados do PC da
-  recepção ao servidor sem ninguém na tela: ainda não decidido. A cópia tem as 258 tabelas do Data4U
-  (digitais, anamnese, pagamentos...) e o app só usa 3; a tela já envia só elas e só as colunas usadas.
+- Importar todo dia, **sozinho**: feito em 14/10/2026 (ver "Atualização automática dos alunos"). Em aberto: provar `--instalar` e a
+  tarefa agendada no PC da recepção, e uma chave que só valha para as rotas de importação (hoje a chave do PC vale para a área toda).
 - A tela "Atualizar alunos" lê o `.zip` com o `DecompressionStream` do navegador (Chrome e Edge
   atuais) e **não lê ZIP64** (só usado acima de 4 GB). Foi testada com `.zip` gerado pelo Python
   (deflate) num Chromium de verdade; **falta testar com o `base_total.zip` real** no PC da recepção.

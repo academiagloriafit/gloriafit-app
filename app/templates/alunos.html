@@ -13,6 +13,10 @@
   <main class="pagina pagina-larga">
     <h1 class="titulo-grande">Buscar aluno</h1>
 
+    {% for aviso in avisos_de_atraso %}
+    <p class="aviso-importado aviso-importado-atencao" role="status">{{ aviso }}</p>
+    {% endfor %}
+
     <div class="campo campo-busca-aluno">
       <label for="busca-aluno">Nome, CPF ou matrícula</label>
       <input id="busca-aluno" type="search" placeholder="Digite para buscar" autocomplete="off" maxlength="100" autofocus>
