@@ -15,8 +15,9 @@ Como funciona, em ordem:
    tempos (`consultar_pedido`). Motivo: a resposta do Claude leva dezenas de segundos e o servidor (gunicorn) derruba um
    pedido que passe de 30 s.
 3. O fio monta a conversa (`montar_conversa`): regras da casa + lista dos exercícios que a academia de fato usa + treinos
-   padrão como exemplo do jeito da casa, chama a API (`chamar_claude`) e obriga a resposta a vir pela "ferramenta"
-   `montar_treino` (formato fixo, em vez de texto solto).
+   padrão como exemplo do jeito da casa, chama a API (`chamar_claude`) e pede que a resposta venha pela "ferramenta"
+   `montar_treino` (formato fixo, em vez de texto solto). Não dá para OBRIGAR por `tool_choice`: o Sonnet 5.5 recusa
+   `tool_choice` "tool"/"any" (erro 400). Por isso: `tool_choice` "auto" + ferramenta `strict` + ordem escrita no pedido.
 4. `conferir_rascunho` desconfia da resposta: todo exercício precisa estar na lista enviada (id inventado é descartado),
    textos são cortados nos limites do Data4U e o treino passa pela MESMA conferência de um treino de verdade
    (`treinos.validar_fichas`). O resultado vai para a tela no formato de `modelos.para_montar`.

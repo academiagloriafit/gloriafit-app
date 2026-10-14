@@ -288,7 +288,7 @@ aluno de perfil parecido.
   também recusaria.
 - **Bi-sets/tri-sets do Data4U fora do molde** (bloco com 1 exercício ou com 4 ou mais) viram exercícios sozinhos ao copiar; blocos
   bons são renumerados.
-- **Filas numeradas** (sequência básico, intermediário...): já existem; ver "Filas numeradas: como funciona". **Ainda não existe** (planejado): montar um treino sob medida a partir de uma descrição (o professor conferiria).
+- **Filas numeradas** (sequência básico, intermediário...): já existem; ver "Filas numeradas: como funciona". **Treino sob medida pelo Claude** (rascunho que o professor confere): já existe; ver "Treino sob medida pelo Claude: como funciona".
 
 ## Senha de administrador: como funciona
 
@@ -312,7 +312,7 @@ aluno) e ajusta **só para aquele aluno**: o padrão nunca muda.
 ## Filas numeradas: como funciona
 
 Pedido do Thiago (09/10/2026), decisões de 13/10/2026 (fase 2 da "troca automática"). A fase 3 (treino sob medida montado pelo Claude e
-conferido pelo professor) ainda não existe.
+conferido pelo professor) está na seção "Treino sob medida pelo Claude: como funciona".
 
 - **Fila** = sequência de treinos padrão numerados, **do Treino 1 ao Treino 6** (um evolui do outro), para um tipo de aluno. Começam **cinco**, todas **vazias**: Homem,
   Mulher, Adolescente, Gestante e Grupos de risco (tabela `fila`; Gestante e Grupos de risco têm `exige_liberacao`).
@@ -336,6 +336,42 @@ conferido pelo professor) ainda não existe.
 - **Segurança e erros:** tudo é conferido de novo no servidor (fila existente, número de 1 a 6, liberação `true` literal, data não futura,
   aluno realmente na fila do treino). Se a fila do aluno mudar entre abrir e salvar, nada é gravado (tudo ou nada) e a tela mostra o motivo.
   Textos vindos do banco (nome do padrão, professor) entram na página sempre escapados.
+
+## Treino sob medida pelo Claude: como funciona
+
+Fase 3 do "Importar treino" (pedido do Thiago de 09/10/2026; no ar desde 14/10/2026, banco versão 10). Na tela **Lançar treino** há o cartão
+**"Treino sob medida"**: o professor responde objetivo, nível, dias por semana e tempo por treino, pode escrever observações (lesão,
+preferência) e clica em gerar. O app pede ao Claude (API da Anthropic) um **rascunho** feito só com exercícios da academia e o coloca na tela
+de montar, como um treino importado. **Nada é salvo para o aluno:** o professor confere, ajusta e clica em **Salvar treino**, como sempre.
+
+- **Como o pedido anda:** `POST /api/alunos/<id>/treino-ia` grava uma linha em `ia_pedido` (situação `andando`) e responde `202` na hora; um
+  fio de segundo plano chama a API; a tela pergunta a cada 2 s em `GET /api/alunos/<id>/treino-ia/<pedido>` (a resposta leva dezenas de
+  segundos e o gunicorn derruba pedido acima de 30 s). Erros do `POST`: `400` (campo inválido), `404`, `409` (aluno em fila que exige
+  liberação), `429` (limite), `503` (IA sem chave). Pedido `andando` há mais de 4 min vira `erro`; resultado fica guardado por 3 dias.
+- **O que vai para a Anthropic:** objetivo, nível, dias, tempo, o nome da fila do aluno (ex.: "Mulher"), as observações do professor e as
+  listas de exercícios e treinos padrão da academia. **Não vão:** nome, CPF, WhatsApp, e-mail, matrícula nem treinos antigos do aluno. O
+  app **recusa** observação com sequência de 8 ou mais algarismos, com e-mail ou com o nome do aluno (e a tela avisa o mesmo no navegador).
+  **As observações não são guardadas no banco.** Os servidores da Anthropic ficam fora do Brasil (espaço "App Academia", geografia
+  Estados Unidos): é transferência internacional de dado, por isso nada que identifique o aluno é enviado.
+- **Quem não usa:** aluno em fila que exige liberação (Gestante, Grupos de risco) e observação que fala de gravidez: o treino é do professor.
+- **Limites:** 20 pedidos por dia (dia de Brasília; só contam os que andaram/prontos ou com erro depois de gastar token) e 2 ao mesmo
+  tempo. O teto de verdade é o **gasto mensal do espaço "App Academia" na Anthropic (US$ 10)**. Medido em 14/10/2026: 1 rascunho = 17.245
+  tokens de entrada + 1.531 de saída, cerca de **US$ 0,05**.
+- **Catálogo enviado:** só exercícios que a academia usou ao menos 5 vezes no último ano (ou que estão num treino padrão) e até 16 padrões
+  como exemplo do jeito da casa. O servidor **desconfia da resposta**: id fora da lista é descartado, textos são cortados nos limites do
+  Data4U e o treino passa pela mesma conferência de um treino de verdade (`treinos.validar_fichas`). Texto de observação é dado, não ordem.
+- **Chave da API:** num arquivo ao lado do banco (`/dados/ia_chave`, permissão `0600`); nunca no banco, no código, no navegador nem em
+  backup. No terminal do contêiner (quem digita é quem cuida do servidor; a chave não aparece na tela): `python -m app.ia_treino
+  definir-chave`; `situacao` (chave guardada?, modelo, pedidos de hoje, tokens do mês); `testar` (chamada mínima); `diagnosticar [--esforco
+  low|medium|high] [--sem-pensar] [--dias N] [--minutos N] [--observacoes "..."]` (pedido real **sem aluno e sem salvar nada**: mostra
+  tempo, tokens, custo estimado e o rascunho).
+- **Regras do modelo (Claude Sonnet 5.5; conferidas na documentação da Anthropic):** `tool_choice` "tool"/"any" dá erro 400, então usamos
+  `auto` + ferramenta `strict` + ordem escrita no pedido; `thinking` ligado por padrão (adaptativo) e `{"type":"disabled"}` dá 400 (o
+  jeito de desligar é `between_tools`); `temperature`/`top_p`/`top_k` fora do padrão e *prefill* dão 400; o esforço vai em
+  `output_config.effort` (padrão do app: `medium`). O esquema `strict` não aceita `minimum`/`maximum`/`minLength`/`maxLength`/`maxItems`
+  (limites ficam nas descrições e na conferência do servidor). Testes travam tudo isso (`tests/test_ia_treino.py`).
+- **Voltar atrás:** banco versão 10 só acrescenta a tabela `ia_pedido`. Para a imagem anterior (`b4860bf`, que conhece até a versão 9):
+  app parado, `PRAGMA user_version = 9`, ou restaurar a cópia feita antes da migração. Sem a chave, o botão responde `503` e o resto do app não muda.
 
 ## Editar treino: como funciona
 
