@@ -306,11 +306,15 @@ aluno) e ajusta **só para aquele aluno**: o padrão nunca muda.
   A senha é conferida **antes** de achar o padrão (`404`) ou validar o resto.
 - **Definir ou trocar a senha** (no terminal do servidor, quem digita é o Thiago; a senha não aparece na tela nem vai para arquivo):
   `python -m app.administrador definir-senha`. `python -m app.administrador situacao` diz só se há senha, quando foi definida e se está travada (nunca a senha).
-- **Ajustar vários padrões de uma vez** (revisão de 14/10/2026): `python -m app.ajustar_padroes` (no terminal do servidor; quem digita a senha é o
-  Thiago). Troca textos dentro dos padrões já guardados, sem mudar id, fila, número nem professor, com **uma senha só**, **cópia de segurança
-  antes** e **tudo ou nada**. `--simular` mostra o que mudaria sem pedir senha nem gravar (`--detalhes` lista linha por linha). A lista de
-  mudanças fica em `PLANOS` (`app/ajustar_padroes.py`); cada linha é conferida por posição, nome do exercício e valor de antes, e rodar de novo
-  reconhece o que já foi ajustado. É uma ferramenta de manutenção, não uma tela do app.
+- **Ajustar vários padrões de uma vez, ou criar padrões novos** (14/10/2026): `python -m app.ajustar_padroes [--lote revisao|filas]` (no terminal do
+  servidor; quem digita a senha é o Thiago). Aplica um **lote** decidido item por item: troca textos dentro de padrões já guardados, renomeia
+  treino e fichas, coloca um padrão solto numa fila e **cria padrões novos** já no lugar da fila, com **uma senha só**, **cópia de segurança antes**
+  e **tudo ou nada**. `--simular` mostra o que mudaria sem pedir senha nem gravar (`--detalhes` lista linha por linha). Os lotes ficam em
+  `app/ajustar_padroes.py`: `revisao` (os 12 treinos de Homem e Mulher; já aplicada) e `filas` (Treino 1 de Adolescente, Gestante e Grupos de
+  risco; sem `--lote` vale este). Cada linha é conferida por posição, nome do exercício e valor de antes; cada exercício de treino novo é achado
+  pelo nome que aparece na tela e tem que existir **uma vez só** na lista ativa; rodar de novo reconhece o que já foi feito. Para um lote novo:
+  escrever os `Plano`/`Novo`, registrar em `LOTES`, testar, publicar e rodar `--simular` em produção antes. É uma ferramenta de manutenção, não
+  uma tela do app.
 - **Limite honesto:** o computador autorizado + a senha protegem de acidente e de curioso. Quem tem acesso ao servidor ou ao banco de dados
   pode contornar (é a regra de qualquer sistema sem conta de usuário).
 
