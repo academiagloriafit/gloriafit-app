@@ -57,9 +57,11 @@ class IAFalsa:
         self.devolve = devolve or _rascunho()
         self.levanta = levanta
         self.chamadas = 0
+        self.corpos = []  # o que a IA recebeu em cada chamada
 
     def __call__(self, chave, corpo, *_a, **_k):
         self.chamadas += 1
+        self.corpos.append(corpo)
         if self.levanta:
             raise self.levanta
         return self.devolve
@@ -198,6 +200,108 @@ def test_pedidos_demais_no_dia_devolve_429(cliente, caminho):
     assert resposta.status_code == 429 and "limite do dia" in resposta.get_json()["erro"]
 
 
+# ---- a conversa: a IA pergunta, o professor responde, a IA monta
+
+
+def _perguntas_da_ia(*perguntas):
+    return {
+        "stop_reason": "tool_use",
+        "content": [{"type": "tool_use", "name": "fazer_perguntas", "input": {"perguntas": list(perguntas)}}],
+        "usage": {"input_tokens": 4000, "output_tokens": 200},
+    }
+
+
+def test_a_ia_pergunta_o_professor_responde_e_a_ia_monta(cliente, app):
+    ia = IAFalsa(devolve=_perguntas_da_ia("Qual o foco?", "Tem alguma lesão?"))
+    app.config["IA_CHAMADA"] = ia
+
+    primeiro = _pedir(cliente, perguntar=True)
+    assert primeiro.status_code == 202
+    lido = cliente.get(f"/api/alunos/1/treino-ia/{primeiro.get_json()['pedido_id']}").get_json()
+    assert lido == {"situacao": "pronto", "perguntas": ["Qual o foco?", "Tem alguma lesão?"], "rodada": 1, "maximo_de_rodadas": 2}
+    assert [f["name"] for f in ia.corpos[0]["tools"]] == ["fazer_perguntas", "montar_treino"]
+
+    ia.devolve = _rascunho()
+    rodadas = [{"perguntas": ["Qual o foco?", "Tem alguma lesão?"], "respostas": ["Mais peito.", "Condropatia no joelho esquerdo."]}]
+    segundo = _pedir(cliente, perguntar=True, rodadas=rodadas)
+    assert segundo.status_code == 202
+    final = cliente.get(f"/api/alunos/1/treino-ia/{segundo.get_json()['pedido_id']}").get_json()
+    assert final["situacao"] == "pronto" and [f["nome"] for f in final["treino"]["fichas"]] == ["A - PEITO", "B - COSTAS"]
+    enviado = ia.corpos[1]["messages"][0]["content"]
+    assert "Condropatia no joelho esquerdo." in enviado and "Pergunta 1: Qual o foco?" in enviado
+
+
+def test_pedido_sem_perguntar_nao_oferece_a_ferramenta_de_perguntas(cliente, ia):
+    _pedir(cliente)
+
+    assert [f["name"] for f in ia.corpos[0]["tools"]] == ["montar_treino"]
+
+
+def test_a_ia_recebe_o_treino_anterior_do_aluno_sem_o_nome_dele(cliente, caminho, ia):
+    c = conectar(caminho)
+    c.execute("INSERT INTO treino (id, aluno_id, nome, montado_por, ativo, inicio) VALUES (1, 1, 'TREINO DA ANA', 'PROF SECRETO', 1, '2026-09-01')")
+    c.execute("INSERT INTO ficha (id, treino_id, nome, ordem) VALUES (1, 1, 'A - PEITO', 1)")
+    c.execute("INSERT INTO ficha_item (ficha_id, ordem, exercicio_id, series, repeticoes) VALUES (1, 1, 1, '3', '12')")
+    c.commit()
+    c.close()
+
+    _pedir(cliente)
+
+    enviado = json.dumps(ia.corpos[0], ensure_ascii=False)
+    assert "SUPINO RETO 3x12" in enviado and "Treino anterior do aluno (ativo" in enviado
+    for segredo in ("TREINO DA ANA", "FICTICIA", "PROF SECRETO", "12345678909"):
+        assert segredo not in enviado
+
+
+@pytest.mark.parametrize(
+    "mudanca",
+    [
+        {"perguntar": "sim"},
+        {"rodadas": "texto"},
+        {"rodadas": [{"perguntas": ["a?"], "respostas": []}]},
+        {"rodadas": [{"perguntas": ["a?"], "respostas": ["b"]}] * 3},
+        {"rodadas": [{"perguntas": ["a?"], "respostas": ["meu cpf 123.456.789-09"]}]},
+        {"rodadas": [{"perguntas": ["a?"], "respostas": ["a Ficticia tem dor"]}]},
+        {"rodadas": [{"perguntas": ["a?"], "respostas": ["x" * 301]}]},
+    ],
+)
+def test_conversa_invalida_devolve_400_sem_gastar(cliente, ia, mudanca):
+    resposta = _pedir(cliente, **mudanca)
+
+    assert resposta.status_code == 400 and resposta.get_json()["erros"] and ia.chamadas == 0
+
+
+def test_gravidez_numa_resposta_devolve_409_sem_gastar(cliente, ia):
+    rodadas = [{"perguntas": ["Alguma condição?"], "respostas": ["Está grávida de 3 meses"]}]
+
+    resposta = _pedir(cliente, perguntar=True, rodadas=rodadas)
+
+    assert resposta.status_code == 409 and resposta.get_json()["bloqueio"] == "gravidez" and "As respostas" in resposta.get_json()["erro"]
+    assert ia.chamadas == 0
+
+
+def test_a_ia_que_pergunta_sem_poder_vira_erro_na_consulta(cliente, app):
+    app.config["IA_CHAMADA"] = IAFalsa(devolve=_perguntas_da_ia("Mais uma?"))
+
+    pedido_id = _pedir(cliente).get_json()["pedido_id"]  # perguntar=False: a IA nem recebeu a ferramenta
+
+    assert cliente.get(f"/api/alunos/1/treino-ia/{pedido_id}").get_json()["situacao"] == "erro"
+
+
+def test_as_respostas_do_professor_nao_ficam_no_banco(cliente, caminho, app):
+    app.config["IA_CHAMADA"] = IAFalsa(devolve=_perguntas_da_ia("Prefere halteres?"))
+    rodadas = [{"perguntas": ["Alguma lesão?"], "respostas": ["RESPOSTA-SECRETA hérnia de disco"]}]
+
+    _pedir(cliente, perguntar=True, rodadas=rodadas)
+
+    c = conectar(caminho)
+    try:
+        tudo = "\n".join(c.iterdump())
+    finally:
+        c.close()
+    assert "RESPOSTA-SECRETA" not in tudo and "hérnia" not in tudo
+
+
 def test_a_chave_nunca_aparece_em_nenhuma_resposta(cliente):
     pedido_id = _pedir(cliente).get_json()["pedido_id"]
 
@@ -286,6 +390,37 @@ def test_cartao_avisa_para_nao_escrever_quem_e_o_aluno(cliente):
 
     assert "Não escreva o nome, CPF nem telefone do aluno" in html
     assert "Quem confere e responde pelo treino é você" in html
+
+
+def test_cartao_explica_o_que_a_ia_le_e_para_onde_vai_o_texto(cliente):
+    html = _html(cliente)
+
+    assert "lê o treino anterior do aluno e pode te fazer perguntas" in html
+    assert "até 2 rodadas de perguntas" in html and "Montar direto" in html
+    assert "Anthropic, nos EUA" in html  # o professor sabe para onde vai o que escreve
+
+
+def test_cartao_tem_os_dois_botoes_e_a_area_da_conversa_escondida(cliente):
+    html = _html(cliente)
+
+    assert "Gerar rascunho" in _botao(html, "gerar-ia") or 'id="gerar-ia"' in html
+    for id_ in ("montar-direto-ia", "acoes-ia", "conversa-ia", "historico-ia", "perguntas-ia", "rodada-ia", "enviar-respostas-ia", "montar-agora-ia", "mudar-pedido-ia"):
+        assert f'id="{id_}"' in html, id_
+    assert re.search(r'<div id="conversa-ia"[^>]*\bhidden\b', html)
+    assert re.search(r'<ol id="historico-ia"[^>]*\bhidden\b', html)
+
+
+def test_todo_id_que_o_script_da_ia_procura_existe_na_tela(cliente):
+    """treino_ia.js faz `pegar("id")` sem checar: um id esquecido no HTML quebra o cartão inteiro (e só se vê no navegador)."""
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parent.parent / "app" / "static" / "treino_ia.js").read_text(encoding="utf-8")
+    ids = set(re.findall(r'pegar\("([^"]+)"\)', script))
+    html = _html(cliente)
+
+    assert len(ids) >= 20  # o script de fato foi lido
+    faltam = {i for i in ids if f'id="{i}"' not in html}
+    assert not faltam, faltam
 
 
 def test_cartao_fica_desligado_sem_a_chave_e_diz_o_motivo(cliente, caminho):

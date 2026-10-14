@@ -78,7 +78,7 @@
           <p id="dica-ia" class="dica">
             {%- if ia.bloqueio %}{{ ia.bloqueio }}
             {%- elif not ia.configurada %}Ainda não está ligado: falta a chave da IA no servidor. Avise o Thiago.
-            {%- else %}A IA monta um rascunho só com os exercícios da academia. Você confere e ajusta antes de salvar.{% endif -%}
+            {%- else %}A IA monta um rascunho só com os exercícios da academia, lê o treino anterior do aluno e pode te fazer perguntas antes. Você confere e ajusta antes de salvar.{% endif -%}
           </p>
         </div>
 
@@ -115,10 +115,26 @@
             <div class="campo campo-largo">
               <label for="ia-observacoes">Observações sobre o aluno <span class="opcional">(opcional)</span></label>
               <textarea id="ia-observacoes" rows="3" maxlength="{{ ia_limite_das_observacoes }}" aria-describedby="dica-ia-observacoes" placeholder="Ex.: dor no joelho direito; não gosta de esteira; prefere máquinas"></textarea>
-              <p id="dica-ia-observacoes" class="dica">Lesões, o que evitar, preferências. <strong>Não escreva o nome, CPF nem telefone do aluno:</strong> a IA recebe só o que está neste cartão, nunca quem é o aluno.</p>
+              <p id="dica-ia-observacoes" class="dica">Lesões, o que evitar, preferências. <strong>Não escreva o nome, CPF nem telefone do aluno:</strong> a IA recebe só o que está neste cartão, as suas respostas e o treino anterior do aluno (só os exercícios), nunca quem é o aluno. O que você escrever vai para o serviço da IA (Anthropic, nos EUA).</p>
             </div>
           </div>
           <p class="dica">O rascunho pode ter erro. Quem confere e responde pelo treino é você. Para gestante e grupos de risco, monte à mão.</p>
+          <p id="dica-botoes-ia" class="dica"><strong>Gerar rascunho:</strong> a IA lê o treino anterior do aluno e pode te fazer até 2 rodadas de perguntas (o que mudar, objetivo, lesões, comorbidades) antes de montar. <strong>Montar direto:</strong> sem perguntas.</p>
+
+          {# A conversa: as perguntas da IA aparecem aqui, o professor responde e a IA monta (ou pergunta mais uma vez). Os textos das
+             perguntas vêm da IA e entram na tela só como texto (nunca como HTML). Nada disto é gravado no banco. #}
+          <div id="conversa-ia" class="conversa-ia" aria-labelledby="titulo-conversa-ia" hidden>
+            <h3 id="titulo-conversa-ia" class="titulo-conversa">A IA quer saber mais <span id="rodada-ia" class="selo-rodada"></span></h3>
+            <ol id="historico-ia" class="historico-ia" aria-label="O que você já respondeu" hidden></ol>
+            <div id="perguntas-ia" class="perguntas-ia"></div>
+            <p class="dica">Responda o que souber; deixar em branco também vale. <strong>Não escreva o nome, CPF nem telefone do aluno.</strong></p>
+            <div class="botoes-ia">
+              <button type="button" id="enviar-respostas-ia" class="botao-principal">Enviar respostas</button>
+              <button type="button" id="montar-agora-ia" class="botao-escuro">Montar agora, sem mais perguntas</button>
+              <button type="button" id="mudar-pedido-ia" class="botao-discreto">Recomeçar do zero</button>
+            </div>
+          </div>
+
           <div class="rodape-importar">
             <p id="aviso-ia" class="aviso-campo" role="status" aria-live="polite"></p>
             <span id="confirmar-ia" class="confirmacao" hidden>
@@ -126,8 +142,9 @@
               <button type="button" id="confirmar-gerar-ia" class="botao-perigo">Sim, substituir</button>
               <button type="button" id="cancelar-gerar-ia" class="botao-discreto">Não</button>
             </span>
-            <span class="botoes-ia">
+            <span id="acoes-ia" class="botoes-ia">
               <button type="button" id="gerar-ia" class="botao-principal">Gerar rascunho</button>
+              <button type="button" id="montar-direto-ia" class="botao-escuro">Montar direto, sem perguntas</button>
               <button type="button" id="fechar-ia" class="botao-discreto">Fechar</button>
             </span>
           </div>

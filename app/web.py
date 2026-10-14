@@ -661,12 +661,15 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.post("/api/alunos/<int:aluno_id>/treino-ia")
     def api_pedir_treino_ia(aluno_id: int):
-        """O professor pede um RASCUNHO de treino ao Claude. Nada é salvo para o aluno.
+        """O professor pede um RASCUNHO de treino ao Claude (ou a vez de a IA perguntar). Nada é salvo para o aluno.
 
-        Corpo: {"objetivo", "nivel", "dias", "minutos", "observacoes" (opcional)}.
+        Corpo: {"objetivo", "nivel", "dias", "minutos", "observacoes" (opcional), "perguntar" (opcional, true = a IA pode fazer
+        perguntas antes de montar), "rodadas" (opcional: as rodadas de perguntas já respondidas, [{"perguntas": [...],
+        "respostas": [...]}], no máximo 2; o servidor não guarda a conversa, o navegador manda tudo de novo a cada chamada)}.
         202 {"pedido_id"} (a resposta demora: a tela pergunta de tempos em tempos em GET .../treino-ia/<pedido_id>);
         400 {"erros"}; 404 aluno inexistente; 409 {"erro", "bloqueio"} (aluno de fila com liberação, ou gravidez nas
-        observações); 429 {"erro"} (pedidos demais); 503 {"erro", "configurada": false} (o servidor ainda não tem a chave).
+        observações ou nas respostas); 429 {"erro"} (pedidos demais; cada chamada à IA conta); 503 {"erro", "configurada": false}
+        (o servidor ainda não tem a chave).
         """
         dados = corpo_json()
         conn = conexao()
@@ -693,8 +696,9 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.get("/api/alunos/<int:aluno_id>/treino-ia/<int:pedido_id>")
     def api_ver_treino_ia(aluno_id: int, pedido_id: int):
-        """Como está o pedido de rascunho. {"situacao": "andando"} | {"situacao": "pronto", "treino", "resumo", "alertas",
-        "removidos"} | {"situacao": "erro", "erro"}. 404 se o pedido não existe ou é de outro aluno."""
+        """Como está o pedido. {"situacao": "andando"} | {"situacao": "pronto", "treino", "resumo", "alertas", "removidos"}
+        (o rascunho) | {"situacao": "pronto", "perguntas", "rodada", "maximo_de_rodadas"} (a IA quer saber mais antes de
+        montar) | {"situacao": "erro", "erro"}. 404 se o pedido não existe ou é de outro aluno."""
         try:
             return jsonify(ia_treino.consultar_pedido(conexao(), aluno_id, pedido_id))
         except ia_treino.PedidoNaoEncontrado:

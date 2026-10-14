@@ -341,37 +341,63 @@ conferido pelo professor) está na seção "Treino sob medida pelo Claude: como 
 
 Fase 3 do "Importar treino" (pedido do Thiago de 09/10/2026; no ar desde 14/10/2026, banco versão 10). Na tela **Lançar treino** há o cartão
 **"Treino sob medida"**: o professor responde objetivo, nível, dias por semana e tempo por treino, pode escrever observações (lesão,
-preferência) e clica em gerar. O app pede ao Claude (API da Anthropic) um **rascunho** feito só com exercícios da academia e o coloca na tela
-de montar, como um treino importado. **Nada é salvo para o aluno:** o professor confere, ajusta e clica em **Salvar treino**, como sempre.
+preferência) e clica em **Gerar rascunho**. O app pede ao Claude (API da Anthropic) um **rascunho** feito só com exercícios da academia e o
+coloca na tela de montar, como um treino importado. **Nada é salvo para o aluno:** o professor confere, ajusta e clica em **Salvar treino**,
+como sempre.
+
+**A conversa (14/10/2026, "opção A" do Thiago):** o Claude lê o **treino anterior** do aluno e, antes de montar, pode fazer **até 2 rodadas de
+perguntas** ao professor (o que mudar ou evoluir, objetivo, comorbidades, condropatia, lesões, preferências; até 5 perguntas por rodada). O
+professor responde na própria tela e a IA monta (ou pergunta mais uma vez). O botão **Montar direto, sem perguntas** pula tudo isso, e
+**Montar agora, sem mais perguntas** encerra a conversa no meio. Na última rodada a IA não recebe mais a ferramenta de perguntas: ela é
+obrigada a entregar o treino.
+
+- **Como a conversa funciona por dentro (servidor SEM memória):** o servidor não guarda a conversa; quem guarda é a tela
+  (`treino_ia.js`), que manda tudo de novo a cada chamada: `POST .../treino-ia` com `perguntar` (true = a IA pode perguntar) e `rodadas`
+  (`[{"perguntas": [...], "respostas": [...]}]`, no máximo 2). Cada chamada à IA é independente (uma mensagem só) e é um `ia_pedido` próprio.
+  A IA tem **duas ferramentas**: `fazer_perguntas` (só oferecida enquanto `perguntar` e sobrar rodada) e `montar_treino`. Com `tool_choice`
+  `auto` quem decide é o texto do pedido ("se ainda faltar informação, chame fazer_perguntas; se basta, chame montar_treino"). O resultado de
+  `GET .../treino-ia/<pedido>` é o rascunho (`treino`, `resumo`, `alertas`, `removidos`) **ou** `{"perguntas", "rodada", "maximo_de_rodadas"}`; a
+  tela distingue pela presença de `perguntas`. Recarregar a página apaga a conversa (de propósito: resposta sobre saúde não fica em lugar nenhum).
+- **Treino anterior** (`treino_anterior`, em `app/ia_treino.py`): o treino **ativo** do aluno; sem ativo, o mais recente que tenha exercício.
+  Vai só: ativo ou concluído, há quantos dias começou, nome das fichas e, por exercício, o número na lista da academia (ou "fora da lista"),
+  o nome, séries e repetições. **Não vão:** nome do treino, professor, observações, cargas, datas exatas. Nome de ficha que traga parte do
+  nome do aluno vira "ficha N". Texto do treino anterior é informação, não ordem.
 
 - **Como o pedido anda:** `POST /api/alunos/<id>/treino-ia` grava uma linha em `ia_pedido` (situação `andando`) e responde `202` na hora; um
   fio de segundo plano chama a API; a tela pergunta a cada 2 s em `GET /api/alunos/<id>/treino-ia/<pedido>` (a resposta leva dezenas de
   segundos e o gunicorn derruba pedido acima de 30 s). Erros do `POST`: `400` (campo inválido), `404`, `409` (aluno em fila que exige
-  liberação), `429` (limite), `503` (IA sem chave). Pedido `andando` há mais de 4 min vira `erro`; resultado fica guardado por 3 dias.
-- **O que vai para a Anthropic:** objetivo, nível, dias, tempo, o nome da fila do aluno (ex.: "Mulher"), as observações do professor e as
-  listas de exercícios e treinos padrão da academia. **Não vão:** nome, CPF, WhatsApp, e-mail, matrícula nem treinos antigos do aluno. O
-  app **recusa** observação com sequência de 8 ou mais algarismos, com e-mail ou com o nome do aluno (e a tela avisa o mesmo no navegador).
-  **As observações não são guardadas no banco.** Os servidores da Anthropic ficam fora do Brasil (espaço "App Academia", geografia
-  Estados Unidos): é transferência internacional de dado, por isso nada que identifique o aluno é enviado.
-- **Quem não usa:** aluno em fila que exige liberação (Gestante, Grupos de risco) e observação que fala de gravidez: o treino é do professor.
-- **Limites:** 20 pedidos por dia (dia de Brasília; só contam os que andaram/prontos ou com erro depois de gastar token) e 2 ao mesmo
-  tempo. O teto de verdade é o **gasto mensal do espaço "App Academia" na Anthropic (US$ 10)**. Medido em 14/10/2026: 1 rascunho = 17.245
-  tokens de entrada + 1.531 de saída, cerca de **US$ 0,05**.
+  liberação, ou gravidez nas observações/respostas), `429` (limite), `503` (IA sem chave). Pedido `andando` há mais de 4 min vira `erro`; resultado fica guardado por 3 dias.
+- **O que vai para a Anthropic:** objetivo, nível, dias, tempo, o nome da fila do aluno (ex.: "Mulher"), as observações do professor, o
+  **treino anterior** (só exercícios, séries e repetições), as **perguntas da IA e as respostas do professor** e as listas de exercícios e
+  treinos padrão da academia. **Não vão:** nome, CPF, WhatsApp, e-mail, matrícula, nome do treino, professor nem cargas. O app **recusa**
+  observação ou resposta com sequência de 8 ou mais algarismos, com e-mail ou com o nome do aluno (e a tela avisa o mesmo no navegador).
+  **Observações e respostas não são guardadas no banco** (só o resultado: as perguntas novas da IA ou o rascunho, por 3 dias).
+  **Atenção, dado de saúde:** as respostas costumam falar de comorbidade, condropatia, lesão: é dado pessoal **sensível** (LGPD). Os
+  servidores da Anthropic ficam fora do Brasil (espaço "App Academia", geografia Estados Unidos): é transferência internacional de dado.
+  O cartão avisa o professor de que o que ele escreve vai para o serviço da IA. A academia deve confirmar com quem cuida da LGPD se isso
+  precisa de consentimento do aluno (isto não é parecer jurídico).
+- **Quem não usa:** aluno em fila que exige liberação (Gestante, Grupos de risco) e observação **ou resposta** que fala de gravidez: o
+  treino é do professor.
+- **Limites:** 40 pedidos por dia (dia de Brasília; **cada rodada de perguntas é uma chamada paga e conta**; só contam os que andaram/
+  prontos ou com erro depois de gastar token) e 2 ao mesmo tempo. O teto de verdade é o **gasto mensal do espaço "App Academia" na
+  Anthropic (US$ 10)**. Medido em 14/10/2026, sem treino anterior nem conversa: 1 rascunho = 17.245 tokens de entrada + 1.531 de saída,
+  cerca de **US$ 0,05**. Uma conversa completa (2 rodadas + montagem) são até 3 chamadas, na ordem de US$ 0,15.
 - **Catálogo enviado:** só exercícios que a academia usou ao menos 5 vezes no último ano (ou que estão num treino padrão) e até 16 padrões
   como exemplo do jeito da casa. O servidor **desconfia da resposta**: id fora da lista é descartado, textos são cortados nos limites do
   Data4U e o treino passa pela mesma conferência de um treino de verdade (`treinos.validar_fichas`). Texto de observação é dado, não ordem.
 - **Chave da API:** num arquivo ao lado do banco (`/dados/ia_chave`, permissão `0600`); nunca no banco, no código, no navegador nem em
   backup. No terminal do contêiner (quem digita é quem cuida do servidor; a chave não aparece na tela): `python -m app.ia_treino
   definir-chave`; `situacao` (chave guardada?, modelo, pedidos de hoje, tokens do mês); `testar` (chamada mínima); `diagnosticar [--esforco
-  low|medium|high] [--sem-pensar] [--dias N] [--minutos N] [--observacoes "..."]` (pedido real **sem aluno e sem salvar nada**: mostra
-  tempo, tokens, custo estimado e o rascunho).
+  low|medium|high] [--sem-pensar] [--dias N] [--minutos N] [--observacoes "..."] [--perguntar] [--aluno N]` (pedido real **sem salvar
+  nada**: mostra tempo, tokens, custo estimado e o rascunho; `--perguntar` deixa a IA perguntar e mostra as perguntas; `--aluno N` manda
+  também o treino anterior desse aluno).
 - **Regras do modelo (Claude Sonnet 5.5; conferidas na documentação da Anthropic):** `tool_choice` "tool"/"any" dá erro 400, então usamos
   `auto` + ferramenta `strict` + ordem escrita no pedido; `thinking` ligado por padrão (adaptativo) e `{"type":"disabled"}` dá 400 (o
   jeito de desligar é `between_tools`); `temperature`/`top_p`/`top_k` fora do padrão e *prefill* dão 400; o esforço vai em
   `output_config.effort` (padrão do app: `medium`). O esquema `strict` não aceita `minimum`/`maximum`/`minLength`/`maxLength`/`maxItems`
   (limites ficam nas descrições e na conferência do servidor). Testes travam tudo isso (`tests/test_ia_treino.py`).
 - **Voltar atrás:** banco versão 10 só acrescenta a tabela `ia_pedido`. Para a imagem anterior (`b4860bf`, que conhece até a versão 9):
-  app parado, `PRAGMA user_version = 9`, ou restaurar a cópia feita antes da migração. Sem a chave, o botão responde `503` e o resto do app não muda.
+  app parado, `PRAGMA user_version = 9`, ou restaurar a cópia feita antes da migração. Sem a chave, o botão responde `503` e o resto do app não muda. A conversa com perguntas **não muda o banco** (continua versão 10).
 
 ## Editar treino: como funciona
 

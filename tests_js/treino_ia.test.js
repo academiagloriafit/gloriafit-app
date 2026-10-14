@@ -3,13 +3,18 @@ import {
   FALHAS_SEGUIDAS_PARA_DESISTIR,
   INTERVALO_DA_CONSULTA_MS,
   LIMITE_DAS_OBSERVACOES,
+  LIMITE_DAS_RESPOSTAS,
+  MAXIMO_DE_RODADAS,
   TEMPO_MAXIMO_DA_ESPERA_MS,
   avisoDoRascunho,
+  historicoDaConversa,
   interpretarConsulta,
   interpretarPedido,
   montarPedido,
+  textoDaRodada,
   textoDeEspera,
   validarPedido,
+  validarRespostas,
 } from "../app/static/treino_ia_modelo.js";
 import { MENSAGEM_NAO_AUTORIZADO } from "../app/static/api.js";
 
@@ -76,7 +81,42 @@ describe("montarPedido", () => {
       dias: 3,
       minutos: 60,
       observacoes: "dor no joelho",
+      perguntar: false,
+      rodadas: [],
     });
+  });
+
+  it("por padrão a IA não pergunta e não leva conversa nenhuma", () => {
+    const pedido = montarPedido(COMPLETO);
+
+    expect(pedido.perguntar).toBe(false);
+    expect(pedido.rodadas).toEqual([]);
+  });
+
+  it("deixa a IA perguntar e leva a conversa até agora, com os textos limpos", () => {
+    const rodadas = [{ perguntas: ["  O que  mudar? "], respostas: ["  mais   peito \n"] }];
+
+    const pedido = montarPedido(COMPLETO, { perguntar: true, rodadas });
+
+    expect(pedido.perguntar).toBe(true);
+    expect(pedido.rodadas).toEqual([{ perguntas: ["O que mudar?"], respostas: ["mais peito"] }]);
+  });
+
+  it("resposta em branco ou ausente vai como texto vazio, nunca como undefined", () => {
+    const pedido = montarPedido(COMPLETO, { rodadas: [{ perguntas: ["a?", "b?"], respostas: ["", undefined] }] });
+
+    expect(pedido.rodadas[0].respostas).toEqual(["", ""]);
+  });
+
+  it("só aceita verdadeiro de verdade em perguntar (texto \"false\" não vira sim)", () => {
+    expect(montarPedido(COMPLETO, { perguntar: "false" }).perguntar).toBe(false);
+  });
+
+  it("não mexe nas rodadas que recebeu", () => {
+    const rodadas = [{ perguntas: [" a? "], respostas: [" b "] }];
+    montarPedido(COMPLETO, { rodadas });
+
+    expect(rodadas).toEqual([{ perguntas: [" a? "], respostas: [" b "] }]);
   });
 
   it("sem observações manda texto vazio, nunca undefined", () => {
@@ -108,7 +148,7 @@ describe("interpretarPedido", () => {
     expect(interpretarPedido({ status: 400, corpo: { erros: ["Escolha o objetivo do aluno.", "Escolha o nível do aluno."] } }).mensagem).toBe(
       "Escolha o objetivo do aluno. Escolha o nível do aluno.",
     );
-    expect(interpretarPedido({ status: 429, corpo: { erro: "Já foram feitos 20 rascunhos hoje." } }).mensagem).toContain("20 rascunhos");
+    expect(interpretarPedido({ status: 429, corpo: { erro: "Já foram feitos 40 pedidos à IA hoje (o limite do dia)." } }).mensagem).toContain("40 pedidos");
   });
 
   it("computador sem autorização pede o código novo", () => {
@@ -143,6 +183,39 @@ describe("interpretarConsulta", () => {
     });
 
     expect(lida).toMatchObject({ tipo: "pronto", resumo: "", alertas: ["ok"], removidos: 0 });
+  });
+
+  it("pronto com perguntas: a IA quer saber mais, com a rodada e o máximo", () => {
+    const lida = interpretarConsulta({
+      status: 200,
+      corpo: { situacao: "pronto", perguntas: ["Qual o foco?", "Tem lesão?"], rodada: 1, maximo_de_rodadas: 2 },
+    });
+
+    expect(lida).toEqual({ tipo: "perguntas", perguntas: ["Qual o foco?", "Tem lesão?"], rodada: 1, maximoDeRodadas: 2 });
+  });
+
+  it("perguntas vazias ou em branco são tiradas; sobrando nenhuma é falha, não tela vazia", () => {
+    const comLixo = { situacao: "pronto", perguntas: ["ok?", "", "  ", 3, null], rodada: 2, maximo_de_rodadas: 2 };
+    expect(interpretarConsulta({ status: 200, corpo: comLixo })).toMatchObject({ tipo: "perguntas", perguntas: ["ok?"] });
+    for (const perguntas of [[], ["", " "], [1, 2]]) {
+      expect(interpretarConsulta({ status: 200, corpo: { situacao: "pronto", perguntas, rodada: 1, maximo_de_rodadas: 2 } }).tipo).toBe("falha");
+    }
+  });
+
+  it.each([[{ rodada: 0 }], [{ rodada: "1" }], [{ rodada: null }], [{}]])("perguntas sem rodada que sirva é falha: %j", (extra) => {
+    expect(interpretarConsulta({ status: 200, corpo: { situacao: "pronto", perguntas: ["a?"], ...extra } }).tipo).toBe("falha");
+  });
+
+  it("máximo de rodadas estranho cai no padrão", () => {
+    for (const maximo of [undefined, "2", 0, null]) {
+      const lida = interpretarConsulta({ status: 200, corpo: { situacao: "pronto", perguntas: ["a?"], rodada: 1, maximo_de_rodadas: maximo } });
+      expect(lida.maximoDeRodadas).toBe(MAXIMO_DE_RODADAS);
+    }
+  });
+
+  it("perguntas têm prioridade só quando o resultado traz a lista; treino continua sendo rascunho", () => {
+    const comTreino = { situacao: "pronto", treino, resumo: "", alertas: [], removidos: 0 };
+    expect(interpretarConsulta({ status: 200, corpo: comTreino }).tipo).toBe("pronto");
   });
 
   it("pronto sem treino de verdade é falha, não rascunho vazio", () => {
@@ -211,9 +284,79 @@ describe("espera", () => {
     expect(textoDeEspera(42)).toContain("42 s");
   });
 
+  it("enquanto a IA ainda pode perguntar, o texto não promete que o treino está sendo montado", () => {
+    expect(textoDeEspera(5)).toContain("Montando o treino");
+    expect(textoDeEspera(5, true)).toContain("analisando");
+    expect(textoDeEspera(5, true)).not.toContain("Montando");
+  });
+
   it("o prazo da tela é maior que o prazo em que o servidor cancela o pedido (4 minutos)", () => {
     expect(TEMPO_MAXIMO_DA_ESPERA_MS).toBeGreaterThan(4 * 60 * 1000);
     expect(INTERVALO_DA_CONSULTA_MS).toBeGreaterThanOrEqual(1000);
     expect(FALHAS_SEGUIDAS_PARA_DESISTIR).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("validarRespostas", () => {
+  it("aceita respostas normais, em branco e números de treino", () => {
+    expect(validarRespostas(["Mais peito e braço.", "", "3 dias, séries de 4 x 12, 60 min", "dor 7 de 10"])).toEqual([]);
+  });
+
+  it("sem argumento nem respostas não quebra", () => {
+    expect(validarRespostas()).toEqual([]);
+    expect(validarRespostas([undefined, null])).toEqual([]);
+  });
+
+  it("recusa resposta acima do limite, contando como o servidor (emoji vale 1) e dizendo qual é", () => {
+    expect(validarRespostas(["a".repeat(LIMITE_DAS_RESPOSTAS), "💪".repeat(LIMITE_DAS_RESPOSTAS)])).toEqual([]);
+    const [problema] = validarRespostas(["ok", "a".repeat(LIMITE_DAS_RESPOSTAS + 1)]);
+
+    expect(problema.indice).toBe(1);
+    expect(problema.mensagem).toContain("resposta 2");
+    expect(problema.mensagem).toContain(String(LIMITE_DAS_RESPOSTAS + 1));
+  });
+
+  it.each(["cpf 123.456.789-09", "zap 27 98888-7777", "123456789"])("recusa número de documento ou telefone: %s", (texto) => {
+    const [problema] = validarRespostas([texto]);
+
+    expect(problema).toMatchObject({ indice: 0 });
+    expect(problema.mensagem).toContain("CPF");
+  });
+
+  it("recusa e-mail", () => {
+    expect(validarRespostas(["ok", "ana@exemplo.com"])[0].mensagem).toContain("e-mail");
+  });
+
+  it("aponta todas as respostas com problema, na ordem", () => {
+    expect(validarRespostas(["a@b.com", "ok", "123456789"]).map((p) => p.indice)).toEqual([0, 2]);
+  });
+
+  it("espaços e quebras de linha a mais não contam", () => {
+    expect(validarRespostas(["dor   no\n\njoelho" + " ".repeat(400)])).toEqual([]);
+  });
+});
+
+describe("a conversa na tela", () => {
+  it("o histórico junta as rodadas na ordem, com resposta em branco como texto vazio", () => {
+    const rodadas = [
+      { perguntas: ["O que mudar?", "Alguma lesão?"], respostas: ["  mais   peito ", ""] },
+      { perguntas: ["Prefere halteres?"], respostas: ["Sim."] },
+    ];
+
+    expect(historicoDaConversa(rodadas)).toEqual([
+      { pergunta: "O que mudar?", resposta: "mais peito" },
+      { pergunta: "Alguma lesão?", resposta: "" },
+      { pergunta: "Prefere halteres?", resposta: "Sim." },
+    ]);
+    expect(historicoDaConversa()).toEqual([]);
+  });
+
+  it("o selo da rodada avisa quando é a última", () => {
+    expect(textoDaRodada({ rodada: 1, maximoDeRodadas: 2 })).toBe("Rodada 1 de 2");
+    expect(textoDaRodada({ rodada: 2, maximoDeRodadas: 2 })).toBe("Última rodada (2 de 2)");
+  });
+
+  it("o máximo de rodadas é 2, como no servidor", () => {
+    expect(MAXIMO_DE_RODADAS).toBe(2);
   });
 });

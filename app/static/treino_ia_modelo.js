@@ -5,6 +5,8 @@ import { textoDoErro } from "./api.js";
 import { limparEspacos, tamanho } from "./treino_modelo.js";
 
 export const LIMITE_DAS_OBSERVACOES = 300; // o mesmo de app/ia_treino.py (tests/test_contrato_js_python.py confere)
+export const LIMITE_DAS_RESPOSTAS = 300; // letras por resposta do professor às perguntas da IA (também conferido contra o Python)
+export const MAXIMO_DE_RODADAS = 2; // quantas vezes a IA pode perguntar antes de entregar o treino (o servidor é quem manda; isto é o padrão)
 export const INTERVALO_DA_CONSULTA_MS = 2000;
 export const TEMPO_MAXIMO_DA_ESPERA_MS = 5 * 60 * 1000; // o servidor cancela o pedido que passa de 4 minutos
 export const FALHAS_SEGUIDAS_PARA_DESISTIR = 4; // consultas seguidas sem resposta do servidor
@@ -37,14 +39,39 @@ export function validarPedido({ objetivo = "", nivel = "", dias = "", minutos = 
   return problemas;
 }
 
+// Confere as respostas do professor às perguntas da IA (uma por pergunta; resposta em branco vale).
+// Devolve [{ indice (0 = primeira pergunta), mensagem }], vazio se está tudo certo. Mesmas regras de privacidade das observações.
+export function validarRespostas(respostas = []) {
+  const problemas = [];
+  respostas.forEach((resposta, indice) => {
+    const texto = limparEspacos(resposta ?? "");
+    const n = indice + 1;
+    if (tamanho(texto) > LIMITE_DAS_RESPOSTAS) {
+      problemas.push({ indice, mensagem: `A resposta ${n} tem ${tamanho(texto)} letras; o máximo é ${LIMITE_DAS_RESPOSTAS}.` });
+    } else if (NUMERO_LONGO.test(texto)) {
+      problemas.push({ indice, mensagem: `Tire da resposta ${n} números de CPF, telefone ou documento: a IA não precisa deles.` });
+    } else if (texto.includes("@")) {
+      problemas.push({ indice, mensagem: `Tire da resposta ${n} o e-mail: a IA não precisa dele.` });
+    }
+  });
+  return problemas;
+}
+
 // O corpo do pedido ao servidor (POST /api/alunos/<id>/treino-ia). Dias e minutos vão como número.
-export function montarPedido({ objetivo, nivel, dias, minutos, observacoes = "" }) {
+// `perguntar`: a IA pode fazer perguntas antes de montar. `rodadas`: o que já foi perguntado e respondido,
+// [{ perguntas: [texto], respostas: [texto] }] (o servidor não guarda a conversa: o navegador manda tudo de novo a cada chamada).
+export function montarPedido({ objetivo, nivel, dias, minutos, observacoes = "" }, { perguntar = false, rodadas = [] } = {}) {
   return {
     objetivo,
     nivel,
     dias: Number(dias),
     minutos: Number(minutos),
     observacoes: limparEspacos(observacoes),
+    perguntar: perguntar === true,
+    rodadas: rodadas.map((r) => ({
+      perguntas: r.perguntas.map((p) => limparEspacos(p)),
+      respostas: r.respostas.map((x) => limparEspacos(x ?? "")),
+    })),
   };
 }
 
@@ -60,6 +87,7 @@ const textos = (lista) => (Array.isArray(lista) ? lista.filter((t) => typeof t =
 
 // A resposta de uma consulta (GET /api/alunos/<id>/treino-ia/<pedido>):
 //   { tipo: "andando" } | { tipo: "pronto", treino, resumo, alertas, removidos } | { tipo: "erro", mensagem }
+//   | { tipo: "perguntas", perguntas, rodada, maximoDeRodadas } (a IA quer saber mais antes de montar)
 //   | { tipo: "falha", mensagem } (o servidor não respondeu direito: vale tentar de novo).
 export function interpretarConsulta(resposta) {
   if (resposta?.status === 404) return { tipo: "erro", mensagem: "O pedido sumiu do servidor. Peça o rascunho de novo." };
@@ -67,6 +95,14 @@ export function interpretarConsulta(resposta) {
   const corpo = resposta?.status === 200 ? resposta.corpo : null;
   if (corpo?.situacao === "andando") return { tipo: "andando" };
   if (corpo?.situacao === "erro" && typeof corpo.erro === "string") return { tipo: "erro", mensagem: corpo.erro };
+  if (corpo?.situacao === "pronto" && Array.isArray(corpo.perguntas)) {
+    const perguntas = textos(corpo.perguntas);
+    if (perguntas.length > 0 && Number.isInteger(corpo.rodada) && corpo.rodada >= 1) {
+      const maximo = Number.isInteger(corpo.maximo_de_rodadas) && corpo.maximo_de_rodadas >= corpo.rodada ? corpo.maximo_de_rodadas : MAXIMO_DE_RODADAS;
+      return { tipo: "perguntas", perguntas, rodada: corpo.rodada, maximoDeRodadas: maximo };
+    }
+    return { tipo: "falha", mensagem: "O servidor mandou perguntas num formato inesperado" };
+  }
   if (corpo?.situacao === "pronto" && corpo.treino && typeof corpo.treino === "object" && Array.isArray(corpo.treino.fichas)) {
     return {
       tipo: "pronto",
@@ -79,8 +115,20 @@ export function interpretarConsulta(resposta) {
   return { tipo: "falha", mensagem: textoDoErro(resposta ?? { status: 0, corpo: null }, "O servidor respondeu algo inesperado") };
 }
 
-export function textoDeEspera(segundos) {
-  return `Montando o treino… ${segundos} s. Pode levar cerca de um minuto; não feche esta tela.`;
+// `perguntando`: a IA ainda pode fazer perguntas, então ninguém sabe se ela vai perguntar ou entregar o treino.
+export function textoDeEspera(segundos, perguntando = false) {
+  const frase = perguntando ? "A IA está analisando o pedido" : "Montando o treino";
+  return `${frase}… ${segundos} s. Pode levar cerca de um minuto; não feche esta tela.`;
+}
+
+// O que a IA já perguntou e o professor já respondeu, para mostrar na tela: [{ pergunta, resposta ("" = sem resposta) }].
+export function historicoDaConversa(rodadas = []) {
+  return rodadas.flatMap((r) => r.perguntas.map((pergunta, i) => ({ pergunta, resposta: limparEspacos(r.respostas[i] ?? "") })));
+}
+
+// O selo da rodada de perguntas na tela: "Rodada 1 de 2" ou, na última, "Última rodada (2 de 2)".
+export function textoDaRodada({ rodada, maximoDeRodadas }) {
+  return rodada >= maximoDeRodadas ? `Última rodada (${rodada} de ${maximoDeRodadas})` : `Rodada ${rodada} de ${maximoDeRodadas}`;
 }
 
 const plural = (n, singular, pluralTexto) => `${n} ${n === 1 ? singular : pluralTexto}`;

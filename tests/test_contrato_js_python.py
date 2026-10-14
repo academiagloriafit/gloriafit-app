@@ -318,6 +318,18 @@ def test_ia_o_limite_das_observacoes_e_o_mesmo_nos_dois_lados():
     assert js["limite"] == ia_treino.LIMITE_DAS_OBSERVACOES
 
 
+def test_ia_os_limites_da_conversa_sao_os_mesmos_nos_dois_lados():
+    from app import ia_treino
+
+    js = _node(f"""
+        import * as m from "{MODULO_IA}";
+        console.log(JSON.stringify({{ respostas: m.LIMITE_DAS_RESPOSTAS, rodadas: m.MAXIMO_DE_RODADAS }}));
+    """)
+
+    assert js["respostas"] == ia_treino.LIMITE_DAS_RESPOSTAS
+    assert js["rodadas"] == ia_treino.MAXIMO_DE_RODADAS_DE_PERGUNTAS
+
+
 # Textos para o JavaScript e o Python julgarem. Onde um recusa e o outro não, ou o professor vê um aviso que o
 # servidor não daria (confusão), ou passa na tela e é barrado depois de esperar (pior).
 _OBSERVACOES = [
@@ -424,3 +436,94 @@ def test_ia_o_pedido_que_o_navegador_monta_e_aceito_pelo_servidor_em_todas_as_co
             assert pedido.observacoes == "dor no joelho"
     finally:
         conn.close()
+
+
+# Respostas do professor às perguntas da IA: o navegador e o servidor recusam as mesmas (menos o nome do aluno, que só o servidor sabe).
+_RESPOSTAS = [x for x in _OBSERVACOES if "💪" not in x] + ["", "Mais peito e braço.", "💪" * 300, "💪" * 301]
+
+
+def test_ia_o_navegador_e_o_servidor_recusam_as_mesmas_respostas(tmp_path):
+    from app import ia_treino
+
+    js = _node(f"""
+        import * as m from "{MODULO_IA}";
+        const textos = {json.dumps(_RESPOSTAS)};
+        console.log(JSON.stringify(textos.map((t) => m.validarRespostas([t]).length > 0)));
+    """)
+
+    caminho = tmp_path / "ia.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ZULEICA FICTICIA')")
+    conn.commit()
+    base = {"objetivo": "hipertrofia", "nivel": "iniciante", "dias": 3, "minutos": 60}
+    python = []
+    for texto in _RESPOSTAS:
+        try:
+            ia_treino.conferir_pedido(conn, 1, {**base, "rodadas": [{"perguntas": ["Alguma lesão?"], "respostas": [texto]}]})
+            python.append(False)
+        except ia_treino.PedidoInvalido:
+            python.append(True)
+    conn.close()
+
+    assert js == python, [(t, j, p) for t, j, p in zip(_RESPOSTAS, js, python) if j != p]
+
+
+def test_ia_a_conversa_que_o_navegador_monta_e_aceita_pelo_servidor(tmp_path):
+    """Uma ida e volta de verdade: o que `montarPedido` produz com perguntar e rodadas passa em `conferir_pedido`."""
+    from app import ia_treino
+
+    montados = _node(f"""
+        import * as m from "{MODULO_IA}";
+        const escolha = {{ objetivo: "forca", nivel: "intermediario", dias: "4", minutos: "45", observacoes: "  evitar   impacto " }};
+        const r1 = {{ perguntas: ["  O que mudar? ", "Alguma lesão?"], respostas: ["  mais   peito ", ""] }};
+        const r2 = {{ perguntas: ["Prefere halteres?"], respostas: ["Prefiro máquinas."] }};
+        console.log(JSON.stringify({{
+          comecando: m.montarPedido(escolha, {{ perguntar: true }}),
+          segunda: m.montarPedido(escolha, {{ perguntar: true, rodadas: [r1] }}),
+          ultima: m.montarPedido(escolha, {{ perguntar: false, rodadas: [r1, r2] }}),
+          problemas: m.validarRespostas([...r1.respostas, ...r2.respostas]),
+        }}));
+    """)
+
+    assert montados["problemas"] == []
+    caminho = tmp_path / "ia.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ZULEICA FICTICIA')")
+    conn.commit()
+    try:
+        comecando = ia_treino.conferir_pedido(conn, 1, montados["comecando"])
+        segunda = ia_treino.conferir_pedido(conn, 1, montados["segunda"])
+        ultima = ia_treino.conferir_pedido(conn, 1, montados["ultima"])
+    finally:
+        conn.close()
+
+    assert comecando.perguntar and comecando.rodadas == () and comecando.pode_perguntar
+    assert segunda.rodadas == ((("O que mudar?", "mais peito"), ("Alguma lesão?", "")),) and segunda.pode_perguntar
+    assert len(ultima.rodadas) == 2 and not ultima.perguntar and not ultima.pode_perguntar
+
+
+def test_ia_as_perguntas_que_o_servidor_devolve_sao_lidas_pelo_navegador(tmp_path):
+    """O JSON que `consultar_pedido` entrega (perguntas) é o que `interpretarConsulta` espera."""
+    from app import ia_treino
+
+    caminho = tmp_path / "ia.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ZULEICA FICTICIA')")
+    resultado = ia_treino.conferir_perguntas({"perguntas": ["Qual o foco?", "Tem lesão?"]}, 2)
+    conn.execute(
+        "INSERT INTO ia_pedido (aluno_id, criado_em, dia, situacao, modelo, resultado) VALUES (1, '2026-10-13 15:00:00', '2026-10-13', 'pronto', 'm', ?)",
+        (json.dumps(resultado, ensure_ascii=False),),
+    )
+    conn.commit()
+    corpo = ia_treino.consultar_pedido(conn, 1, 1, datetime(2026, 10, 13, 15, 1, tzinfo=timezone.utc))
+    conn.close()
+
+    lido = _node(f"""
+        import * as m from "{MODULO_IA}";
+        console.log(JSON.stringify(m.interpretarConsulta({{ status: 200, corpo: {json.dumps(corpo)} }})));
+    """)
+
+    assert lido == {"tipo": "perguntas", "perguntas": ["Qual o foco?", "Tem lesão?"], "rodada": 2, "maximoDeRodadas": 2}

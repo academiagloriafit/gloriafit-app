@@ -901,6 +901,30 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .campo textarea[aria-invalid="true"] { border-color: #b00020; background: #fff1f1; }
 .campo select:disabled, .campo textarea:disabled { background: #ecebe5; cursor: not-allowed; }
 .botoes-ia { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* a conversa com a IA: o que ela já perguntou e as perguntas novas, cada uma com a sua caixa de resposta */
+.conversa-ia { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 10px; background: #f6f4ef; border: 1px solid var(--borda); }
+.titulo-conversa { margin: 0; font-size: 17px; font-weight: 700; }
+.selo-rodada {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 9px;
+  border-radius: 10px;
+  background: var(--branco);
+  border: 1px solid var(--borda);
+  color: var(--texto-suave);
+  font-size: 13px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.historico-ia { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.historico-item { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; border-left: 3px solid var(--borda); font-size: 15px; }
+.historico-pergunta { color: var(--texto-suave); }
+.historico-resposta { font-weight: 600; overflow-wrap: anywhere; }
+.historico-vazia { font-weight: 400; font-style: italic; color: var(--texto-suave); }
+.perguntas-ia { display: flex; flex-direction: column; gap: 12px; }
+.perguntas-ia .campo label { font-size: 16px; color: var(--escuro); }
+.perguntas-ia .campo textarea { min-height: 64px; }
 @media (max-width: 900px) {
   .form-ia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
