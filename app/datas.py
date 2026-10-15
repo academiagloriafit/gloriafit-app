@@ -6,7 +6,7 @@ Duas formas de data aparecem no banco:
   Um treino que começa "dia 08" começa dia 08 em Brasília, não em Londres.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 # Uma ficha montada às 23h30 de 06/10 não pode aparecer como 07/10.
@@ -62,3 +62,15 @@ def formatar_dia(texto: str | None) -> str | None:
     """'2026-10-06' -> '06/10/2026'. Vazio -> None."""
     dia = ler_dia(texto)
     return dia.strftime("%d/%m/%Y") if dia else None
+
+
+def limites_do_dia(agora: datetime | None = None) -> tuple[str, str]:
+    """O dia de hoje em Brasília, como o par [começo, fim) em UTC no formato do banco ('AAAA-MM-DD HH:MM:SS').
+
+    "Hoje" é o dia do calendário da academia: algo feito às 23h30 e outro às 00h10 são de dias diferentes,
+    mesmo que o relógio de Londres ainda esteja no mesmo dia. Serve para "no máximo uma vez por dia" e "no máximo N por dia".
+    """
+    hoje_local = (agora or agora_utc()).astimezone(FUSO_DA_ACADEMIA).date()
+    comeco = datetime.combine(hoje_local, time.min, tzinfo=FUSO_DA_ACADEMIA)
+    fim = datetime.combine(hoje_local + timedelta(days=1), time.min, tzinfo=FUSO_DA_ACADEMIA)
+    return momento_para_texto(comeco), momento_para_texto(fim)

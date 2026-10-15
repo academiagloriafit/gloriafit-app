@@ -20,6 +20,30 @@
       {% if ficha.matricula %}<span class="matricula-ficha">Matrícula {{ ficha.matricula }}</span>{% endif %}
     </div>
 
+    {# Comentários que o aluno escreveu pelo celular (o texto é do aluno: só sai escapado, nunca como HTML). #}
+    {% if comentarios_do_aluno.total %}
+    {% from "_comentario.html" import comentario %}
+    {# O quadro mostra só os mais novos; o botão "Marcar todos" vale só para os que estão na tela (o que ninguém viu não vira lido). #}
+    {% set mostrados = comentarios_do_aluno.comentarios|length %}
+    {% set novos_na_tela = comentarios_do_aluno.comentarios|rejectattr("lido")|list|length %}
+    <section class="cartao-lista painel-comentarios" id="comentarios-do-aluno" aria-labelledby="titulo-comentarios" data-aluno="{{ ficha.id }}">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-comentarios">Comentários do aluno</h2>
+        <p class="resumo" id="resumo-comentarios-aluno" aria-live="polite" data-sem-ler="{{ comentarios_do_aluno.nao_lidos_do_aluno }}" data-total="{{ comentarios_do_aluno.total }}">{{ comentarios_do_aluno.nao_lidos_do_aluno }} sem ler · {{ comentarios_do_aluno.total }} no total</p>
+        {% if novos_na_tela %}
+        <button type="button" class="botao-link" data-marcar-todos-do-aluno="{{ ficha.id }}">Marcar {{ "todos" if novos_na_tela == comentarios_do_aluno.nao_lidos_do_aluno else "os da tela" }} como lidos</button>
+        {% endif %}
+      </div>
+      {% if comentarios_do_aluno.total > mostrados %}
+      <p class="aviso-campo" id="aviso-so-os-novos">Mostrando só os {{ mostrados }} comentários mais novos. Os mais antigos que ainda não foram lidos aparecem na tela <a href="{{ url_for('pagina_comentarios') }}">Comentários</a>.</p>
+      {% endif %}
+      <ul class="lista-comentarios" id="lista-comentarios">
+        {% for c in comentarios_do_aluno.comentarios %}{{ comentario(c) }}{% endfor %}
+      </ul>
+      <p class="aviso-campo aviso-erro" role="alert" id="erro-comentarios-aluno"></p>
+    </section>
+    {% endif %}
+
     <div class="montagem-grade">
       <section class="cartao-lista painel-treinos" aria-labelledby="titulo-treinos">
         <div class="cabecalho-lista">
@@ -247,6 +271,7 @@
   </main>
 
   <script type="module" src="{{ url_for('static', filename='ficha.js') }}"></script>
+  {% if comentarios_do_aluno.total %}<script type="module" src="{{ url_for('static', filename='comentarios.js') }}"></script>{% endif %}
   <script type="module" src="{{ url_for('static', filename='ciclo_ficha.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='padrao_ficha.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='fila_ficha.js') }}"></script>

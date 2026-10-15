@@ -1,0 +1,21 @@
+{# Um comentário do aluno, para a tela "Comentários" e para a ficha do aluno. O texto sai SEMPRE escapado pelo Jinja
+   (nunca |safe): o que o aluno digita não vira HTML. `white-space: pre-wrap` no CSS mantém as quebras de linha. #}
+{% macro comentario(c, com_aluno=False) %}
+<li class="comentario{{ '' if c.lido else ' comentario-novo' }}" data-comentario="{{ c.id }}"{% if not c.lido %} data-comentario-novo="1"{% endif %}>
+  <p class="comentario-cabecalho">
+    {% if com_aluno %}<a class="comentario-aluno" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">{{ c.aluno }}</a>{% endif %}
+    <span class="comentario-quando">{{ c.quando }}</span>
+  </p>
+  <p class="comentario-lugar">
+    {% if c.exercicio %}<span class="comentario-treino">{{ c.treino }}</span> · {{ c.ficha }} · <strong>{{ c.exercicio }}</strong>
+    {% else %}<span class="comentario-treino">{{ c.treino }}</span> · <strong>treino inteiro</strong>{% endif %}
+  </p>
+  <p class="comentario-texto">{{ c.texto }}</p>
+  <p class="comentario-acoes">
+    {% if com_aluno %}<a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">Abrir ficha</a>{% endif %}
+    {% if c.lido %}<span class="comentario-lido">Lido</span>
+    {% else %}<button type="button" class="botao-link" data-marcar-lido="{{ c.id }}">Marcar como lido</button>{% endif %}
+    <span class="aviso-campo aviso-erro" role="alert" data-erro-do-comentario="{{ c.id }}"></span>
+  </p>
+</li>
+{% endmacro %}

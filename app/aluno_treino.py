@@ -16,11 +16,11 @@ mais o próprio andamento (quantas vezes fez cada ficha e a meta).
 """
 
 import sqlite3
-from datetime import datetime, time, timedelta
+from datetime import datetime
 
 from app import ciclo, treinos
 from app.alunos import dose_do_item, etiquetas_dos_itens, texto_da_pausa
-from app.datas import FUSO_DA_ACADEMIA, agora_utc, formatar_dia, momento_para_texto
+from app.datas import agora_utc, formatar_dia, limites_do_dia, momento_para_texto
 
 _NOME_DO_BLOCO = {2: "Bi-set", 3: "Tri-set"}
 
@@ -34,6 +34,7 @@ def _lista_com_e(etiquetas: list[str]) -> str:
 
 def _exercicio(item: dict, etiqueta: str) -> dict:
     return {
+        "ordem": item["ordem"],  # a posição na ficha (1, 2, 3...): é como o celular diz sobre qual exercício o aluno comentou
         "etiqueta": etiqueta,
         "exercicio": item["exercicio"],
         "dose": dose_do_item(item),
@@ -67,21 +68,9 @@ def _grupos_da_ficha(itens: list[dict]) -> list[dict]:
     return grupos
 
 
-def _limites_do_dia(agora: datetime) -> tuple[str, str]:
-    """O dia de hoje em Brasília, como o par [começo, fim) em UTC no formato do banco (`sessao.feita_em`).
-
-    "Hoje" é o dia do calendário da academia: uma ficha marcada às 23h30 e outra às 00h10 são de dias diferentes,
-    mesmo que o relógio de Londres ainda esteja no mesmo dia.
-    """
-    hoje_local = agora.astimezone(FUSO_DA_ACADEMIA).date()
-    comeco = datetime.combine(hoje_local, time.min, tzinfo=FUSO_DA_ACADEMIA)
-    fim = datetime.combine(hoje_local + timedelta(days=1), time.min, tzinfo=FUSO_DA_ACADEMIA)
-    return momento_para_texto(comeco), momento_para_texto(fim)
-
-
 def _andamento_das_fichas(conn: sqlite3.Connection, treino_id: int, agora: datetime) -> dict[int, dict]:
     """{ordem da ficha: {"feitas": quantas vezes (neste treino), "feita_hoje": bool}}."""
-    comeco, fim = _limites_do_dia(agora)
+    comeco, fim = limites_do_dia(agora)
     linhas = conn.execute(
         """
         SELECT ficha_ordem, COUNT(*), MAX(feita_em >= ? AND feita_em < ?)
@@ -169,7 +158,7 @@ def marcar_ficha_feita(
     ou o mesmo aluno em dois celulares, nunca gravam duas vezes.
     """
     agora = agora or agora_utc()
-    comeco, fim = _limites_do_dia(agora)
+    comeco, fim = limites_do_dia(agora)
     conn.execute("BEGIN IMMEDIATE")
     try:
         treino_id = _ficha_do_treino_ativo(conn, aluno_id, ficha_ordem)
@@ -198,7 +187,7 @@ def desfazer_marcacao_de_hoje(
     Devolve {"ficha", "feitas"} (quantas ficaram). Se não havia marcação hoje, não muda nada.
     """
     agora = agora or agora_utc()
-    comeco, fim = _limites_do_dia(agora)
+    comeco, fim = limites_do_dia(agora)
     conn.execute("BEGIN IMMEDIATE")
     try:
         treino_id = _ficha_do_treino_ativo(conn, aluno_id, ficha_ordem)

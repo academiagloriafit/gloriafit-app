@@ -21,6 +21,7 @@ from app import (
     aluno_treino,
     alunos,
     ciclo,
+    comentarios,
     cupom,
     datas,
     db,
@@ -68,6 +69,7 @@ ENDPOINTS_PUBLICOS = frozenset(
         "api_aluno_treino",
         "api_aluno_treino_feito",
         "api_aluno_treino_desfazer",
+        "api_aluno_comentario",
     }
 )
 
@@ -274,6 +276,11 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         # Aparece no topo das telas ("Computador dos professores").
         dispositivo = g.get("dispositivo")
         return {"dispositivo_nome": dispositivo.nome if dispositivo else None}
+
+    @app.context_processor
+    def contador_de_comentarios():
+        # O número do menu "Comentários". É uma função (e não um número) para a conta só rodar nas telas que a usam (o topo do professor).
+        return {"comentarios_novos": lambda: comentarios.contar_nao_lidos(conexao())}
 
     @app.errorhandler(ErroDeEntrada)
     def entrada_invalida(erro):
@@ -529,6 +536,34 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(erro=str(erro)), erro.status
         return jsonify(ok=True, **resultado)
 
+    @app.post("/api/aluno/comentario")
+    def api_aluno_comentario():
+        """O aluno comenta o treino inteiro ou um exercício. Corpo: {"treino": "nome que o celular mostra", "texto": "...",
+        e, se for de um exercício, "ficha": 1, "item": 2, "exercicio": "nome que o celular mostra"}.
+
+        200 {"ok", "repetido"}; 400 texto ou exercício inválido; 401 sem login; 409 sem treino ativo ou o treino mudou
+        (atualizar a página); 415 não é JSON; 429 muitos comentários hoje. O aluno vem do cookie, nunca do corpo.
+        """
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        dados = corpo_json()
+        if not isinstance(dados, dict):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        try:
+            resultado = comentarios.enviar_comentario(
+                conexao(),
+                aluno.id,
+                dados.get("treino"),
+                dados.get("texto"),
+                ficha=dados.get("ficha"),
+                item=dados.get("item"),
+                exercicio=dados.get("exercicio"),
+            )
+        except comentarios.ComentarioInvalido as erro:
+            return jsonify(erro=str(erro)), erro.status
+        return jsonify(ok=True, **resultado)
+
     @app.get("/api/grupos")
     def api_grupos():
         return jsonify(exercicios.listar_grupos(conexao()))
@@ -663,13 +698,49 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             )
         return jsonify(id=aluno_id), 201
 
+    @app.get("/comentarios")
+    def pagina_comentarios():
+        """O que os alunos escreveram sobre o treino: os novos primeiro; com ?todos=1 também os já lidos."""
+        todos = request.args.get("todos") == "1"
+        return render_template("comentarios.html", lista=comentarios.listar(conexao(), so_nao_lidos=not todos), todos=todos)
+
+    @app.post("/api/comentarios/<int(max=9223372036854775807):comentario_id>/lido")
+    def api_comentario_lido(comentario_id: int):
+        """O professor leu o comentário. 200 {"ok", "nao_lidos"}; 404 se não existe. Repetir não faz mal."""
+        conn = conexao()
+        if not comentarios.marcar_lido(conn, comentario_id):
+            return jsonify(erro="Comentário não encontrado."), 404
+        return jsonify(ok=True, nao_lidos=comentarios.contar_nao_lidos(conn))
+
+    @app.post("/api/alunos/<int(max=9223372036854775807):aluno_id>/comentarios/lidos")
+    def api_comentarios_do_aluno_lidos(aluno_id: int):
+        """O professor leu os comentários deste aluno que estavam na tela. Corpo: {"ids": [3, 5]} (os que ele viu).
+
+        200 {"ok", "marcados", "nao_lidos"}; 400 lista inválida; 404 se o aluno não existe. Só marca esses ids, nunca "tudo
+        o que está sem ler": o que chegou depois de a ficha abrir não pode ser dado como lido sem ninguém ter lido.
+        """
+        conn = conexao()
+        dados = corpo_json()
+        if conn.execute("SELECT 1 FROM aluno WHERE id = ?", (aluno_id,)).fetchone() is None:
+            return jsonify(erro="Aluno não encontrado."), 404
+        try:
+            marcados = comentarios.marcar_lidos_do_aluno(conn, aluno_id, dados.get("ids") if isinstance(dados, dict) else None)
+        except comentarios.ComentarioInvalido as erro:
+            return jsonify(erro=str(erro)), erro.status
+        return jsonify(ok=True, marcados=marcados, nao_lidos=comentarios.contar_nao_lidos(conn))
+
     @app.get("/alunos/<int:aluno_id>")
     def pagina_ficha(aluno_id: int):
         """Ficha do aluno: treinos salvos, WhatsApp e dados do cadastro."""
         ficha = alunos.obter_ficha(conexao(), aluno_id)
         if ficha is None:
             abort(404)
-        return render_template("ficha.html", ficha=ficha, hoje=datas.hoje())
+        return render_template(
+            "ficha.html",
+            ficha=ficha,
+            hoje=datas.hoje(),
+            comentarios_do_aluno=comentarios.listar(conexao(), so_nao_lidos=False, aluno_id=aluno_id, limite=30),
+        )
 
     @app.get("/treinos/<int:treino_id>/imprimir")
     def pagina_imprimir_treino(treino_id: int):

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comentários · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% from "_comentario.html" import comentario %}
+  {% set menu_ativo = "comentarios" %}
+  {% include "_topo.html" %}
+
+  <main class="pagina pagina-larga" id="tela-comentarios" data-so-novos="{{ 0 if todos else 1 }}">
+    <h1 class="titulo-grande">Comentários dos alunos</h1>
+    <p class="texto-apoio">O que os alunos escreveram sobre o treino, no celular deles. Leia, abra a ficha do aluno e faça as mudanças que precisar no treino. Depois de ler, marque como lido.</p>
+
+    <nav class="filtro-comentarios" aria-label="Quais comentários mostrar">
+      <a class="botao-link{{ '' if todos else ' filtro-ativo' }}" href="{{ url_for('pagina_comentarios') }}"{% if not todos %} aria-current="page"{% endif %}>Novos ({{ lista.nao_lidos }})</a>
+      <a class="botao-link{{ ' filtro-ativo' if todos else '' }}" href="{{ url_for('pagina_comentarios', todos=1) }}"{% if todos %} aria-current="page"{% endif %}>Todos</a>
+    </nav>
+
+    <section class="cartao-lista" aria-labelledby="titulo-lista-comentarios">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-lista-comentarios">{{ "Todos os comentários" if todos else "Comentários novos" }}</h2>
+        <p class="resumo" id="resumo-comentarios" aria-live="polite">{{ lista.total }} {{ "comentário" if lista.total == 1 else "comentários" }}{% if lista.total > lista.comentarios|length %} (mostrando os {{ lista.comentarios|length }} mais novos){% endif %}</p>
+      </div>
+      <ul class="lista-comentarios" id="lista-comentarios">
+        {% for c in lista.comentarios %}{{ comentario(c, com_aluno=True) }}{% endfor %}
+      </ul>
+      <p class="lista-vazia" id="comentarios-vazio"{% if lista.comentarios %} hidden{% endif %}>{{ "Nenhum comentário ainda." if todos else "Nenhum comentário novo. Quando um aluno escrever pelo celular, ele aparece aqui." }}</p>
+    </section>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='comentarios.js') }}"></script>
+</body>
+</html>

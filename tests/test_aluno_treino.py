@@ -118,6 +118,7 @@ def test_o_exercicio_sai_em_texto_pronto(conn):
     assert ficha["nome"] == "A PEITO"
     primeiro, segundo = (grupo["exercicios"][0] for grupo in ficha["grupos"])
     assert primeiro == {
+        "ordem": 1,
         "etiqueta": "1",
         "exercicio": "SUPINO RETO",
         "dose": "4 × 12",
@@ -125,7 +126,7 @@ def test_o_exercicio_sai_em_texto_pronto(conn):
         "intervalo": "1 min 30 s",
         "observacao": "Descer devagar",
     }
-    assert segundo["etiqueta"] == "2" and segundo["carga"] == "" and segundo["intervalo"] == "" and segundo["observacao"] == ""
+    assert segundo["ordem"] == 2 and segundo["etiqueta"] == "2" and segundo["carga"] == "" and segundo["intervalo"] == "" and segundo["observacao"] == ""
 
 
 def test_cardio_sem_series_nem_repeticoes_nao_quebra(conn):
@@ -334,7 +335,7 @@ def test_o_computador_do_professor_sem_login_de_aluno_nao_ve_treino_de_aluno(cam
 def test_a_pagina_do_aluno_tem_os_pontos_que_o_javascript_usa(caminho, cliente_da_ana):
     html = cliente_da_ana.get("/aluno").get_data(as_text=True)
 
-    for id_ in ("aviso-treino", "botao-de-novo", "treino", "titulo-treino", "treino-datas", "fichas-botoes", "ficha-atual", "botao-sair"):
+    for id_ in ("aviso-treino", "botao-de-novo", "treino", "titulo-treino", "treino-datas", "fichas-botoes", "ficha-atual", "comentario-treino", "botao-sair"):
         assert f'id="{id_}"' in html, id_
 
 

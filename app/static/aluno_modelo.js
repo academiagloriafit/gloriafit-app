@@ -128,3 +128,68 @@ export function descreverMarcacao(status, corpo) {
 
 export const TEXTO_FICHA_FEITA_HOJE = "Anotado. Parabéns!";
 export const TEXTO_JA_MARCADA = "Você já tinha marcado esta ficha hoje.";
+
+// ------------------------------------------------------------------ comentários do aluno
+
+export const LIMITE_DO_COMENTARIO = 500; // o servidor aceita até isto (LIMITE_DO_TEXTO em app/comentarios.py)
+export const TEXTO_COMENTARIO_VAZIO = "Escreva o seu comentário.";
+export const TEXTO_COMENTARIO_ENVIADO = "Comentário enviado. O professor vai ler.";
+export const TEXTO_COMENTARIO_REPETIDO = "Este comentário já tinha sido enviado.";
+
+// Conta letras como o servidor (Python): um emoji vale 1, não 2 como no `.length` do JavaScript.
+function contarLetras(texto) {
+  return [...texto].length;
+}
+
+// "37 de 500", embaixo da caixa de comentário.
+export function textoDoContador(texto) {
+  return `${contarLetras(typeof texto === "string" ? texto : "")} de ${LIMITE_DO_COMENTARIO}`;
+}
+
+// O texto passou do limite? (a caixa não trava a digitação: o contador fica vermelho e o envio explica o motivo)
+export function estourouOLimite(texto) {
+  return contarLetras(typeof texto === "string" ? texto : "") > LIMITE_DO_COMENTARIO;
+}
+
+// O texto está pronto para enviar? { ok: true, texto } (sem as bordas em branco) ou { ok: false, mensagem }.
+export function comentarioPronto(texto) {
+  const limpo = typeof texto === "string" ? texto.trim() : "";
+  if (!limpo) return { ok: false, mensagem: TEXTO_COMENTARIO_VAZIO };
+  if (contarLetras(limpo) > LIMITE_DO_COMENTARIO) {
+    return { ok: false, mensagem: `O comentário pode ter até ${LIMITE_DO_COMENTARIO} letras.` };
+  }
+  return { ok: true, texto: limpo };
+}
+
+// O corpo do pedido. Sem `ficha`/`exercicio` é o comentário do treino inteiro. O nome do treino e o do exercício
+// vão junto de propósito: se o professor mudou o treino enquanto o aluno escrevia, o servidor percebe e não deixa o
+// comentário cair no lugar errado (responde 409).
+export function pedidoDoComentario(treino, texto, ficha = null, exercicio = null) {
+  const pedido = { treino: treino.nome, texto };
+  if (ficha && exercicio) {
+    pedido.ficha = ficha.ordem;
+    pedido.item = exercicio.ordem;
+    pedido.exercicio = exercicio.exercicio;
+  }
+  return pedido;
+}
+
+// Cada caixa de comentário guarda o rascunho com esta chave: "treino" ou "ficha:exercício" (ex.: "2:3").
+export function chaveDoRascunho(ficha = null, exercicio = null) {
+  return ficha && exercicio ? `${ficha.ordem}:${exercicio.ordem}` : "treino";
+}
+
+// Resposta do servidor ao enviar ({ status, corpo }) -> o que a tela faz:
+//   { tipo: "entrar" }                  sessão perdida
+//   { tipo: "ok", repetido }            enviado (`repetido`: o mesmo texto acabou de ser enviado; não gravou duas vezes)
+//   { tipo: "atualizar", mensagem }     o treino mudou (409): o aluno precisa atualizar a página
+//   { tipo: "erro", mensagem }          qualquer outra coisa, com a explicação do servidor se ela veio
+export function descreverComentario(status, corpo) {
+  if (status === 401) return { tipo: "entrar" };
+  if (status === 200 && corpo && corpo.ok === true) return { tipo: "ok", repetido: corpo.repetido === true };
+  const mensagem =
+    corpo && typeof corpo.erro === "string" && corpo.erro
+      ? corpo.erro
+      : `Não consegui enviar (código ${status}). Tente de novo em instantes.`;
+  return { tipo: status === 409 ? "atualizar" : "erro", mensagem };
+}

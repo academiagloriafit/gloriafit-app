@@ -1,5 +1,7 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 12 (15/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados e o login do aluno (senha, códigos por WhatsApp, sessões).
+-- Versão 13 (15/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões) e os comentários do aluno sobre o treino.
+-- Mudança da versão 12 para a 13 (comentários do aluno): nasceu a tabela `comentario` (o que o aluno escreve sobre o treino inteiro ou
+-- sobre um exercício; o professor lê, marca como lido e, na segunda entrega, responde). Bancos da versão 12 são atualizados sozinhos na subida.
 -- Mudança da versão 11 para a 12 (login do aluno): nasceram as tabelas `aluno_senha` (o hash da senha de cada aluno), `aluno_codigo`
 -- (os códigos de 6 números enviados por WhatsApp, só o hash), `aluno_sessao` (os celulares em que o aluno está logado, só o hash do
 -- cookie) e `aluno_evento` (pedidos de código e erros, para limitar tentativas). Bancos da versão 11 são atualizados sozinhos na subida.
@@ -36,7 +38,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 12;
+PRAGMA user_version = 13;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -407,3 +409,39 @@ CREATE TABLE IF NOT EXISTS aluno_evento (
     em    TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_aluno_evento ON aluno_evento(tipo, chave, em);
+
+-- ------------------------------------------------------------------ comentários do aluno
+-- O aluno comenta (tela /aluno) o treino INTEIRO ou UM exercício; o professor lê em "Comentários" e na ficha do aluno.
+-- Âncora: o treino, o número da ficha (1 = A, 2 = B...) e o NOME do exercício, nunca o id do item da ficha: editar um treino
+-- apaga e recria as fichas e os itens, e a atualização de alunos recopia os treinos do Data4U. Por isso o comentário guarda
+-- também uma cópia dos nomes (treino_nome, ficha_nome, exercicio_nome): ele continua legível mesmo que o treino mude.
+--   treino_id: some (vira NULL) se o treino for apagado (treino do Data4U que saiu de lá); o comentário NÃO se perde.
+--   ficha_ordem, ficha_nome, exercicio_nome: os três vazios = comentário do treino inteiro; os três preenchidos = de um exercício.
+--   texto: o que o aluno escreveu (1 a 500 letras). Sempre tratado como TEXTO, nunca como HTML.
+--   criado_em, lido_em: UTC. lido_em vazio = ainda não lido por nenhum professor (o app não tem login por professor).
+--   resposta, respondido_por, respondido_em, resposta_vista_em: a resposta do professor (segunda entrega) e quando o aluno a viu.
+-- Só se cria e se marca como lido; apagar não existe (o histórico do que o aluno disse fica). Apagar o aluno é recusado.
+CREATE TABLE IF NOT EXISTS comentario (
+    id                 INTEGER PRIMARY KEY,
+    aluno_id           INTEGER NOT NULL REFERENCES aluno(id),
+    treino_id          INTEGER REFERENCES treino(id) ON DELETE SET NULL,
+    treino_nome        TEXT    NOT NULL CHECK (length(treino_nome) BETWEEN 1 AND 40),
+    ficha_ordem        INTEGER CHECK (ficha_ordem IS NULL OR ficha_ordem >= 1),
+    ficha_nome         TEXT    CHECK (ficha_nome IS NULL OR length(ficha_nome) BETWEEN 1 AND 15),
+    exercicio_nome     TEXT    CHECK (exercicio_nome IS NULL OR length(exercicio_nome) >= 1),
+    texto              TEXT    NOT NULL CHECK (length(texto) BETWEEN 1 AND 500),
+    criado_em          TEXT    NOT NULL,
+    lido_em            TEXT,
+    resposta           TEXT    CHECK (resposta IS NULL OR length(resposta) BETWEEN 1 AND 500),
+    respondido_por     TEXT    CHECK (respondido_por IS NULL OR length(respondido_por) BETWEEN 1 AND 60),
+    respondido_em      TEXT,
+    resposta_vista_em  TEXT,
+    CHECK ((ficha_ordem IS NULL) = (ficha_nome IS NULL) AND (ficha_ordem IS NULL) = (exercicio_nome IS NULL)),
+    CHECK ((resposta IS NULL) = (respondido_por IS NULL) AND (resposta IS NULL) = (respondido_em IS NULL))
+);
+CREATE INDEX IF NOT EXISTS ix_comentario_aluno ON comentario(aluno_id, criado_em);
+-- Apagar um treino (o importador do Data4U faz isso) solta o vínculo dos comentários dele (ON DELETE SET NULL): sem
+-- este índice o SQLite varreria a tabela inteira a cada treino apagado.
+CREATE INDEX IF NOT EXISTS ix_comentario_treino ON comentario(treino_id);
+-- Os não lidos são poucos: a lista e o contador do menu leem só este índice.
+CREATE INDEX IF NOT EXISTS ix_comentario_nao_lidos ON comentario(criado_em) WHERE lido_em IS NULL;

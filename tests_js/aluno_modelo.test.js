@@ -1,24 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
+  LIMITE_DO_COMENTARIO,
   MENSAGEM_SEM_REDE,
   MINIMO_DA_SENHA,
   TAMANHO_DO_CODIGO,
+  TEXTO_COMENTARIO_ENVIADO,
+  TEXTO_COMENTARIO_REPETIDO,
+  TEXTO_COMENTARIO_VAZIO,
   TEXTO_FICHA_FEITA_HOJE,
   TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
   TEXTO_SEM_TREINO,
+  chaveDoRascunho,
+  comentarioPronto,
   conferirCodigo,
   conferirCpf,
   conferirSenhaNova,
+  descreverComentario,
   descreverMarcacao,
   descreverResposta,
   descreverTreino,
+  estourouOLimite,
   fichaEscolhida,
   formatarCpf,
   linhasDoExercicio,
+  pedidoDoComentario,
   soNumeros,
   textoDasDatas,
   textoDoAndamento,
+  textoDoContador,
   textoDoReenvio,
 } from "../app/static/aluno_modelo.js";
 
@@ -305,5 +315,134 @@ describe("descreverMarcacao", () => {
   it("as frases fixas existem e são diferentes", () => {
     expect(TEXTO_FICHA_FEITA_HOJE).not.toBe(TEXTO_JA_MARCADA);
     expect(TEXTO_JA_MARCADA).toContain("já");
+  });
+});
+
+describe("comentários do aluno", () => {
+  const treino = { nome: "TREINO ABC" };
+  const ficha = { ordem: 2, nome: "B PERNA" };
+  const exercicio = { ordem: 3, exercicio: "CADEIRA ABDUTORA" };
+
+  it("o limite combina com o do servidor (500)", () => {
+    expect(LIMITE_DO_COMENTARIO).toBe(500);
+  });
+
+  describe("textoDoContador", () => {
+    it("mostra quantas letras já tem", () => {
+      expect(textoDoContador("")).toBe("0 de 500");
+      expect(textoDoContador("Dói o ombro")).toBe("11 de 500");
+    });
+    it("conta emoji como uma letra só, como o servidor", () => {
+      expect(textoDoContador("💪💪")).toBe("2 de 500");
+    });
+    it("lixo vira zero", () => {
+      expect(textoDoContador(null)).toBe("0 de 500");
+      expect(textoDoContador(undefined)).toBe("0 de 500");
+    });
+  });
+
+  describe("comentarioPronto", () => {
+    it("tira as bordas em branco e aceita", () => {
+      expect(comentarioPronto("  Está leve demais \n")).toEqual({ ok: true, texto: "Está leve demais" });
+    });
+    it.each([[""], ["   "], ["\n\t"], [null], [undefined], [7]])("recusa vazio (%j)", (texto) => {
+      expect(comentarioPronto(texto)).toEqual({ ok: false, mensagem: TEXTO_COMENTARIO_VAZIO });
+    });
+    it("aceita 500 letras e recusa 501", () => {
+      expect(comentarioPronto("x".repeat(500)).ok).toBe(true);
+      const longo = comentarioPronto("x".repeat(501));
+      expect(longo.ok).toBe(false);
+      expect(longo.mensagem).toContain("500");
+    });
+    it("o limite conta letras, não bytes: 500 emojis passam", () => {
+      expect(comentarioPronto("💪".repeat(500)).ok).toBe(true);
+      expect(comentarioPronto("💪".repeat(501)).ok).toBe(false);
+    });
+  });
+
+  describe("pedidoDoComentario", () => {
+    it("treino inteiro: só o nome do treino e o texto", () => {
+      expect(pedidoDoComentario(treino, "oi")).toEqual({ treino: "TREINO ABC", texto: "oi" });
+    });
+    it("exercício: ficha, número do exercício e o nome que o aluno viu", () => {
+      expect(pedidoDoComentario(treino, "oi", ficha, exercicio)).toEqual({
+        treino: "TREINO ABC",
+        texto: "oi",
+        ficha: 2,
+        item: 3,
+        exercicio: "CADEIRA ABDUTORA",
+      });
+    });
+    it("ficha sem exercício (ou ao contrário) vale como treino inteiro: nunca manda o pedido pela metade", () => {
+      expect(pedidoDoComentario(treino, "oi", ficha, null)).toEqual({ treino: "TREINO ABC", texto: "oi" });
+      expect(pedidoDoComentario(treino, "oi", null, exercicio)).toEqual({ treino: "TREINO ABC", texto: "oi" });
+    });
+    it("não leva ids nem nada além do combinado", () => {
+      const chaves = Object.keys(pedidoDoComentario(treino, "oi", ficha, exercicio)).sort();
+      expect(chaves).toEqual(["exercicio", "ficha", "item", "texto", "treino"]);
+    });
+  });
+
+  describe("chaveDoRascunho", () => {
+    it("treino inteiro e cada exercício têm chaves diferentes", () => {
+      expect(chaveDoRascunho()).toBe("treino");
+      expect(chaveDoRascunho(ficha, exercicio)).toBe("2:3");
+      expect(chaveDoRascunho({ ordem: 1 }, { ordem: 3 })).toBe("1:3");
+    });
+  });
+
+  describe("descreverComentario", () => {
+    it("401 manda entrar de novo", () => {
+      expect(descreverComentario(401, { erro: "x" })).toEqual({ tipo: "entrar" });
+    });
+    it("200 é ok, com e sem repetição", () => {
+      expect(descreverComentario(200, { ok: true, repetido: false })).toEqual({ tipo: "ok", repetido: false });
+      expect(descreverComentario(200, { ok: true, repetido: true })).toEqual({ tipo: "ok", repetido: true });
+      expect(descreverComentario(200, { ok: true })).toEqual({ tipo: "ok", repetido: false });
+    });
+    it("409 pede para atualizar a página, com a frase do servidor", () => {
+      expect(descreverComentario(409, { erro: "O seu treino mudou." })).toEqual({ tipo: "atualizar", mensagem: "O seu treino mudou." });
+    });
+    it.each([
+      [400, { erro: "Escreva o seu comentário." }, "Escreva o seu comentário."],
+      [429, { erro: "Você já enviou muitos comentários hoje." }, "Você já enviou muitos comentários hoje."],
+    ])("%s mostra a explicação do servidor", (status, corpo, esperado) => {
+      expect(descreverComentario(status, corpo)).toEqual({ tipo: "erro", mensagem: esperado });
+    });
+    it.each([
+      [500, null],
+      [500, {}],
+      [500, { erro: "" }],
+      [200, { ok: false }],
+      [200, null],
+    ])("resposta estranha (%s, %j) vira erro com o código na frase", (status, corpo) => {
+      const r = descreverComentario(status, corpo);
+      expect(r.tipo).toBe("erro");
+      expect(r.mensagem).toContain(`código ${status}`);
+    });
+  });
+
+  it("as frases fixas são diferentes entre si", () => {
+    expect(TEXTO_COMENTARIO_ENVIADO).not.toBe(TEXTO_COMENTARIO_REPETIDO);
+    expect(TEXTO_COMENTARIO_ENVIADO).toContain("professor");
+  });
+});
+
+
+describe("estourouOLimite", () => {
+  it("é falso até 500 letras e verdadeiro a partir de 501", () => {
+    expect(estourouOLimite("a".repeat(LIMITE_DO_COMENTARIO))).toBe(false);
+    expect(estourouOLimite("a".repeat(LIMITE_DO_COMENTARIO + 1))).toBe(true);
+  });
+
+  it("conta emoji como 1 letra (como o servidor), não como 2", () => {
+    expect(estourouOLimite("💪".repeat(LIMITE_DO_COMENTARIO))).toBe(false); // 500 emojis = 1.000 no .length
+    expect(estourouOLimite("💪".repeat(LIMITE_DO_COMENTARIO + 1))).toBe(true);
+  });
+
+  it("não quebra com o que não é texto", () => {
+    expect(estourouOLimite(undefined)).toBe(false);
+    expect(estourouOLimite(null)).toBe(false);
+    expect(estourouOLimite(42)).toBe(false);
   });
 });

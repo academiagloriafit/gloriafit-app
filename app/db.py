@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 12
+VERSAO_DO_BANCO = 13
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -331,10 +331,44 @@ def _de_11_para_12(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS ix_aluno_evento ON aluno_evento(tipo, chave, em)")
 
 
+def _de_12_para_13(conn: sqlite3.Connection) -> None:
+    """Comentários do aluno: nasce a tabela `comentario` (o que o aluno escreve sobre o treino inteiro ou sobre um exercício).
+
+    Só acrescenta uma tabela vazia e dois índices: nenhum dado que já existe é tocado. Os comandos são "IF NOT EXISTS" de propósito:
+    se o número da versão for baixado à mão (para abrir o banco com o app antigo, que ignora o que é novo), subir de novo com este
+    app não falha e os comentários já escritos continuam lá.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS comentario (
+            id                 INTEGER PRIMARY KEY,
+            aluno_id           INTEGER NOT NULL REFERENCES aluno(id),
+            treino_id          INTEGER REFERENCES treino(id) ON DELETE SET NULL,
+            treino_nome        TEXT    NOT NULL CHECK (length(treino_nome) BETWEEN 1 AND 40),
+            ficha_ordem        INTEGER CHECK (ficha_ordem IS NULL OR ficha_ordem >= 1),
+            ficha_nome         TEXT    CHECK (ficha_nome IS NULL OR length(ficha_nome) BETWEEN 1 AND 15),
+            exercicio_nome     TEXT    CHECK (exercicio_nome IS NULL OR length(exercicio_nome) >= 1),
+            texto              TEXT    NOT NULL CHECK (length(texto) BETWEEN 1 AND 500),
+            criado_em          TEXT    NOT NULL,
+            lido_em            TEXT,
+            resposta           TEXT    CHECK (resposta IS NULL OR length(resposta) BETWEEN 1 AND 500),
+            respondido_por     TEXT    CHECK (respondido_por IS NULL OR length(respondido_por) BETWEEN 1 AND 60),
+            respondido_em      TEXT,
+            resposta_vista_em  TEXT,
+            CHECK ((ficha_ordem IS NULL) = (ficha_nome IS NULL) AND (ficha_ordem IS NULL) = (exercicio_nome IS NULL)),
+            CHECK ((resposta IS NULL) = (respondido_por IS NULL) AND (resposta IS NULL) = (respondido_em IS NULL))
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_comentario_aluno ON comentario(aluno_id, criado_em)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_comentario_treino ON comentario(treino_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_comentario_nao_lidos ON comentario(criado_em) WHERE lido_em IS NULL")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
-    10: _de_10_para_11, 11: _de_11_para_12,
+    10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13,
 }
 
 

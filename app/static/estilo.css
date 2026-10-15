@@ -999,3 +999,83 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .meu-ficha-andamento { font-size: 15px; color: var(--texto-suave); }
 .meu-ficha-feita { font-weight: 700; color: #1f5a2b; }
 .meu-ficha-rodape button:disabled { cursor: wait; opacity: 0.6; }
+
+/* ---- comentários dos alunos (menu, tela "Comentários" e quadro na ficha) ---- */
+.contador-menu {
+  min-width: 24px;
+  height: 24px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--laranja);
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+}
+.filtro-comentarios { display: flex; flex-wrap: wrap; gap: 8px; }
+.filtro-comentarios .filtro-ativo { background: var(--escuro); color: #ffffff; }
+.lista-comentarios { list-style: none; margin: 0; padding: 0; }
+.comentario {
+  padding: 14px 16px;
+  border-top: 1px solid var(--borda);
+  border-left: 6px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.comentario p { margin: 0; }
+.comentario-novo { background: #fff8f4; border-left-color: var(--laranja); }
+.comentario-cabecalho { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.comentario-aluno { font-weight: 700; font-size: 18px; color: var(--escuro); }
+.comentario-quando { font-size: 15px; color: var(--texto-suave); }
+.comentario-lugar { font-size: 15px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.comentario-lugar strong { color: var(--escuro); }
+/* pre-wrap: as quebras de linha que o aluno digitou aparecem; o texto continua sendo só texto */
+.comentario-texto { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; }
+.comentario-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.comentario-lido { font-size: 15px; font-weight: 600; color: #1f5a2b; }
+.painel-comentarios { margin-bottom: 8px; }
+.painel-comentarios .aviso-campo:empty, .comentario-acoes .aviso-campo:empty { display: none; }
+.painel-comentarios > .aviso-campo { margin: 0 16px 12px; }
+
+/* ---- comentar no celular do aluno ---- */
+.meu-comentario { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.meu-comentario p { margin: 0; }
+.meu-comentario .aviso-campo:empty { display: none; }
+.meu-comentario-abrir {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--foco);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.meu-comentario-form { display: flex; flex-direction: column; gap: 8px; }
+.meu-comentario-rotulo { font-size: 15px; font-weight: 600; color: var(--texto-suave); }
+.meu-comentario-caixa {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1.5px solid #8c8b83;
+  border-radius: 10px;
+  background: var(--branco);
+  color: var(--escuro);
+  font-family: inherit;
+  font-size: 17px; /* 16 ou mais: o iPhone não dá zoom na tela ao tocar na caixa */
+  line-height: 1.4;
+  resize: vertical;
+}
+.meu-comentario-contador { font-size: 14px; color: var(--texto-suave); text-align: right; }
+.meu-comentario-contador-estouro { color: #7a0016; font-weight: 600; }
+.meu-comentario-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.meu-comentario-botoes .botao-link { flex: 1 1 120px; justify-content: center; }
+.meu-comentario-treino { padding-top: 4px; border-top: 1px solid var(--borda); }
+.meu-comentario-treino:empty { display: none; }

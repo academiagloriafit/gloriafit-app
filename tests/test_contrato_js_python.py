@@ -14,7 +14,15 @@ from pathlib import Path
 
 import pytest
 
-from app import acesso, administrador, filas, importar_alunos, importar_treinos, modelos, treinos
+from app import (
+    acesso,
+    administrador,
+    filas,
+    importar_alunos,
+    importar_treinos,
+    modelos,
+    treinos,
+)
 from app.db import conectar, criar_tabelas
 from app.web import criar_app
 
@@ -527,3 +535,59 @@ def test_ia_as_perguntas_que_o_servidor_devolve_sao_lidas_pelo_navegador(tmp_pat
     """)
 
     assert lido == {"tipo": "perguntas", "perguntas": ["Qual o foco?", "Tem lesão?"], "rodada": 2, "maximoDeRodadas": 2}
+
+
+# ------------------------------------------------------------------ comentários do aluno (celular -> servidor)
+
+MODULO_DO_ALUNO = (RAIZ / "app" / "static" / "aluno_modelo.js").as_uri()
+
+
+def test_o_pedido_de_comentario_montado_pelo_javascript_e_aceito_pelo_servidor(tmp_path):
+    """O celular monta o pedido com o treino que o SERVIDOR mandou; o servidor tem que aceitar sem reclamar."""
+    from app import comentarios
+    from app.aluno_treino import treino_do_aluno
+
+    conn = conectar(tmp_path / "contrato.db")
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome, cpf, situacao) VALUES (1, 'ANA SOUZA', '11144477735', 'A')")
+    for nome in ("SUPINO RETO", "(15) CADEIRA ABDUTORA"):
+        conn.execute("INSERT INTO exercicio (nome, origem) VALUES (?, 'app')", (nome,))
+    conn.commit()
+    treinos.salvar_treino(
+        conn,
+        1,
+        {
+            "nome_treino": "TREINO ABC",
+            "montado_por": "ANA",
+            "fichas": [
+                {"nome": "A PEITO", "itens": [{"exercicio_id": 1, "series": "4", "repeticoes": "12"}]},
+                {"nome": "B PERNA", "itens": [{"exercicio_id": 2, "series": "3", "repeticoes": "15"}]},
+            ],
+        },
+    )
+    treino = json.loads(json.dumps(treino_do_aluno(conn, 1)))  # o que o celular recebe
+    js = _node(f"""
+        import * as m from "{MODULO_DO_ALUNO}";
+        const treino = {json.dumps(treino)};
+        const ficha = treino.fichas[1];
+        const exercicio = ficha.grupos[0].exercicios[0];
+        console.log(JSON.stringify({{
+          inteiro: m.pedidoDoComentario(treino, "Está leve demais"),
+          exercicio: m.pedidoDoComentario(treino, "Dói o ombro", ficha, exercicio),
+          limite: m.LIMITE_DO_COMENTARIO,
+        }}));
+    """)
+
+    assert js["limite"] == comentarios.LIMITE_DO_TEXTO
+    inteiro, exercicio = js["inteiro"], js["exercicio"]
+    assert comentarios.enviar_comentario(conn, 1, inteiro["treino"], inteiro["texto"]) == {"repetido": False}
+    assert comentarios.enviar_comentario(
+        conn, 1, exercicio["treino"], exercicio["texto"],
+        ficha=exercicio["ficha"], item=exercicio["item"], exercicio=exercicio["exercicio"],
+    ) == {"repetido": False}
+    linhas = [dict(linha) for linha in conn.execute("SELECT ficha_nome, exercicio_nome, texto FROM comentario ORDER BY id")]
+    assert linhas == [
+        {"ficha_nome": None, "exercicio_nome": None, "texto": "Está leve demais"},
+        {"ficha_nome": "B PERNA", "exercicio_nome": "CADEIRA ABDUTORA", "texto": "Dói o ombro"},
+    ]
+    conn.close()

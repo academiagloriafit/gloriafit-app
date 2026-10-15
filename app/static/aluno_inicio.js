@@ -4,16 +4,24 @@ import { buscarJson, enviarJson } from "./api.js";
 import { el } from "./dom.js";
 import {
   MENSAGEM_SEM_REDE,
+  TEXTO_COMENTARIO_ENVIADO,
+  TEXTO_COMENTARIO_REPETIDO,
   TEXTO_FICHA_FEITA_HOJE,
   TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
   TEXTO_SEM_TREINO,
+  chaveDoRascunho,
+  comentarioPronto,
+  descreverComentario,
   descreverMarcacao,
   descreverTreino,
+  estourouOLimite,
   fichaEscolhida,
   linhasDoExercicio,
+  pedidoDoComentario,
   textoDasDatas,
   textoDoAndamento,
+  textoDoContador,
 } from "./aluno_modelo.js";
 
 const botaoSair = document.getElementById("botao-sair");
@@ -25,8 +33,145 @@ const tituloDoTreino = document.getElementById("titulo-treino");
 const datasDoTreino = document.getElementById("treino-datas");
 const botoesDasFichas = document.getElementById("fichas-botoes");
 const areaDaFicha = document.getElementById("ficha-atual");
+const areaDoComentarioDoTreino = document.getElementById("comentario-treino");
 
-function desenharExercicio(exercicio) {
+// Os rascunhos ficam aqui (e não dentro da caixa): a ficha é desenhada de novo ao trocar de A para B e ao marcar
+// "Treino concluído", e o aluno não pode perder o que estava escrevendo nem a confirmação de que enviou.
+// Cada rascunho também guarda `enviando` (há um envio no ar) e `redesenhar` (a função da caixa que está NA TELA agora):
+// se a ficha for redesenhada no meio de um envio, a resposta atualiza a caixa nova, não uma que já saiu da tela.
+const rascunhos = new Map();
+
+function estadoDoRascunho(chave) {
+  if (!rascunhos.has(chave)) {
+    rascunhos.set(chave, { aberto: false, texto: "", mensagem: "", deuErro: false, precisaAtualizar: false, enviando: false, redesenhar: null });
+  }
+  return rascunhos.get(chave);
+}
+
+// A caixa de comentário do treino inteiro (`ficha` e `exercicio` vazios) ou de um exercício. O texto do aluno só vai e
+// volta como texto (value / textContent): nada é interpretado como HTML.
+function desenharComentario(treino, ficha = null, exercicio = null) {
+  const chave = chaveDoRascunho(ficha, exercicio);
+  const estado = estadoDoRascunho(chave);
+  const sobre = exercicio ? "este exercício" : "o treino";
+  const raiz = el("div", { classe: "meu-comentario" });
+  const idDaCaixa = `caixa-comentario-${chave.replace(":", "-")}`; // (o id "comentario-treino" já é o da área na página)
+
+  // `foco`: "caixa" leva o cursor para o texto; "botao" devolve o foco ao botão de abrir (quem usa teclado ou leitor de tela não se perde).
+  const redesenhar = (foco = "") => {
+    raiz.replaceChildren(...montar());
+    if (foco === "caixa") raiz.querySelector("textarea")?.focus();
+    else if (foco === "botao") raiz.querySelector(".meu-comentario-abrir")?.focus();
+  };
+  estado.redesenhar = redesenhar; // a caixa criada por último é a que está na tela
+
+  async function enviar(botao) {
+    if (estado.enviando) return;
+    const pronto = comentarioPronto(estado.texto);
+    if (!pronto.ok) {
+      Object.assign(estado, { mensagem: pronto.mensagem, deuErro: true, precisaAtualizar: false });
+      estado.redesenhar("caixa");
+      return;
+    }
+    estado.enviando = true;
+    botao.disabled = true;
+    try {
+      const resposta = await enviarJson("/api/aluno/comentario", pedidoDoComentario(treino, pronto.texto, ficha, exercicio));
+      const resultado = descreverComentario(resposta.status, resposta.corpo);
+      if (resultado.tipo === "entrar") {
+        window.location.assign("/aluno/entrar");
+        return; // o botão continua travado: a página está sendo trocada
+      }
+      if (resultado.tipo === "ok") {
+        Object.assign(estado, {
+          aberto: false,
+          texto: "",
+          mensagem: resultado.repetido ? TEXTO_COMENTARIO_REPETIDO : TEXTO_COMENTARIO_ENVIADO,
+          deuErro: false,
+          precisaAtualizar: false,
+        });
+      } else {
+        Object.assign(estado, { mensagem: resultado.mensagem, deuErro: true, precisaAtualizar: resultado.tipo === "atualizar" });
+      }
+    } catch {
+      Object.assign(estado, { mensagem: MENSAGEM_SEM_REDE, deuErro: true, precisaAtualizar: false });
+    }
+    estado.enviando = false;
+    estado.redesenhar(estado.aberto ? "" : "botao");
+  }
+
+  function montar() {
+    const aviso = el("p", {
+      classe: estado.deuErro ? "aviso-campo aviso-erro" : "aviso-campo",
+      role: "status",
+      texto: estado.mensagem,
+    });
+    const atualizar = estado.precisaAtualizar
+      ? el("button", { type: "button", classe: "botao-link", texto: "Atualizar a página", aoClicar: () => window.location.reload() })
+      : null;
+    if (!estado.aberto) {
+      return [
+        el("button", {
+          type: "button",
+          classe: "meu-comentario-abrir",
+          texto: exercicio ? "Comentar" : "Comentar sobre o treino",
+          // Só "Comentar" não diz sobre qual exercício; o leitor de tela lê o nome completo.
+          "aria-label": exercicio ? `Comentar sobre ${exercicio.exercicio}` : "Comentar sobre o treino",
+          aoClicar: () => {
+            Object.assign(estado, { aberto: true, mensagem: "", deuErro: false, precisaAtualizar: false });
+            estado.redesenhar("caixa");
+          },
+        }),
+        aviso,
+      ];
+    }
+    const contador = el("p", { classe: "meu-comentario-contador", texto: textoDoContador(estado.texto) });
+    const atualizarContador = () => {
+      contador.textContent = textoDoContador(estado.texto);
+      contador.classList.toggle("meu-comentario-contador-estouro", estourouOLimite(estado.texto));
+    };
+    // Sem `maxlength`: ele conta de outro jeito que o servidor (um emoji vale 2 nele) e travaria o aluno antes da hora.
+    // O contador mostra quanto falta e fica vermelho quando passa; o envio explica o motivo.
+    const caixa = el("textarea", {
+      id: idDaCaixa,
+      classe: "meu-comentario-caixa",
+      rows: "4",
+      aoDigitar: (evento) => {
+        estado.texto = evento.currentTarget.value;
+        atualizarContador();
+      },
+    });
+    caixa.value = estado.texto; // por propriedade (texto puro), não como conteúdo HTML
+    atualizarContador();
+    return [
+      el("div", { classe: "meu-comentario-form" },
+        el("label", { for: idDaCaixa, classe: "meu-comentario-rotulo", texto: `Seu comentário sobre ${sobre}` }),
+        caixa,
+        contador,
+        el("div", { classe: "meu-comentario-botoes" },
+          // `disabled` enquanto há um envio no ar (também numa caixa redesenhada no meio do envio): sem toque duplo.
+          el("button", { type: "button", classe: "botao-link botao-link-forte", texto: "Enviar", disabled: estado.enviando, aoClicar: (evento) => enviar(evento.currentTarget) }),
+          el("button", {
+            type: "button",
+            classe: "botao-link",
+            texto: "Cancelar",
+            aoClicar: () => {
+              Object.assign(estado, { aberto: false, mensagem: "", deuErro: false, precisaAtualizar: false });
+              estado.redesenhar("botao");
+            },
+          }),
+        ),
+        aviso,
+        atualizar,
+      ),
+    ];
+  }
+
+  raiz.replaceChildren(...montar());
+  return raiz;
+}
+
+function desenharExercicio(exercicio, treino, ficha) {
   return el(
     "li",
     { classe: "meu-exercicio" },
@@ -36,12 +181,13 @@ function desenharExercicio(exercicio) {
       { classe: "meu-exercicio-corpo" },
       el("p", { classe: "meu-exercicio-nome", texto: exercicio.exercicio }),
       linhasDoExercicio(exercicio).map((linha) => el("p", { classe: "meu-exercicio-detalhe", texto: linha })),
+      desenharComentario(treino, ficha, exercicio),
     ),
   );
 }
 
-function desenharGrupo(grupo) {
-  const lista = el("ul", { classe: "meu-exercicios" }, grupo.exercicios.map(desenharExercicio));
+function desenharGrupo(grupo, treino, ficha) {
+  const lista = el("ul", { classe: "meu-exercicios" }, grupo.exercicios.map((exercicio) => desenharExercicio(exercicio, treino, ficha)));
   if (!grupo.nome) return el("div", { classe: "meu-grupo-simples" }, lista);
   return el(
     "div",
@@ -117,7 +263,7 @@ function mostrarFicha(treino, indice, mensagem = "", deuErro = false) {
     botao.setAttribute("aria-pressed", i === escolhida ? "true" : "false");
   });
   areaDaFicha.replaceChildren(
-    ...treino.fichas[escolhida].grupos.map(desenharGrupo),
+    ...treino.fichas[escolhida].grupos.map((grupo) => desenharGrupo(grupo, treino, treino.fichas[escolhida])),
     desenharRodape(treino, escolhida, mensagem, deuErro),
   );
 }
@@ -139,6 +285,7 @@ function mostrarTreino(treino) {
   );
   botoesDasFichas.hidden = treino.fichas.length < 2; // uma ficha só: não precisa de botão
   mostrarFicha(treino, 0);
+  areaDoComentarioDoTreino.replaceChildren(desenharComentario(treino));
   areaDoTreino.hidden = false;
   avisoTreino.hidden = true;
 }
