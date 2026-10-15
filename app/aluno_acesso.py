@@ -13,9 +13,13 @@ Como funciona, do começo ao fim:
 Quem pode entrar (decisão do Thiago em 15/10/2026, em `_quem_pode_entrar`): QUALQUER aluno vindo do Data4U, seja qual for a
 situação (Ativo, Trancado, Pendente, Desistente, Inativo ou Cancelado). Motivo: os alunos do Wellhub e do TotalPass aparecem como
 Inativo no Data4U, mas a academia monta treino para eles. Ficam de fora só os alunos provisórios (cadastro feito à mão no app,
-ainda sem registro no Data4U: o mesmo CPF costuma aparecer de novo quando o Data4U o traz), e quem não é dono SOZINHO do CPF
-(o Data4U tem CPFs repetidos; se dois alunos têm o mesmo CPF, ninguém entra por ele até a recepção arrumar). A conferência se
-repete a CADA pedido, com o cadastro de hoje.
+ainda sem registro no Data4U: o mesmo CPF costuma aparecer de novo quando o Data4U o traz).
+CPF repetido (decisão do Thiago em 15/10/2026): o Data4U tem poucos CPFs em mais de um cadastro (3 na base de 15/10). Nesse caso o
+app escolhe SOZINHO o melhor cadastro (`_escolher_o_cadastro`): situação Ativo, depois Trancado, Pendente, Inativo, Desistente,
+Cancelado; empate, o mais novo (maior `data4u_id`, depois maior `id`). O código vai para o WhatsApp do escolhido. Se os dois
+cadastros forem de pessoas diferentes (CPF digitado errado num deles), o código vai para a do escolhido e a outra fica sem
+conseguir entrar até a recepção arrumar: ninguém vê dado de outra pessoa, porque a sessão fica presa ao cadastro escolhido.
+A conferência se repete a CADA pedido, com o cadastro de hoje.
 
 Cuidados de segurança que este arquivo tem (o endereço é aberto à internet inteira):
 - Código e token são sorteados com `secrets`. O banco guarda só hash. O código tem só 1 milhão de possibilidades, então a
@@ -47,6 +51,10 @@ from datetime import datetime, timedelta, timezone
 from app import administrador, db, provisorios
 
 NOME_DO_COOKIE = "gloriafit_aluno"
+
+# Para o CPF que está em mais de um cadastro: quanto menor o número, melhor (ver o alto do arquivo).
+_ORDEM_DAS_SITUACOES = {"A": 0, "T": 1, "P": 2, "I": 3, "D": 4, "C": 5}
+
 
 def _quem_pode_entrar(tabela: str = "aluno") -> str:
     """O pedaço de SQL que separa quem pode entrar: qualquer situação, menos aluno provisório. Ver a explicação no alto do arquivo."""
@@ -249,12 +257,20 @@ def _esquecer_erros(conn: sqlite3.Connection, cpf: str) -> None:
 # ------------------------------------------------------------------ quem é o aluno
 
 
+def _escolher_o_cadastro(linhas: list[sqlite3.Row]) -> sqlite3.Row:
+    """Entre cadastros com o mesmo CPF: a melhor situação; empate, o mais novo (maior data4u_id, depois maior id)."""
+    return min(
+        linhas,
+        key=lambda linha: (_ORDEM_DAS_SITUACOES.get(linha["situacao"], len(_ORDEM_DAS_SITUACOES)), -(linha["data4u_id"] or 0), -linha["id"]),
+    )
+
+
 def _aluno_do_cpf(conn: sqlite3.Connection, cpf: str) -> sqlite3.Row | None:
-    """O aluno dono deste CPF, se há UM só entre os que podem entrar; senão None (não existe, não pode ou é ambíguo)."""
+    """O cadastro que responde por este CPF entre os que podem entrar; None se não há nenhum. Se há mais de um, escolhe um (acima)."""
     linhas = conn.execute(
-        f"SELECT id, nome, whatsapp FROM aluno WHERE cpf = ? AND {_quem_pode_entrar()}", (cpf,)
+        f"SELECT id, nome, whatsapp, situacao, data4u_id FROM aluno WHERE cpf = ? AND {_quem_pode_entrar()}", (cpf,)
     ).fetchall()
-    return linhas[0] if len(linhas) == 1 else None
+    return _escolher_o_cadastro(linhas) if linhas else None
 
 
 # ------------------------------------------------------------------ pedir o código

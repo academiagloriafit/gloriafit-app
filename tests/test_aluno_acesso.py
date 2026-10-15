@@ -117,8 +117,8 @@ def test_o_banco_guarda_so_o_hash_do_codigo(conn):
 
 @pytest.mark.parametrize(
     "cpf",
-    [CPF_INEXISTENTE, CPF_BIA, CPF_REPETIDO, CPF_PROVISORIO],
-    ids=["nao existe", "sem WhatsApp", "CPF repetido", "provisorio"],
+    [CPF_INEXISTENTE, CPF_BIA, CPF_PROVISORIO],
+    ids=["nao existe", "sem WhatsApp", "provisorio"],
 )
 def test_quem_nao_pode_receber_codigo_nao_ganha_codigo_mas_o_pedido_e_registrado(conn, cpf):
     assert _pedir(conn, cpf) is None
@@ -144,12 +144,60 @@ def test_desistente_recebe_codigo_e_cria_a_senha(conn):
     assert entrada.aluno_id == 3
 
 
-@pytest.mark.parametrize("situacao", ["A", "D", "I"])
-def test_cpf_repetido_continua_barrado_qualquer_que_seja_a_situacao(conn, situacao):
-    conn.execute("UPDATE aluno SET situacao = ? WHERE id = 5", (situacao,))
+@pytest.mark.parametrize(
+    ("situacao_do_4", "situacao_do_5", "escolhido"),
+    [
+        ("A", "A", 5),  # empate: o mais novo (data4u_id 200)
+        ("A", "D", 4),
+        ("D", "A", 5),
+        ("I", "D", 4),
+        ("D", "I", 5),
+        ("T", "P", 4),
+        ("P", "T", 5),
+        ("C", "D", 5),
+        ("D", "C", 4),
+        (None, "C", 5),  # situação ausente perde de todas
+        ("C", None, 4),
+    ],
+)
+def test_cpf_repetido_fica_com_o_melhor_cadastro(conn, situacao_do_4, situacao_do_5, escolhido):
+    conn.execute("UPDATE aluno SET situacao = ?, data4u_id = 100 WHERE id = 4", (situacao_do_4,))
+    conn.execute("UPDATE aluno SET situacao = ?, data4u_id = 200 WHERE id = 5", (situacao_do_5,))
     conn.commit()
 
-    assert _pedir(conn, CPF_REPETIDO) is None
+    assert _pedir(conn, CPF_REPETIDO).aluno_id == escolhido
+
+
+def test_cpf_repetido_com_a_mesma_situacao_fica_com_o_data4u_id_maior_e_depois_com_o_id_maior(conn):
+    conn.execute("UPDATE aluno SET data4u_id = 300 WHERE id = 4")
+    conn.execute("UPDATE aluno SET data4u_id = 200 WHERE id = 5")
+    conn.commit()
+    assert _pedir(conn, CPF_REPETIDO).aluno_id == 4  # data4u_id maior, mesmo com o id menor
+
+    conn.execute("UPDATE aluno SET data4u_id = NULL")
+    conn.commit()
+    assert _pedir(conn, CPF_REPETIDO, quando=_mais(minutes=2)).aluno_id == 5  # sem data4u_id: o id maior
+
+
+def test_cpf_repetido_manda_para_o_whatsapp_do_cadastro_escolhido_e_a_sessao_fica_nele(conn):
+    conn.execute("UPDATE aluno SET whatsapp = '27911112222', situacao = 'D' WHERE id = 4")
+    conn.execute("UPDATE aluno SET whatsapp = '27933334444', situacao = 'I' WHERE id = 5")
+    conn.commit()
+
+    envio = _pedir(conn, CPF_REPETIDO)
+    assert (envio.aluno_id, envio.whatsapp) == (5, "27933334444")
+
+    entrada = aluno_acesso.definir_senha_com_codigo(conn, CPF_REPETIDO, envio.codigo, SENHA, ENDERECO, agora=_mais(minutes=1))
+    assert entrada.aluno_id == 5
+    assert aluno_acesso.identificar(conn, entrada.token, agora=_mais(minutes=2)).id == 5
+    assert aluno_acesso.entrar(conn, CPF_REPETIDO, SENHA, ENDERECO, agora=_mais(minutes=3)).aluno_id == 5
+
+
+def test_cpf_repetido_com_cadastro_provisorio_e_cadastro_do_data4u_fica_com_o_do_data4u(conn):
+    conn.execute("UPDATE aluno SET provisorio = 1, situacao = NULL WHERE id = 5")  # o 5 vira provisório; sobra o 4
+    conn.commit()
+
+    assert _pedir(conn, CPF_REPETIDO).aluno_id == 4
 
 
 def test_cadastro_provisorio_com_o_mesmo_cpf_nao_atrapalha_o_aluno_do_data4u(conn):
