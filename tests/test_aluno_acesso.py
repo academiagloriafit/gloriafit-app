@@ -22,7 +22,7 @@ SENHA = "uma senha boa 77"
 CPF_ANA = "11144477735"  # ativa, com WhatsApp
 CPF_BIA = "52998224725"  # ativa, SEM WhatsApp
 CPF_CLO = "39053344705"  # desistente
-CPF_REPETIDO = "16899535009"  # dois alunos ativos com o mesmo CPF
+CPF_REPETIDO = "16899535009"  # dois alunos com o mesmo CPF
 CPF_PROVISORIO = "12345678909"  # aluno provisório
 CPF_INEXISTENTE = "98765432100"
 
@@ -117,8 +117,8 @@ def test_o_banco_guarda_so_o_hash_do_codigo(conn):
 
 @pytest.mark.parametrize(
     "cpf",
-    [CPF_INEXISTENTE, CPF_BIA, CPF_CLO, CPF_REPETIDO, CPF_PROVISORIO],
-    ids=["nao existe", "sem WhatsApp", "desistente", "CPF repetido entre ativos", "provisorio"],
+    [CPF_INEXISTENTE, CPF_BIA, CPF_REPETIDO, CPF_PROVISORIO],
+    ids=["nao existe", "sem WhatsApp", "CPF repetido", "provisorio"],
 )
 def test_quem_nao_pode_receber_codigo_nao_ganha_codigo_mas_o_pedido_e_registrado(conn, cpf):
     assert _pedir(conn, cpf) is None
@@ -127,11 +127,39 @@ def test_quem_nao_pode_receber_codigo_nao_ganha_codigo_mas_o_pedido_e_registrado
     assert _contar(conn, "aluno_evento") == 2  # um por CPF e um por endereço: o limite vale também para quem não existe
 
 
-def test_cpf_repetido_com_um_so_ativo_entra_pelo_ativo(conn):
-    conn.execute("UPDATE aluno SET situacao = 'D' WHERE id = 5")
+@pytest.mark.parametrize("situacao", ["A", "T", "P", "D", "I", "C", None])
+def test_aluno_de_qualquer_situacao_recebe_codigo(conn, situacao):
+    # Decisão de 15/10: Wellhub e TotalPass aparecem como Inativo no Data4U e a academia monta treino para eles.
+    conn.execute("UPDATE aluno SET situacao = ? WHERE id = 1", (situacao,))
     conn.commit()
 
-    assert _pedir(conn, CPF_REPETIDO).aluno_id == 4
+    assert _pedir(conn).aluno_id == 1
+
+
+def test_desistente_recebe_codigo_e_cria_a_senha(conn):
+    envio = _pedir(conn, CPF_CLO)
+
+    entrada = aluno_acesso.definir_senha_com_codigo(conn, CPF_CLO, envio.codigo, SENHA, ENDERECO, agora=_mais(minutes=1))
+
+    assert entrada.aluno_id == 3
+
+
+@pytest.mark.parametrize("situacao", ["A", "D", "I"])
+def test_cpf_repetido_continua_barrado_qualquer_que_seja_a_situacao(conn, situacao):
+    conn.execute("UPDATE aluno SET situacao = ? WHERE id = 5", (situacao,))
+    conn.commit()
+
+    assert _pedir(conn, CPF_REPETIDO) is None
+
+
+def test_cadastro_provisorio_com_o_mesmo_cpf_nao_atrapalha_o_aluno_do_data4u(conn):
+    conn.execute(
+        "INSERT INTO aluno (id, nome, cpf, whatsapp, situacao, provisorio) VALUES (8, 'ANA (PROVISORIO)', ?, '27988887766', NULL, 1)",
+        (CPF_ANA,),
+    )
+    conn.commit()
+
+    assert _pedir(conn).aluno_id == 1
 
 
 def test_novo_pedido_queima_o_codigo_anterior(conn, sorteios):
@@ -399,13 +427,13 @@ def test_a_senha_aceita_acento_digitado_de_dois_jeitos(conn):
 
 @pytest.mark.parametrize(
     "cpf",
-    [CPF_INEXISTENTE, CPF_BIA, CPF_CLO, CPF_REPETIDO],
-    ids=["cpf que nao existe", "aluno sem senha", "desistente", "cpf repetido"],
+    [CPF_INEXISTENTE, CPF_BIA, CPF_PROVISORIO, CPF_REPETIDO],
+    ids=["cpf que nao existe", "aluno sem senha", "provisorio", "cpf repetido"],
 )
 def test_quem_nao_pode_entrar_recebe_o_mesmo_erro_e_o_mesmo_trabalho(conn, monkeypatch, cpf):
     _criar_acesso(conn)  # a Ana tem senha; os outros não
-    conn.execute("INSERT INTO aluno_senha (aluno_id, senha_hash, definida_em) VALUES (3, ?, '2026-10-01 10:00:00')", (administrador.gerar_hash(SENHA),))
-    conn.commit()  # a Clo (desistente) tem senha de quando era ativa: mesmo assim não entra
+    conn.execute("INSERT INTO aluno_senha (aluno_id, senha_hash, definida_em) VALUES (6, ?, '2026-10-01 10:00:00')", (administrador.gerar_hash(SENHA),))
+    conn.commit()  # a Eva (provisória) tem senha de quando o cadastro era outro: mesmo assim não entra
     chamadas = []
     original = administrador.hash_confere
     monkeypatch.setattr(administrador, "hash_confere", lambda *a: chamadas.append(a) or original(*a))
@@ -502,24 +530,23 @@ def test_uso_frequente_mantem_a_sessao_viva_alem_de_90_dias(conn):
 
 
 @pytest.mark.parametrize("situacao", ["D", "I", "C", "T", "P", None])
-def test_aluno_que_deixa_de_estar_ativo_perde_o_acesso_na_hora(conn, situacao):
+def test_mudar_a_situacao_no_data4u_nao_tira_o_acesso(conn, situacao):
     entrada = _criar_acesso(conn)
     conn.execute("UPDATE aluno SET situacao = ? WHERE id = 1", (situacao,))
     conn.commit()  # a cópia diária do Data4U mudou a situação
 
+    assert aluno_acesso.identificar(conn, entrada.token, agora=_mais(minutes=1)) is not None
+    assert aluno_acesso.entrar(conn, CPF_ANA, SENHA, ENDERECO, agora=_mais(minutes=2)).aluno_id == 1
+
+
+def test_cadastro_que_deixa_de_seguir_as_regras_perde_o_acesso_na_hora(conn):
+    entrada = _criar_acesso(conn)
+    conn.execute("UPDATE aluno SET provisorio = 1 WHERE id = 1")
+    conn.commit()
+
     assert aluno_acesso.identificar(conn, entrada.token, agora=_mais(minutes=1)) is None
     with pytest.raises(LoginInvalido):
         aluno_acesso.entrar(conn, CPF_ANA, SENHA, ENDERECO, agora=_mais(minutes=2))
-
-
-def test_aluno_que_volta_a_ficar_ativo_volta_a_entrar_com_a_mesma_senha(conn):
-    _criar_acesso(conn)
-    conn.execute("UPDATE aluno SET situacao = 'T' WHERE id = 1")
-    conn.commit()
-    conn.execute("UPDATE aluno SET situacao = 'A' WHERE id = 1")
-    conn.commit()
-
-    assert aluno_acesso.entrar(conn, CPF_ANA, SENHA, ENDERECO, agora=_mais(days=3)).aluno_id == 1
 
 
 def test_sair_revoga_so_aquele_celular(conn):

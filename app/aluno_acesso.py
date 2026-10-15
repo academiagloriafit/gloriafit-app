@@ -10,10 +10,12 @@ Como funciona, do começo ao fim:
 3. DIA A DIA. CPF + senha. O navegador guarda um cookie (HttpOnly) com um token sorteado; o banco guarda só o hash dele.
 4. Senha nova (primeiro acesso ou esqueci) derruba todos os outros celulares em que ele estava logado.
 
-Quem pode entrar (decisão de partida, fácil de mudar em `SITUACOES_QUE_PODEM_ENTRAR` / `_quem_pode_entrar`): aluno com situação
-Ativo no Data4U, que não é provisório, e dono SOZINHO do CPF entre os que podem entrar (o Data4U tem CPFs repetidos; se dois
-alunos que podem entrar têm o mesmo CPF, ninguém entra por ele até a recepção arrumar). A conferência se repete a CADA pedido:
-o aluno que vira Desistente na cópia do Data4U perde o acesso no mesmo dia, mesmo com o celular já logado.
+Quem pode entrar (decisão do Thiago em 15/10/2026, em `_quem_pode_entrar`): QUALQUER aluno vindo do Data4U, seja qual for a
+situação (Ativo, Trancado, Pendente, Desistente, Inativo ou Cancelado). Motivo: os alunos do Wellhub e do TotalPass aparecem como
+Inativo no Data4U, mas a academia monta treino para eles. Ficam de fora só os alunos provisórios (cadastro feito à mão no app,
+ainda sem registro no Data4U: o mesmo CPF costuma aparecer de novo quando o Data4U o traz), e quem não é dono SOZINHO do CPF
+(o Data4U tem CPFs repetidos; se dois alunos têm o mesmo CPF, ninguém entra por ele até a recepção arrumar). A conferência se
+repete a CADA pedido, com o cadastro de hoje.
 
 Cuidados de segurança que este arquivo tem (o endereço é aberto à internet inteira):
 - Código e token são sorteados com `secrets`. O banco guarda só hash. O código tem só 1 milhão de possibilidades, então a
@@ -46,13 +48,9 @@ from app import administrador, db, provisorios
 
 NOME_DO_COOKIE = "gloriafit_aluno"
 
-# Quem pode entrar: situação do Data4U (A = Ativo) e não ser aluno provisório. Ver a explicação no alto do arquivo.
-SITUACOES_QUE_PODEM_ENTRAR = ("A",)
-
-
 def _quem_pode_entrar(tabela: str = "aluno") -> str:
-    """O pedaço de SQL que separa quem pode entrar (os valores das situações vão como parâmetros: SITUACOES_QUE_PODEM_ENTRAR)."""
-    return f"{tabela}.situacao IN ({', '.join('?' for _ in SITUACOES_QUE_PODEM_ENTRAR)}) AND {tabela}.provisorio = 0"
+    """O pedaço de SQL que separa quem pode entrar: qualquer situação, menos aluno provisório. Ver a explicação no alto do arquivo."""
+    return f"{tabela}.provisorio = 0"
 
 
 TAMANHO_DO_CODIGO = 6
@@ -254,7 +252,7 @@ def _esquecer_erros(conn: sqlite3.Connection, cpf: str) -> None:
 def _aluno_do_cpf(conn: sqlite3.Connection, cpf: str) -> sqlite3.Row | None:
     """O aluno dono deste CPF, se há UM só entre os que podem entrar; senão None (não existe, não pode ou é ambíguo)."""
     linhas = conn.execute(
-        f"SELECT id, nome, whatsapp FROM aluno WHERE cpf = ? AND {_quem_pode_entrar()}", (cpf, *SITUACOES_QUE_PODEM_ENTRAR)
+        f"SELECT id, nome, whatsapp FROM aluno WHERE cpf = ? AND {_quem_pode_entrar()}", (cpf,)
     ).fetchall()
     return linhas[0] if len(linhas) == 1 else None
 
@@ -450,7 +448,7 @@ def entrar(conn: sqlite3.Connection, cpf: str, senha: object, endereco: str | No
 
 def identificar(conn: sqlite3.Connection, token: object, agora: datetime | None = None) -> AlunoLogado | None:
     """O token do cookie -> o aluno logado, ou None se não vale (não existe, foi revogado, ficou tempo demais sem uso ou o
-    aluno deixou de poder entrar, por exemplo por ter virado Desistente)."""
+    cadastro do aluno deixou de seguir as regras de quem pode entrar, ver o alto do arquivo)."""
     if not isinstance(token, str) or not token:
         return None
     agora = _agora(agora)
@@ -458,7 +456,7 @@ def identificar(conn: sqlite3.Connection, token: object, agora: datetime | None 
         "SELECT s.id, s.ultimo_uso_em, a.id AS aluno_id, a.nome"
         " FROM aluno_sessao s JOIN aluno a ON a.id = s.aluno_id"
         f" WHERE s.token_hash = ? AND s.revogado_em IS NULL AND {_quem_pode_entrar('a')}",
-        (_hash(token), *SITUACOES_QUE_PODEM_ENTRAR),
+        (_hash(token),),
     ).fetchone()
     if linha is None:
         return None

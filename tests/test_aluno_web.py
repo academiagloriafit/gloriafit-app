@@ -46,6 +46,9 @@ def caminho(tmp_path):
             (3, "CLO DIAS", "39053344705", "27966665544", "D"),
         ],
     )
+    conn.execute(
+        "INSERT INTO aluno (id, nome, cpf, whatsapp, situacao, provisorio) VALUES (4, 'EVA NOVA', '12345678909', '27955554433', NULL, 1)"
+    )
     conn.commit()
     conn.close()
     return caminho
@@ -169,10 +172,13 @@ def test_a_resposta_e_igual_para_cpf_de_aluno_e_cpf_que_nao_existe(app, remetent
     de_aluno = _pedir_codigo(um, CPF_FORMATADO)
     de_ninguem = _pedir_codigo(outro, "98765432100")
     desistente = _pedir_codigo(app.test_client(), "39053344705")
+    provisoria = _pedir_codigo(app.test_client(), "12345678909")
 
     assert (de_aluno.status_code, de_aluno.get_json()) == (de_ninguem.status_code, de_ninguem.get_json())
     assert (desistente.status_code, desistente.get_json()) == (de_ninguem.status_code, de_ninguem.get_json())
-    assert len(remetente.enviados) == 1  # só a Ana recebeu
+    assert (provisoria.status_code, provisoria.get_json()) == (de_ninguem.status_code, de_ninguem.get_json())
+    # A Ana (ativa) e a Clo (desistente) recebem; a Eva (provisória) e o CPF que não existe, não.
+    assert sorted(telefone for telefone, _ in remetente.enviados) == ["27966665544", "27988887766"]
 
 
 def test_envio_que_falha_continua_dando_a_mesma_resposta_e_fica_anotado(cliente, remetente, caminho):
@@ -381,9 +387,9 @@ def test_senha_errada_e_cpf_inexistente_dao_exatamente_a_mesma_resposta(app, rem
 
     errada = cliente.post("/api/aluno/entrar", json={"cpf": CPF_ANA, "senha": "senha errada 99"})
     inexistente = cliente.post("/api/aluno/entrar", json={"cpf": "98765432100", "senha": "senha errada 99"})
-    desistente = cliente.post("/api/aluno/entrar", json={"cpf": "39053344705", "senha": "senha errada 99"})
+    provisoria = cliente.post("/api/aluno/entrar", json={"cpf": "12345678909", "senha": "senha errada 99"})
 
-    for resposta in (errada, inexistente, desistente):
+    for resposta in (errada, inexistente, provisoria):
         assert resposta.status_code == 401
         assert resposta.get_json() == {"erro": "CPF ou senha incorretos."}
         assert aluno_acesso.NOME_DO_COOKIE not in "".join(resposta.headers.getlist("Set-Cookie"))
@@ -429,11 +435,20 @@ def test_cookie_falso_nao_loga_ninguem(cliente):
         assert cliente.get("/aluno").status_code == 302
 
 
-def test_aluno_que_vira_desistente_perde_a_tela_na_hora(cliente, remetente, caminho):
+def test_aluno_que_vira_desistente_continua_com_a_tela(cliente, remetente, caminho):
     _criar_acesso(cliente, remetente, caminho)
     assert cliente.get("/aluno").status_code == 200
 
     _sql(caminho, "UPDATE aluno SET situacao = 'D' WHERE id = 1")
+
+    assert cliente.get("/aluno").status_code == 200
+
+
+def test_cadastro_que_vira_provisorio_perde_a_tela_na_hora(cliente, remetente, caminho):
+    _criar_acesso(cliente, remetente, caminho)
+    assert cliente.get("/aluno").status_code == 200
+
+    _sql(caminho, "UPDATE aluno SET provisorio = 1 WHERE id = 1")
 
     assert cliente.get("/aluno").status_code == 302
 

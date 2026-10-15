@@ -524,7 +524,7 @@ Pedido do Thiago de 14/10/2026 ("atualizar os alunos todo dia sem ninguém clica
 
 **No dia a dia:** CPF + senha. O celular guarda o cookie `gloriafit_aluno` (HttpOnly, SameSite=Lax, Secure fora do localhost, 90 dias, renovado a cada hora de uso); o banco guarda só o hash. Sessão sem uso por 90 dias perde o acesso.
 
-**Quem pode entrar (regra de partida, a confirmar com o Thiago):** situação **Ativo** (`A`) no Data4U, **não** provisório, e dono **sozinho** do CPF entre os que podem entrar (o Data4U tem 4 CPFs repetidos: se só um dos dois cadastros é Ativo, entra por ele; se os dois são, ninguém entra até a recepção arrumar). A conferência vale **a cada pedido**: quem vira Desistente na cópia diária do Data4U perde o acesso no mesmo dia, mesmo com o celular logado. A regra é a constante `SITUACOES_QUE_PODEM_ENTRAR` em `app/aluno_acesso.py`. Quem não tem WhatsApp no app (ou o tem errado) não recebe o código: a recepção corrige na ficha do aluno (o número do app vale mais que o do Data4U).
+**Quem pode entrar (decisão do Thiago em 15/10/2026):** **qualquer aluno do Data4U, seja qual for a situação** (Ativo, Trancado, Pendente, Desistente, Inativo, Cancelado). Motivo: quem vem pelo Wellhub ou pelo TotalPass aparece como Inativo no Data4U, mas a academia monta treino para essas pessoas. Ficam de fora só o aluno **provisório** (cadastro feito à mão no app; o mesmo CPF costuma voltar quando o Data4U o traz e os dois são juntados) e quem não é dono **sozinho** do CPF (em 15/10 eram 3 CPFs repetidos no Data4U: ninguém entra por um CPF repetido até a recepção arrumar). A conferência vale **a cada pedido**, com o cadastro de hoje. A regra está em `_quem_pode_entrar` em `app/aluno_acesso.py` (antes era só situação Ativo, até 15/10). Como todo o cadastro (cerca de 5.500 pessoas, perto de 3.500 com WhatsApp) pode pedir código, o teto de 500 códigos por dia e os limites por CPF e por endereço são a proteção contra gasto e abuso. Quem não tem WhatsApp no app (ou o tem errado) não recebe o código: a recepção corrige na ficha do aluno (o número do app vale mais que o do Data4U).
 
 **Limites de tentativa (todos contam também CPF que não existe, com a mesma regra, para o bloqueio não revelar quem é aluno; CPF e endereço entram na tabela `aluno_evento` como hash e somem em 1 dia):**
 
@@ -623,7 +623,7 @@ Sem a configuração o pedido de código responde `503` ("o envio ainda não est
 ## Ainda em aberto (de propósito, não decidido)
 
 - Qual dos ids do Data4U usar ao gravar um exercício que tem mais de um.
-- Login do aluno: os 4 CPFs repetidos no Data4U entram só se UM dos cadastros for Ativo (regra de partida, ver "Login do aluno"); confirmar com o Thiago quem mais pode entrar (Pendente? Trancado? aluno provisório?).
+- Login do aluno: CPF repetido no Data4U (3 em 15/10) não entra até a recepção arrumar; aluno provisório não entra (decidir se deve, quando o Thiago pedir).
 - Como o app do aluno vai registrar "treino feito" (a tabela `sessao` e `registrar_sessao` esperam por ele) e como início/fim/meta voltam ao Data4U.
 - Tela de "aparelhos autorizados" dentro do app (hoje só pelo comando no servidor).
 - Aviso de "combinação nova no Data4U" (o desenho mostra na montagem e no salvar): precisa
