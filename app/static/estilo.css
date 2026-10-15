@@ -993,3 +993,9 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .meu-bloco-titulo { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
 .meu-bloco-instrucao { font-size: 15px; color: var(--texto-suave); }
 .painel-sair .aviso-campo:empty { display: none; }
+.meu-ficha-rodape { display: flex; flex-direction: column; gap: 10px; }
+.meu-ficha-rodape p { margin: 0; }
+.meu-ficha-rodape .aviso-campo:empty { display: none; }
+.meu-ficha-andamento { font-size: 15px; color: var(--texto-suave); }
+.meu-ficha-feita { font-weight: 700; color: #1f5a2b; }
+.meu-ficha-rodape button:disabled { cursor: wait; opacity: 0.6; }

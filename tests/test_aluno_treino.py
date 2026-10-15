@@ -1,11 +1,17 @@
 """Testes do treino que o aluno vê no celular (app/aluno_treino.py e GET /api/aluno/treino). Dados inventados."""
 
-from datetime import datetime, timezone
+import threading
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app import aluno_acesso, treinos
-from app.aluno_treino import treino_do_aluno
+from app import aluno_acesso, ciclo, treinos
+from app.aluno_treino import (
+    MarcacaoInvalida,
+    desfazer_marcacao_de_hoje,
+    marcar_ficha_feita,
+    treino_do_aluno,
+)
 from app.db import conectar, criar_tabelas
 from app.web import criar_app
 
@@ -330,3 +336,331 @@ def test_a_pagina_do_aluno_tem_os_pontos_que_o_javascript_usa(caminho, cliente_d
 
     for id_ in ("aviso-treino", "botao-de-novo", "treino", "titulo-treino", "treino-datas", "fichas-botoes", "ficha-atual", "botao-sair"):
         assert f'id="{id_}"' in html, id_
+
+
+# ------------------------------------------------------------------ "Fiz esta ficha hoje"
+
+MEIO_DIA = datetime(2026, 10, 15, 15, 0, tzinfo=timezone.utc)  # 12h00 em Brasília
+
+
+def _sessoes(conn, aluno_id=1):
+    return [
+        tuple(linha)
+        for linha in conn.execute(
+            "SELECT s.ficha_ordem, s.feita_em FROM sessao s JOIN treino t ON t.id = s.treino_id "
+            "WHERE t.aluno_id = ? ORDER BY s.id",
+            (aluno_id,),
+        )
+    ]
+
+
+def _treino_abc(conn, aluno_id=1, nome="TREINO ABC", **extras):
+    return _salvar(conn, aluno_id=aluno_id, nome=nome, fichas=[("A", [_item(1)]), ("B", [_item(2)]), ("C", [_item(3)])], **extras)
+
+
+def test_marcar_grava_uma_sessao_com_o_momento_certo(conn):
+    _treino_abc(conn)
+
+    resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+
+    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 1}
+    assert _sessoes(conn) == [(1, "2026-10-15 15:00:00")]
+
+
+def test_marcar_de_novo_no_mesmo_dia_nao_conta_duas_vezes(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+
+    resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA + timedelta(hours=3))
+
+    assert resposta == {"ficha": 1, "ja_marcada": True, "feitas": 1}
+    assert len(_sessoes(conn)) == 1
+
+
+def test_no_dia_seguinte_conta_de_novo(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+
+    resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA + timedelta(days=1))
+
+    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 2}
+
+
+def test_o_dia_e_o_de_brasilia_e_nao_o_do_relogio_de_londres(conn):
+    _treino_abc(conn)
+    cinco_depois_da_meia_noite = datetime(2026, 10, 15, 3, 5, tzinfo=timezone.utc)  # 00h05 de 15/10 em Brasília
+    cinco_antes_da_meia_noite = datetime(2026, 10, 16, 2, 55, tzinfo=timezone.utc)  # 23h55 de 15/10 em Brasília (16/10 em UTC)
+    cinco_depois_da_virada = datetime(2026, 10, 16, 3, 5, tzinfo=timezone.utc)  # 00h05 de 16/10 em Brasília
+
+    assert marcar_ficha_feita(conn, 1, 1, cinco_depois_da_meia_noite)["ja_marcada"] is False
+    assert marcar_ficha_feita(conn, 1, 1, cinco_antes_da_meia_noite)["ja_marcada"] is True  # mesmo dia em Brasília
+    assert marcar_ficha_feita(conn, 1, 1, cinco_depois_da_virada)["ja_marcada"] is False  # já é outro dia
+
+
+def test_fichas_diferentes_no_mesmo_dia_contam_cada_uma(conn):
+    _treino_abc(conn)
+
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+    marcar_ficha_feita(conn, 1, 2, MEIO_DIA)
+
+    assert [ordem for ordem, _ in _sessoes(conn)] == [1, 2]
+
+
+def test_a_contagem_alimenta_o_ciclo_do_professor(conn):
+    treino_id = _treino_abc(conn, sessoes_por_ficha=2)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA + timedelta(days=1))
+
+    assert ciclo.sessoes_feitas_do_aluno(conn, 1) == {treino_id: {1: 2}}
+
+
+@pytest.mark.parametrize("ficha", [0, -1, True, False, "1", None, 1.5, [1], {"a": 1}])
+def test_ficha_que_nao_e_um_numero_valido_e_recusada(conn, ficha):
+    _treino_abc(conn)
+
+    with pytest.raises(MarcacaoInvalida) as erro:
+        marcar_ficha_feita(conn, 1, ficha, MEIO_DIA)
+
+    assert erro.value.status == 400
+    assert _sessoes(conn) == [] and not conn.in_transaction
+
+
+def test_ficha_que_o_treino_nao_tem_e_recusada(conn):
+    _treino_abc(conn)
+
+    with pytest.raises(MarcacaoInvalida) as erro:
+        marcar_ficha_feita(conn, 1, 4, MEIO_DIA)
+
+    assert erro.value.status == 404 and _sessoes(conn) == [] and not conn.in_transaction
+
+
+def test_aluno_sem_treino_ativo_nao_marca_nada(conn):
+    with pytest.raises(MarcacaoInvalida) as erro:
+        marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+
+    assert erro.value.status == 409 and not conn.in_transaction
+
+
+def test_treino_concluido_nao_recebe_marcacao(conn):
+    treino_id = _treino_abc(conn)
+    ciclo.concluir_treino(conn, treino_id)
+
+    with pytest.raises(MarcacaoInvalida) as erro:
+        marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+
+    assert erro.value.status == 409 and _sessoes(conn) == []
+
+
+def test_marcar_so_mexe_no_treino_do_proprio_aluno(conn):
+    _treino_abc(conn, aluno_id=1)
+    _treino_abc(conn, aluno_id=2, nome="TREINO DO BRUNO")
+
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+
+    assert len(_sessoes(conn, 1)) == 1 and _sessoes(conn, 2) == []
+
+
+def test_dois_toques_ao_mesmo_tempo_gravam_uma_vez_so(caminho):
+    conn = conectar(caminho)
+    _treino_abc(conn)
+    conn.close()
+    resultados, erros = [], []
+    largada = threading.Barrier(2)
+
+    def tocar():
+        c = conectar(caminho)
+        try:
+            largada.wait()
+            resultados.append(marcar_ficha_feita(c, 1, 1, MEIO_DIA)["ja_marcada"])
+        except Exception as erro:  # noqa: BLE001 - o teste quer ver qualquer falha
+            erros.append(erro)
+        finally:
+            c.close()
+
+    fios = [threading.Thread(target=tocar) for _ in range(2)]
+    for fio in fios:
+        fio.start()
+    for fio in fios:
+        fio.join()
+
+    assert erros == []
+    assert sorted(resultados) == [False, True]  # um gravou, o outro viu que já estava marcada
+    c = conectar(caminho)
+    assert len(_sessoes(c)) == 1
+    c.close()
+
+
+# ------------------------------------------------------------------ desfazer
+
+
+def test_desfazer_apaga_a_marcacao_de_hoje_e_deixa_marcar_de_novo(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 0}
+    assert marcar_ficha_feita(conn, 1, 1, MEIO_DIA)["ja_marcada"] is False
+
+
+def test_desfazer_nunca_apaga_marcacao_de_outro_dia(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(days=1))
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1}
+    assert _sessoes(conn) == [(1, "2026-10-14 15:00:00")]
+
+
+def test_desfazer_sem_marcacao_hoje_nao_muda_nada(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(days=1))
+
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1}
+
+
+def test_desfazer_so_mexe_na_ficha_pedida_e_no_proprio_aluno(conn):
+    _treino_abc(conn, aluno_id=1)
+    _treino_abc(conn, aluno_id=2, nome="TREINO DO BRUNO")
+    for aluno in (1, 2):
+        marcar_ficha_feita(conn, aluno, 1, MEIO_DIA)
+        marcar_ficha_feita(conn, aluno, 2, MEIO_DIA)
+
+    desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA)
+
+    assert [o for o, _ in _sessoes(conn, 1)] == [2]
+    assert [o for o, _ in _sessoes(conn, 2)] == [1, 2]
+
+
+@pytest.mark.parametrize("ficha", [0, True, "1", None])
+def test_desfazer_ficha_invalida_e_recusado(conn, ficha):
+    _treino_abc(conn)
+
+    with pytest.raises(MarcacaoInvalida) as erro:
+        desfazer_marcacao_de_hoje(conn, 1, ficha, MEIO_DIA)
+
+    assert erro.value.status == 400 and not conn.in_transaction
+
+
+# ------------------------------------------------------------------ o que a tela recebe
+
+
+def test_o_treino_traz_ordem_feitas_feita_hoje_e_a_meta(conn):
+    _treino_abc(conn, sessoes_por_ficha=15)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(days=2))
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
+    marcar_ficha_feita(conn, 1, 2, MEIO_DIA - timedelta(days=1))
+
+    treino = treino_do_aluno(conn, 1, MEIO_DIA)
+
+    assert treino["meta_por_ficha"] == 15
+    assert [(f["ordem"], f["feitas"], f["feita_hoje"]) for f in treino["fichas"]] == [(1, 2, True), (2, 1, False), (3, 0, False)]
+
+
+def test_sem_meta_o_treino_traz_meta_nula(conn):
+    _treino_abc(conn)
+
+    assert treino_do_aluno(conn, 1, MEIO_DIA)["meta_por_ficha"] is None
+
+
+def test_treino_novo_comeca_a_contar_do_zero(conn):
+    _treino_abc(conn, nome="TREINO ANTIGO")
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(days=3))
+    _treino_abc(conn, nome="TREINO NOVO")  # conclui o antigo
+
+    treino = treino_do_aluno(conn, 1, MEIO_DIA)
+
+    assert treino["nome"] == "TREINO NOVO" and [f["feitas"] for f in treino["fichas"]] == [0, 0, 0]
+
+
+# ------------------------------------------------------------------ as rotas de marcar e desfazer
+
+
+def _post(cliente, rota, corpo):
+    return cliente.post(f"/api/aluno/treino/{rota}", json=corpo)
+
+
+def test_rotas_de_marcar_sem_login_respondem_401(caminho):
+    cliente = criar_app(caminho).test_client()
+
+    assert _post(cliente, "feito", {"ficha": 1}).status_code == 401
+    assert _post(cliente, "desfazer", {"ficha": 1}).status_code == 401
+
+
+def test_marcar_e_desfazer_pela_rota(caminho, cliente_da_ana):
+    conn = conectar(caminho)
+    _treino_abc(conn)
+    conn.close()
+
+    primeira = _post(cliente_da_ana, "feito", {"ficha": 1})
+    segunda = _post(cliente_da_ana, "feito", {"ficha": 1})
+    depois = cliente_da_ana.get("/api/aluno/treino").get_json()["treino"]["fichas"][0]
+    desfeita = _post(cliente_da_ana, "desfazer", {"ficha": 1})
+    final = cliente_da_ana.get("/api/aluno/treino").get_json()["treino"]["fichas"][0]
+
+    assert primeira.status_code == 200 and primeira.get_json() == {"ok": True, "ficha": 1, "ja_marcada": False, "feitas": 1}
+    assert segunda.get_json()["ja_marcada"] is True and segunda.get_json()["feitas"] == 1
+    assert depois["feita_hoje"] is True and depois["feitas"] == 1
+    assert desfeita.get_json() == {"ok": True, "ficha": 1, "feitas": 0}
+    assert final["feita_hoje"] is False and final["feitas"] == 0
+
+
+@pytest.mark.parametrize("corpo", [{}, {"ficha": "1"}, {"ficha": 0}, {"ficha": True}, {"ficha": None}, [], "ficha", 7])
+def test_corpo_estranho_da_400_e_nao_grava(caminho, cliente_da_ana, corpo):
+    conn = conectar(caminho)
+    _treino_abc(conn)
+    conn.close()
+
+    resposta = _post(cliente_da_ana, "feito", corpo)
+
+    assert resposta.status_code == 400 and "erro" in resposta.get_json()
+    conn = conectar(caminho)
+    assert _sessoes(conn) == []
+    conn.close()
+
+
+def test_ficha_que_nao_existe_da_404_e_sem_treino_da_409(caminho, cliente_da_ana):
+    assert _post(cliente_da_ana, "feito", {"ficha": 1}).status_code == 409
+    conn = conectar(caminho)
+    _treino_abc(conn)
+    conn.close()
+
+    assert _post(cliente_da_ana, "feito", {"ficha": 9}).status_code == 404
+
+
+def test_marcar_exige_json_e_origem_do_proprio_site(caminho, cliente_da_ana):
+    conn = conectar(caminho)
+    _treino_abc(conn)
+    conn.close()
+
+    assert cliente_da_ana.post("/api/aluno/treino/feito", data="ficha=1").status_code == 415
+    de_outro_site = cliente_da_ana.post("/api/aluno/treino/feito", json={"ficha": 1}, headers={"Origin": "https://site-malvado.example"})
+    assert de_outro_site.status_code == 403
+    conn = conectar(caminho)
+    assert _sessoes(conn) == []
+    conn.close()
+
+
+def test_o_aluno_nao_consegue_marcar_no_treino_de_outro_mandando_ids(caminho, cliente_da_ana):
+    conn = conectar(caminho)
+    _treino_abc(conn, aluno_id=1)
+    _treino_abc(conn, aluno_id=2, nome="TREINO DO BRUNO")
+    conn.close()
+
+    resposta = _post(cliente_da_ana, "feito", {"ficha": 1, "aluno_id": 2, "treino_id": 2})
+
+    assert resposta.status_code == 200
+    conn = conectar(caminho)
+    assert len(_sessoes(conn, 1)) == 1 and _sessoes(conn, 2) == []
+    conn.close()
+
+
+def test_o_computador_do_professor_nao_marca_ficha_de_aluno(caminho):
+    from app import acesso
+
+    conn = conectar(caminho)
+    codigo = acesso.gerar_codigo(conn, "Computador dos professores").codigo
+    _treino_abc(conn)
+    conn.close()
+    professor = criar_app(caminho).test_client()
+    assert professor.post("/api/autorizar", json={"codigo": codigo}).status_code == 200
+
+    assert _post(professor, "feito", {"ficha": 1}).status_code == 401

@@ -8,8 +8,9 @@ Regras (decisões do Thiago, 08/10/2026):
 - O professor pode dar ao treino uma data de fim e uma meta: "treinos por ficha" (ex.: 15 = o aluno faz
   a ficha A 15 vezes, a B 15 vezes, a C 15 vezes). Quando TODAS as fichas chegam à meta, ou quando
   passa a data de fim, o app só AVISA que está na hora de trocar o treino (não conclui sozinho).
-- Quem registra que o aluno treinou é o próprio aluno, no celular. Esse app ainda não existe: por isso
-  `registrar_sessao` só é usada pelos testes por enquanto, e a contagem fica em zero.
+- Quem registra que o aluno treinou é o próprio aluno, no celular: o botão "Fiz esta ficha hoje" da tela /aluno
+  (app/aluno_treino.py), no máximo uma vez por ficha por dia (decisão do Thiago, 15/10/2026). `registrar_sessao`
+  abaixo é o registro de baixo nível, sem a regra do dia.
 """
 
 import sqlite3
@@ -90,7 +91,7 @@ def registrar_sessao(
 ) -> int:
     """Anota que o aluno treinou uma ficha (1 = A, 2 = B...). Só em treino ativo e em ficha que existe.
 
-    Hoje nada chama isto fora dos testes: quem vai chamar é o app do aluno (ainda não existe).
+    Não confere o dia: o botão do aluno usa `app.aluno_treino.marcar_ficha_feita`, que conta uma vez por ficha por dia.
     """
     with conn:
         treino = _treino(conn, treino_id)

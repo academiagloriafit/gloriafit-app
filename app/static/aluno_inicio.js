@@ -4,12 +4,16 @@ import { buscarJson, enviarJson } from "./api.js";
 import { el } from "./dom.js";
 import {
   MENSAGEM_SEM_REDE,
+  TEXTO_FICHA_FEITA_HOJE,
+  TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
   TEXTO_SEM_TREINO,
+  descreverMarcacao,
   descreverTreino,
   fichaEscolhida,
   linhasDoExercicio,
   textoDasDatas,
+  textoDoAndamento,
 } from "./aluno_modelo.js";
 
 const botaoSair = document.getElementById("botao-sair");
@@ -48,12 +52,74 @@ function desenharGrupo(grupo) {
   );
 }
 
-function mostrarFicha(treino, indice) {
+// Marca ("fiz hoje") ou desfaz a ficha. `rota`: "feito" ou "desfazer". Depois atualiza a tela com o que o servidor disse.
+async function marcarFicha(treino, indice, rota, botao) {
+  if (botao.disabled) return;
+  botao.disabled = true;
+  const ficha = treino.fichas[indice];
+  let mensagem = "";
+  let deuErro = false;
+  try {
+    const resposta = await enviarJson(`/api/aluno/treino/${rota}`, { ficha: ficha.ordem });
+    const resultado = descreverMarcacao(resposta.status, resposta.corpo);
+    if (resultado.tipo === "entrar") {
+      window.location.assign("/aluno/entrar");
+      return; // o botão continua travado: a página está sendo trocada
+    }
+    if (resultado.tipo === "ok") {
+      ficha.feitas = resultado.feitas;
+      ficha.feita_hoje = rota === "feito";
+      mensagem = rota === "feito" ? (resultado.jaMarcada ? TEXTO_JA_MARCADA : TEXTO_FICHA_FEITA_HOJE) : "";
+    } else {
+      mensagem = resultado.mensagem;
+      deuErro = true;
+    }
+  } catch {
+    mensagem = MENSAGEM_SEM_REDE;
+    deuErro = true;
+  }
+  mostrarFicha(treino, indice, mensagem, deuErro);
+}
+
+function desenharRodape(treino, indice, mensagem, deuErro) {
+  const ficha = treino.fichas[indice];
+  const aviso = el("p", { classe: deuErro ? "aviso-campo aviso-erro" : "aviso-campo", role: "status", texto: mensagem });
+  const botaoFeito = ficha.feita_hoje
+    ? null
+    : el("button", {
+        type: "button",
+        classe: "botao-link botao-link-forte botao-largo",
+        texto: "Fiz esta ficha hoje",
+        aoClicar: (evento) => marcarFicha(treino, indice, "feito", evento.currentTarget),
+      });
+  const botaoDesfazer = ficha.feita_hoje
+    ? el("button", {
+        type: "button",
+        classe: "botao-link botao-largo",
+        texto: "Desfazer (marquei sem querer)",
+        aoClicar: (evento) => marcarFicha(treino, indice, "desfazer", evento.currentTarget),
+      })
+    : null;
+  return el(
+    "div",
+    { classe: "meu-ficha-rodape" },
+    el("p", { classe: "meu-ficha-andamento", texto: textoDoAndamento(ficha, treino.meta_por_ficha) }),
+    ficha.feita_hoje && el("p", { classe: "meu-ficha-feita", texto: "Marcada como feita hoje" }),
+    botaoFeito,
+    botaoDesfazer,
+    aviso,
+  );
+}
+
+function mostrarFicha(treino, indice, mensagem = "", deuErro = false) {
   const escolhida = fichaEscolhida(treino.fichas, indice);
   botoesDasFichas.querySelectorAll("button").forEach((botao, i) => {
     botao.setAttribute("aria-pressed", i === escolhida ? "true" : "false");
   });
-  areaDaFicha.replaceChildren(...treino.fichas[escolhida].grupos.map(desenharGrupo));
+  areaDaFicha.replaceChildren(
+    ...treino.fichas[escolhida].grupos.map(desenharGrupo),
+    desenharRodape(treino, escolhida, mensagem, deuErro),
+  );
 }
 
 function mostrarTreino(treino) {

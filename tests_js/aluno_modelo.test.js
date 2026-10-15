@@ -3,11 +3,14 @@ import {
   MENSAGEM_SEM_REDE,
   MINIMO_DA_SENHA,
   TAMANHO_DO_CODIGO,
+  TEXTO_FICHA_FEITA_HOJE,
+  TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
   TEXTO_SEM_TREINO,
   conferirCodigo,
   conferirCpf,
   conferirSenhaNova,
+  descreverMarcacao,
   descreverResposta,
   descreverTreino,
   fichaEscolhida,
@@ -15,6 +18,7 @@ import {
   linhasDoExercicio,
   soNumeros,
   textoDasDatas,
+  textoDoAndamento,
   textoDoReenvio,
 } from "../app/static/aluno_modelo.js";
 
@@ -243,5 +247,63 @@ describe("fichaEscolhida", () => {
 
   it("cai na primeira quando o número não serve", () => {
     for (const ruim of [3, -1, 1.5, NaN, undefined, null, "1"]) expect(fichaEscolhida(fichas, ruim)).toBe(0);
+  });
+});
+
+
+describe("textoDoAndamento", () => {
+  it("com meta mostra feitas de meta", () => {
+    expect(textoDoAndamento({ feitas: 3 }, 15)).toBe("Você fez esta ficha 3 de 15 vezes");
+    expect(textoDoAndamento({ feitas: 0 }, 15)).toBe("Você fez esta ficha 0 de 15 vezes");
+  });
+
+  it("sem meta conta só o que foi feito", () => {
+    expect(textoDoAndamento({ feitas: 0 }, null)).toBe("Você ainda não fez esta ficha");
+    expect(textoDoAndamento({ feitas: 1 }, null)).toBe("Você fez esta ficha 1 vez");
+    expect(textoDoAndamento({ feitas: 4 }, null)).toBe("Você fez esta ficha 4 vezes");
+  });
+
+  it("dado estranho não quebra nem mostra 'NaN'", () => {
+    expect(textoDoAndamento({ feitas: "3" }, null)).toBe("Você ainda não fez esta ficha");
+    expect(textoDoAndamento({}, undefined)).toBe("Você ainda não fez esta ficha");
+    expect(textoDoAndamento(undefined, 0)).toBe("Você ainda não fez esta ficha");
+    expect(textoDoAndamento({ feitas: -2 }, 10)).toBe("Você fez esta ficha 0 de 10 vezes");
+  });
+});
+
+describe("descreverMarcacao", () => {
+  it("401 manda para a tela de entrar", () => {
+    expect(descreverMarcacao(401, { erro: "x" })).toEqual({ tipo: "entrar" });
+  });
+
+  it("200 com ok devolve quantas vezes e se já estava marcada", () => {
+    expect(descreverMarcacao(200, { ok: true, ficha: 1, ja_marcada: false, feitas: 4 })).toEqual({ tipo: "ok", feitas: 4, jaMarcada: false });
+    expect(descreverMarcacao(200, { ok: true, ficha: 1, ja_marcada: true, feitas: 4 })).toEqual({ tipo: "ok", feitas: 4, jaMarcada: true });
+    expect(descreverMarcacao(200, { ok: true, ficha: 1, feitas: 0 })).toEqual({ tipo: "ok", feitas: 0, jaMarcada: false }); // desfazer
+  });
+
+  it("erro com explicação do servidor mostra a explicação", () => {
+    expect(descreverMarcacao(409, { erro: "Você não tem um treino ativo. Atualize a página." })).toEqual({
+      tipo: "erro",
+      mensagem: "Você não tem um treino ativo. Atualize a página.",
+    });
+  });
+
+  it.each([
+    [200, null],
+    [200, { ok: true }],
+    [200, { ok: true, feitas: "3" }],
+    [200, { ok: false, feitas: 1 }],
+    [500, null],
+    [500, { erro: "" }],
+  ])("resposta estranha (%s, %j) vira erro com o código na frase", (status, corpo) => {
+    const r = descreverMarcacao(status, corpo);
+    expect(r.tipo).toBe("erro");
+    expect(r.mensagem).toContain(`código ${status}`);
+  });
+
+  it("as frases fixas existem e são diferentes", () => {
+    expect(TEXTO_FICHA_FEITA_HOJE).not.toBe(TEXTO_JA_MARCADA);
+    expect(TEXTO_JA_MARCADA).toContain("já");
   });
 });

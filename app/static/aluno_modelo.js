@@ -102,3 +102,29 @@ export function linhasDoExercicio(exercicio) {
 export function fichaEscolhida(fichas, indice) {
   return Number.isInteger(indice) && indice >= 0 && indice < fichas.length ? indice : 0;
 }
+
+// ------------------------------------------------------------------ "Fiz esta ficha hoje"
+
+// "Você fez esta ficha 3 de 15 vezes" (com meta) / "Você fez esta ficha 1 vez" / "Você ainda não fez esta ficha".
+export function textoDoAndamento(ficha, meta) {
+  const feitas = Number.isInteger(ficha?.feitas) && ficha.feitas > 0 ? ficha.feitas : 0;
+  if (Number.isInteger(meta) && meta > 0) return `Você fez esta ficha ${feitas} de ${meta} vezes`;
+  if (feitas === 0) return "Você ainda não fez esta ficha";
+  return feitas === 1 ? "Você fez esta ficha 1 vez" : `Você fez esta ficha ${feitas} vezes`;
+}
+
+// Resposta do servidor ao marcar ou desfazer ({ status, corpo }) -> o que a tela faz:
+//   { tipo: "entrar" }                        sessão perdida
+//   { tipo: "ok", feitas, jaMarcada }         deu certo (`jaMarcada`: já estava marcada hoje; só no "feito")
+//   { tipo: "erro", mensagem }                qualquer outra coisa (com a explicação do servidor, se ela veio)
+export function descreverMarcacao(status, corpo) {
+  if (status === 401) return { tipo: "entrar" };
+  if (status === 200 && corpo && corpo.ok === true && Number.isInteger(corpo.feitas)) {
+    return { tipo: "ok", feitas: corpo.feitas, jaMarcada: corpo.ja_marcada === true };
+  }
+  if (corpo && typeof corpo.erro === "string" && corpo.erro) return { tipo: "erro", mensagem: corpo.erro };
+  return { tipo: "erro", mensagem: `Não consegui salvar (código ${status}). Tente de novo em instantes.` };
+}
+
+export const TEXTO_FICHA_FEITA_HOJE = "Anotado. Bom treino!";
+export const TEXTO_JA_MARCADA = "Você já tinha marcado esta ficha hoje.";

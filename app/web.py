@@ -66,6 +66,8 @@ ENDPOINTS_PUBLICOS = frozenset(
         "api_aluno_entrar",
         "api_aluno_sair",
         "api_aluno_treino",
+        "api_aluno_treino_feito",
+        "api_aluno_treino_desfazer",
     }
 )
 
@@ -490,6 +492,42 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         if aluno is None:
             return jsonify(erro="Você precisa entrar de novo."), 401
         return jsonify(treino=aluno_treino.treino_do_aluno(conexao(), aluno.id))
+
+    def ficha_do_pedido_do_aluno() -> tuple:
+        """(aluno, número da ficha) do pedido de marcar/desfazer, ou a resposta 401. O número vem no corpo: {"ficha": 1}."""
+        aluno = aluno_atual()
+        if aluno is None:
+            return None, None
+        dados = corpo_json()
+        return aluno, dados.get("ficha") if isinstance(dados, dict) else None
+
+    @app.post("/api/aluno/treino/feito")
+    def api_aluno_treino_feito():
+        """"Fiz esta ficha hoje". Corpo {"ficha": 1} (1 = A, 2 = B...). Conta no máximo uma vez por ficha por dia.
+
+        200 {"ok", "ficha", "ja_marcada", "feitas"}; 400 ficha inválida; 401 sem login; 404 a ficha não existe;
+        409 sem treino ativo; 415 não é JSON.
+        """
+        aluno, ficha = ficha_do_pedido_do_aluno()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        try:
+            resultado = aluno_treino.marcar_ficha_feita(conexao(), aluno.id, ficha)
+        except aluno_treino.MarcacaoInvalida as erro:
+            return jsonify(erro=str(erro)), erro.status
+        return jsonify(ok=True, **resultado)
+
+    @app.post("/api/aluno/treino/desfazer")
+    def api_aluno_treino_desfazer():
+        """Desfaz a marcação de HOJE de uma ficha. Corpo {"ficha": 1}. 200 {"ok", "ficha", "feitas"}; mesmos erros do /feito."""
+        aluno, ficha = ficha_do_pedido_do_aluno()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        try:
+            resultado = aluno_treino.desfazer_marcacao_de_hoje(conexao(), aluno.id, ficha)
+        except aluno_treino.MarcacaoInvalida as erro:
+            return jsonify(erro=str(erro)), erro.status
+        return jsonify(ok=True, **resultado)
 
     @app.get("/api/grupos")
     def api_grupos():
