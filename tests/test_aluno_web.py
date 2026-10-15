@@ -509,7 +509,7 @@ def test_as_rotas_do_aluno_estao_na_lista_de_publicas_e_so_elas(app):
     rotas_do_aluno = {e for e in rotas_do_aluno if e.startswith(("pagina_aluno_", "api_aluno_"))}
 
     assert rotas_do_aluno == {e for e in ENDPOINTS_PUBLICOS if e.startswith(("pagina_aluno_", "api_aluno_"))}
-    assert len(rotas_do_aluno) == 6
+    assert len(rotas_do_aluno) == 7
 
 
 def test_nenhuma_resposta_do_aluno_mostra_cpf_hash_ou_token(cliente, remetente, caminho):

@@ -17,7 +17,20 @@
   <main class="pagina pagina-aluno">
     <section class="painel painel-aluno" aria-labelledby="titulo-inicio">
       <h1 id="titulo-inicio">Olá, {{ primeiro_nome }}!</h1>
-      <p class="texto-apoio">Você já está dentro. A tela com o seu treino ainda está sendo preparada.</p>
+      <p id="aviso-treino" class="texto-apoio" role="status">Buscando o seu treino…</p>
+      <button id="botao-de-novo" class="botao-link botao-largo" type="button" hidden>Tentar de novo</button>
+    </section>
+
+    <section id="treino" class="painel painel-aluno" aria-labelledby="titulo-treino" hidden>
+      <div>
+        <h2 id="titulo-treino" class="meu-treino-nome"></h2>
+        <p id="treino-datas" class="meu-treino-datas"></p>
+      </div>
+      <div id="fichas-botoes" class="meu-fichas-botoes" role="group" aria-label="Fichas do treino"></div>
+      <div id="ficha-atual" class="meu-ficha-atual"></div>
+    </section>
+
+    <section class="painel painel-aluno painel-sair">
       <button id="botao-sair" class="botao-link botao-largo" type="button">Sair</button>
       <p id="aviso-sair" class="aviso-campo" role="status"></p>
     </section>

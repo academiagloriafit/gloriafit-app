@@ -211,6 +211,7 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 | `POST /api/aluno/primeiro-acesso` | **Pública.** Corpo `{"cpf", "codigo", "senha"}`. Troca o código certo pela senha nova e já entra (cookie `gloriafit_aluno`). `200 {"ok": true, "nome": "Ana"}`; `400` senha que não serve (o código **não** é gasto) ou código inválido/vencido (mesma mensagem para todos os motivos); `429`; `415` |
 | `POST /api/aluno/entrar` | **Pública.** Corpo `{"cpf", "senha"}`. `200 {"ok": true, "nome"}` e o cookie; `401 {"erro": "CPF ou senha incorretos."}` (igual para CPF que não existe, aluno sem senha, aluno que não pode entrar e senha errada); `429`; `415` |
 | `POST /api/aluno/sair` | **Pública.** Encerra este celular e apaga o cookie |
+| `GET /api/aluno/treino` | **Pública** (confere o cookie do aluno; sem login, `401`). O treino **ativo** do aluno logado, em texto pronto: `{"treino": null}` (sem treino ativo) ou `{"treino": {nome, inicio, fim, fichas: [{nome, grupos: [{nome, instrucao, exercicios: [{etiqueta, exercicio, dose, carga, intervalo, observacao}]}]}]}}`. O aluno vem do cookie, nunca da URL. **Não devolve** ids, quem montou, origem nem o andamento do ciclo |
 | `GET /alunos` | A página de buscar aluno |
 | `GET /treinos/<id>/imprimir` | O cupom do treino para a térmica (404 se não existe), com o botão Imprimir |
 | `GET /alunos/novo` | A tela de cadastrar aluno provisório |
@@ -514,7 +515,7 @@ Pedido do Thiago de 14/10/2026 ("atualizar os alunos todo dia sem ninguém clica
 
 ## Login do aluno: como funciona
 
-*Feito em 15/10/2026 (banco versão 12). O aluno entra pelo celular, em `/aluno/entrar`. A tela do aluno logado ainda é só "Olá, Ana!" e o botão Sair: o treino do aluno é um passo à parte.*
+*Feito em 15/10/2026 (banco versão 12). O aluno entra pelo celular, em `/aluno/entrar`. Testado de ponta a ponta em produção no celular do Thiago em 15/10 (código no WhatsApp, senha, sair e entrar de novo). A tela do aluno logado mostra o treino ativo (seção "Meu treino", logo abaixo).*
 
 **Primeiro acesso e "esqueci a senha" (o mesmo caminho):**
 1. O aluno digita o CPF e toca em "Enviar o código". O app sorteia um código de **6 números** (`secrets`), guarda **só o hash** (vale **10 minutos**, **5 tentativas**) e o manda ao WhatsApp cadastrado pelo modelo `codigo_acesso_app` da Meta (`app/whatsapp.py`), em segundo plano.
@@ -546,14 +547,16 @@ python -m app.whatsapp situacao       # configurado? códigos das últimas 24 h 
 ```
 Sem a configuração o pedido de código responde `503` ("o envio ainda não está liberado") e nada é criado. O arquivo `/dados/whatsapp.json` vale na hora, sem reiniciar o app. A versão da API da Meta (`v24.0`, a mais nova na página de versões da Meta em 15/10/2026) fica no arquivo e pode ser trocada com `configurar --versao`. "Enviado" no banco quer dizer que a **Meta aceitou** a mensagem; se chegou no celular só a Meta sabe.
 
+**Meu treino (tela `/aluno`, 15/10/2026):** depois de entrar, o aluno vê o **treino ativo** dele (a regra de 08/10: só um ativo por aluno; treino concluído ou trocado fica só no histórico do professor). Botões com as fichas (A, B, C; só aparecem se houver mais de uma), e cada ficha lista os exercícios na ordem, com `séries × repetições · carga`, "Intervalo" e "Obs." quando existem; bi-set e tri-set aparecem num quadro com "Faça A1 e A2 seguidos" (mesmas etiquetas e frases do cupom impresso). A conta toda é feita no servidor (`app/aluno_treino.py`, com as mesmas funções do cupom); o navegador (`aluno_inicio.js`) só desenha, sempre com `textContent` (um nome de exercício com HTML aparece como texto). Sem treino ativo: "Você ainda não tem um treino ativo. Fale com o seu professor na academia." O treino do Data4U (espelho) também aparece. **O que o aluno não vê:** ids, quem montou, de onde veio, "hora de trocar" e treinos antigos. **Ainda não existe:** vídeo do exercício (o banco não tem), marcar "treino feito" (tabela `sessao`) e comentários. Limitação: com CPF repetido a sessão fica presa ao melhor cadastro, e se o treino foi montado no outro cadastro o aluno vê "sem treino ativo" (a recepção junta os cadastros no Data4U).
+
 **Voltar atrás:** o banco versão 12 só acrescenta quatro tabelas. Para a imagem anterior (`842ef45`, que conhece até a versão 11): app parado, `PRAGMA user_version = 11` (as tabelas ficam lá, sem atrapalhar; as senhas criadas continuam valendo quando se sobe de novo), ou restaurar a cópia feita antes da migração (`/dados/antes-da-migracao`).
 
 **Limitações conhecidas:**
-- O envio de verdade pela Meta **não foi provado** (falta o token e o ID do número de telefone, que o Thiago coloca no servidor); a conversa com a Meta só foi testada contra um servidor de mentira. O formato da mensagem segue a página da Meta de modelos de autenticação com botão "Copiar código" (conferida em 15/10/2026).
+- O envio pela Meta foi **provado em produção em 15/10/2026** (o código de teste e o de login chegaram no WhatsApp do Thiago). O token foi gerado com validade "Nunca" (pedido; a tela não foi conferida): se os códigos pararem de chegar por volta de 60 dias, gerar um token novo.
 - Número de WhatsApp de 10 dígitos (DDD + 8) é enviado como está, com o `55` na frente; se a Meta o aceita ou não só o teste real mostra.
 - Quem tem a cópia do banco dentro dos 10 minutos de vida de um código pode achá-lo testando os 1.000.000 de possibilidades; mas quem tem a cópia do banco já tem tudo o que o app guarda.
 - Quem quiser atrapalhar o "esqueci a senha" de um aluno consegue travá-lo por 15 minutos (5 códigos errados no CPF dele); não consegue entrar.
-- A tela do aluno ainda não aparece em lugar nenhum além do link "É aluno da academia?" na tela de autorizar; o endereço do app no cupom (`GLORIAFIT_ENDERECO_DO_APP`) continua em aberto.
+- O endereço do app ainda não é divulgado: só aparece o link "É aluno da academia?" na tela de autorizar; o endereço do app no cupom (`GLORIAFIT_ENDERECO_DO_APP`) continua em aberto.
 
 ## Cuidados
 
@@ -631,7 +634,7 @@ Sem a configuração o pedido de código responde `503` ("o envio ainda não est
 - Qual `professor_id` do Data4U usar ao enviar o treino para lá (o app guarda só o nome digitado;
   a fila do Data4U exige um id de pessoa).
 - Se o Data4U aceita séries/repetições vazias (o app aceita em branco, para o cardio).
-- A busca de alunos mostra o **último treino** (o mais novo, do app ou do histórico), que normalmente é o ativo; ainda falta o app do aluno.
+- A busca de alunos mostra o **último treino** (o mais novo, do app ou do histórico), que normalmente é o ativo; o aluno vê o treino ativo no celular (`/aluno`).
 - A **situação** mostrada é a letra do Data4U (Ativo, Pendente...), no lugar do "Em dia" do
   desenho. "Em dia" não foi verificado (o desenho dizia "pagou nos últimos 30 dias").
 - Importar todo dia, **sozinho**: feito em 14/10/2026 (ver "Atualização automática dos alunos"). Em aberto: provar `--instalar` e a

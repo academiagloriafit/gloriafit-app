@@ -18,6 +18,7 @@ from app import (
     acesso,
     administrador,
     aluno_acesso,
+    aluno_treino,
     alunos,
     ciclo,
     cupom,
@@ -64,6 +65,7 @@ ENDPOINTS_PUBLICOS = frozenset(
         "api_aluno_definir_senha",
         "api_aluno_entrar",
         "api_aluno_sair",
+        "api_aluno_treino",
     }
 )
 
@@ -477,6 +479,17 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         resposta = jsonify(ok=True)
         resposta.delete_cookie(aluno_acesso.NOME_DO_COOKIE, path="/")
         return resposta
+
+    @app.get("/api/aluno/treino")
+    def api_aluno_treino():
+        """O treino ativo do aluno logado: 200 {"treino": {...}} ou {"treino": null} (sem treino ativo); 401 sem login.
+
+        O aluno vem do cookie, nunca de um número na URL: não há como pedir o treino de outra pessoa.
+        """
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        return jsonify(treino=aluno_treino.treino_do_aluno(conexao(), aluno.id))
 
     @app.get("/api/grupos")
     def api_grupos():

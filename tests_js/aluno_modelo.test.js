@@ -3,12 +3,18 @@ import {
   MENSAGEM_SEM_REDE,
   MINIMO_DA_SENHA,
   TAMANHO_DO_CODIGO,
+  TEXTO_SEM_EXERCICIOS,
+  TEXTO_SEM_TREINO,
   conferirCodigo,
   conferirCpf,
   conferirSenhaNova,
   descreverResposta,
+  descreverTreino,
+  fichaEscolhida,
   formatarCpf,
+  linhasDoExercicio,
   soNumeros,
+  textoDasDatas,
   textoDoReenvio,
 } from "../app/static/aluno_modelo.js";
 
@@ -152,5 +158,90 @@ describe("textoDoReenvio", () => {
 describe("MENSAGEM_SEM_REDE", () => {
   it("fala de internet, não de servidor técnico", () => {
     expect(MENSAGEM_SEM_REDE).toContain("internet");
+  });
+});
+
+
+describe("descreverTreino", () => {
+  const treino = { nome: "TREINO ABC", inicio: "06/10/2026", fim: null, fichas: [{ nome: "A", grupos: [] }] };
+
+  it("401 manda o aluno para a tela de entrar", () => {
+    expect(descreverTreino(401, { erro: "Você precisa entrar de novo." })).toEqual({ tipo: "entrar" });
+    expect(descreverTreino(401, null)).toEqual({ tipo: "entrar" });
+  });
+
+  it("treino nulo = sem treino ativo", () => {
+    expect(descreverTreino(200, { treino: null })).toEqual({ tipo: "sem-treino" });
+  });
+
+  it("treino com fichas é mostrado", () => {
+    expect(descreverTreino(200, { treino })).toEqual({ tipo: "treino", treino });
+  });
+
+  it("treino sem nenhuma ficha vira o aviso de treino sem exercícios", () => {
+    expect(descreverTreino(200, { treino: { ...treino, fichas: [] } })).toEqual({ tipo: "sem-exercicios" });
+  });
+
+  it.each([
+    [200, null],
+    [200, {}],
+    [200, { treino: "texto" }],
+    [200, { treino: { nome: "X" } }],
+    [200, { treino: { fichas: "A" } }],
+    [500, null],
+    [503, { erro: "x" }],
+  ])("resposta estranha (%s, %j) vira erro com o código na frase", (status, corpo) => {
+    const r = descreverTreino(status, corpo);
+    expect(r.tipo).toBe("erro");
+    expect(r.mensagem).toContain(`código ${status}`);
+  });
+
+  it("as frases de aviso mandam falar com o professor", () => {
+    expect(TEXTO_SEM_TREINO).toContain("professor");
+    expect(TEXTO_SEM_EXERCICIOS).toContain("professor");
+  });
+});
+
+describe("textoDasDatas", () => {
+  it("mostra início e fim", () => {
+    expect(textoDasDatas({ inicio: "06/10/2026", fim: "06/11/2026" })).toBe("Início 06/10/2026 · Fim 06/11/2026");
+  });
+
+  it("mostra só o que existe", () => {
+    expect(textoDasDatas({ inicio: "06/10/2026", fim: null })).toBe("Início 06/10/2026");
+    expect(textoDasDatas({ inicio: null, fim: "06/11/2026" })).toBe("Fim 06/11/2026");
+    expect(textoDasDatas({ inicio: null, fim: null })).toBe("");
+  });
+});
+
+describe("linhasDoExercicio", () => {
+  it("junta dose e carga numa linha, e põe intervalo e observação em linhas separadas", () => {
+    expect(
+      linhasDoExercicio({ dose: "4 × 12", carga: "20 kg", intervalo: "1 min 30 s", observacao: "Descer devagar" }),
+    ).toEqual(["4 × 12 · 20 kg", "Intervalo: 1 min 30 s", "Obs.: Descer devagar"]);
+  });
+
+  it("não inventa linha para o que está vazio", () => {
+    expect(linhasDoExercicio({ dose: "4 × 12", carga: "", intervalo: "", observacao: "" })).toEqual(["4 × 12"]);
+    expect(linhasDoExercicio({ dose: "", carga: "20 kg", intervalo: "", observacao: "" })).toEqual(["20 kg"]);
+    expect(linhasDoExercicio({ dose: "", carga: "", intervalo: "", observacao: "20 minutos" })).toEqual(["Obs.: 20 minutos"]);
+    expect(linhasDoExercicio({ dose: "", carga: "", intervalo: "", observacao: "" })).toEqual([]);
+  });
+
+  it("ignora dose e carga só com espaços", () => {
+    expect(linhasDoExercicio({ dose: "  ", carga: " ", intervalo: "", observacao: "" })).toEqual([]);
+  });
+});
+
+describe("fichaEscolhida", () => {
+  const fichas = [{}, {}, {}];
+
+  it("usa a ficha pedida quando ela existe", () => {
+    expect(fichaEscolhida(fichas, 0)).toBe(0);
+    expect(fichaEscolhida(fichas, 2)).toBe(2);
+  });
+
+  it("cai na primeira quando o número não serve", () => {
+    for (const ruim of [3, -1, 1.5, NaN, undefined, null, "1"]) expect(fichaEscolhida(fichas, ruim)).toBe(0);
   });
 });

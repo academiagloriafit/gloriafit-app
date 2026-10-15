@@ -946,3 +946,50 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
   text-align: center;
 }
 .botao-link:disabled { color: var(--texto-suave); border-color: var(--borda); cursor: wait; }
+
+/* ---- tela "Meu treino" (/aluno) ---- */
+.pagina-aluno { display: flex; flex-direction: column; gap: 14px; }
+.meu-treino-nome { margin: 0; font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+.meu-treino-datas { margin: 4px 0 0; font-size: 15px; color: var(--texto-suave); }
+.meu-fichas-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.meu-ficha-botao {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--escuro);
+  border-radius: 10px;
+  background: var(--branco);
+  color: var(--escuro);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.meu-ficha-botao[aria-pressed="true"] { background: var(--escuro); color: var(--branco); }
+.meu-ficha-atual { display: flex; flex-direction: column; gap: 12px; }
+.meu-exercicios { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.meu-exercicio { display: flex; gap: 12px; align-items: flex-start; }
+.meu-exercicio-etiqueta {
+  flex: none;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border-radius: 16px;
+  background: var(--laranja);
+  color: #111111;
+  font-size: 15px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.meu-exercicio-corpo { min-width: 0; }
+.meu-exercicio-corpo p { margin: 0; }
+.meu-exercicio-nome { font-weight: 700; overflow-wrap: anywhere; }
+.meu-exercicio-detalhe { font-size: 15px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.meu-grupo-simples { padding-bottom: 12px; border-bottom: 1px solid var(--borda); }
+.meu-grupo-bloco { padding: 12px; border: 1.5px solid var(--laranja); border-radius: 12px; display: flex; flex-direction: column; gap: 10px; }
+.meu-grupo-bloco p { margin: 0; }
+.meu-bloco-titulo { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.meu-bloco-instrucao { font-size: 15px; color: var(--texto-suave); }
+.painel-sair .aviso-campo:empty { display: none; }

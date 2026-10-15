@@ -56,3 +56,49 @@ export function textoDoReenvio(segundosRestantes) {
   const s = Math.ceil(Number(segundosRestantes));
   return s > 0 ? `Enviar o código de novo (em ${s} s)` : "Enviar o código de novo";
 }
+
+// ------------------------------------------------------------------ tela "Meu treino" (/aluno)
+
+// Resposta de GET /api/aluno/treino ({ status, corpo }) -> o que a tela faz:
+//   { tipo: "entrar" }               sessão perdida: ir para a tela de entrar
+//   { tipo: "sem-treino" }           o aluno não tem treino ativo
+//   { tipo: "sem-exercicios" }       tem treino ativo, mas nenhuma ficha com exercício
+//   { tipo: "treino", treino }       mostrar o treino
+//   { tipo: "erro", mensagem }       qualquer outra coisa
+export function descreverTreino(status, corpo) {
+  if (status === 401) return { tipo: "entrar" };
+  if (status === 200 && corpo && "treino" in corpo) {
+    const treino = corpo.treino;
+    if (treino === null) return { tipo: "sem-treino" };
+    if (treino && typeof treino === "object" && Array.isArray(treino.fichas)) {
+      return treino.fichas.length ? { tipo: "treino", treino } : { tipo: "sem-exercicios" };
+    }
+  }
+  return { tipo: "erro", mensagem: `Não consegui buscar o seu treino (código ${status}). Tente de novo em instantes.` };
+}
+
+export const TEXTO_SEM_TREINO = "Você ainda não tem um treino ativo. Fale com o seu professor na academia.";
+export const TEXTO_SEM_EXERCICIOS = "O seu treino ainda não tem exercícios. Fale com o seu professor na academia.";
+
+// "Início 06/10/2026 · Fim 06/11/2026" (só o que existe; sem nenhuma das duas datas, vazio).
+export function textoDasDatas(treino) {
+  const partes = [];
+  if (treino.inicio) partes.push(`Início ${treino.inicio}`);
+  if (treino.fim) partes.push(`Fim ${treino.fim}`);
+  return partes.join(" · ");
+}
+
+// "4 × 12 · 20 kg · Intervalo: 1 min 30 s" (só o que existe) -> lista de linhas curtas do exercício.
+export function linhasDoExercicio(exercicio) {
+  const linhas = [];
+  const dose = [exercicio.dose, exercicio.carga].filter((parte) => parte && String(parte).trim());
+  if (dose.length) linhas.push(dose.join(" · "));
+  if (exercicio.intervalo) linhas.push(`Intervalo: ${exercicio.intervalo}`);
+  if (exercicio.observacao) linhas.push(`Obs.: ${exercicio.observacao}`);
+  return linhas;
+}
+
+// Qual ficha mostrar: a pedida, se existir; senão a primeira. Número fora da lista não quebra nada.
+export function fichaEscolhida(fichas, indice) {
+  return Number.isInteger(indice) && indice >= 0 && indice < fichas.length ? indice : 0;
+}
