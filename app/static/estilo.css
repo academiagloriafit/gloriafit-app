@@ -931,3 +931,18 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 @media (max-width: 520px) {
   .form-ia { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---- telas do aluno (celular): /aluno/entrar e /aluno ---- */
+.pagina-aluno { max-width: 480px; padding-top: 16px; }
+.painel-aluno { max-width: none; gap: 14px; }
+.form-aluno { display: flex; flex-direction: column; gap: 14px; }
+.marca-mostrar { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 16px; color: var(--texto-suave); }
+.marca-mostrar input { width: 22px; height: 22px; flex: none; }
+.botao-largo { justify-content: center; }
+.campo input.campo-codigo-aluno {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 28px;
+  letter-spacing: 0.2em;
+  text-align: center;
+}
+.botao-link:disabled { color: var(--texto-suave); border-color: var(--borda); cursor: wait; }

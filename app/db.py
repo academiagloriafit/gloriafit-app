@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 11
+VERSAO_DO_BANCO = 12
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -272,10 +272,69 @@ def _de_10_para_11(conn: sqlite3.Connection) -> None:
     )
 
 
+def _de_11_para_12(conn: sqlite3.Connection) -> None:
+    """Login do aluno: nascem `aluno_senha`, `aluno_codigo`, `aluno_sessao` e `aluno_evento` (senha, códigos por WhatsApp, sessões, limite de tentativas).
+
+    Só acrescenta quatro tabelas vazias: nenhum dado que já existe é tocado. Os comandos são "IF NOT EXISTS" de propósito:
+    se um dia o número da versão for baixado à mão (para abrir o banco com o app antigo, que ignora o que é novo), subir
+    de novo com este app não falha por as tabelas já existirem, e as senhas já criadas continuam valendo.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS aluno_senha (
+            aluno_id    INTEGER PRIMARY KEY REFERENCES aluno(id),
+            senha_hash  TEXT    NOT NULL,
+            definida_em TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS aluno_codigo (
+            id          INTEGER PRIMARY KEY,
+            aluno_id    INTEGER NOT NULL REFERENCES aluno(id),
+            codigo_hash TEXT    NOT NULL,
+            criado_em   TEXT    NOT NULL,
+            expira_em   TEXT    NOT NULL,
+            tentativas  INTEGER NOT NULL DEFAULT 0 CHECK (tentativas >= 0),
+            usado_em    TEXT,
+            envio       TEXT    NOT NULL DEFAULT 'pendente' CHECK (envio IN ('pendente', 'enviado', 'falhou')),
+            envio_erro  TEXT    CHECK (envio_erro IS NULL OR length(envio_erro) <= 300)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_aluno_codigo_aluno ON aluno_codigo(aluno_id, criado_em)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_aluno_codigo_criado ON aluno_codigo(criado_em)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS aluno_sessao (
+            id            INTEGER PRIMARY KEY,
+            aluno_id      INTEGER NOT NULL REFERENCES aluno(id),
+            token_hash    TEXT    NOT NULL UNIQUE,
+            criado_em     TEXT    NOT NULL,
+            ultimo_uso_em TEXT    NOT NULL,
+            revogado_em   TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_aluno_sessao_aluno ON aluno_sessao(aluno_id)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS aluno_evento (
+            id    INTEGER PRIMARY KEY,
+            tipo  TEXT    NOT NULL CHECK (tipo IN ('pedido_codigo', 'codigo_errado', 'login_errado')),
+            chave TEXT    NOT NULL,
+            em    TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_aluno_evento ON aluno_evento(tipo, chave, em)")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
-    10: _de_10_para_11,
+    10: _de_10_para_11, 11: _de_11_para_12,
 }
 
 

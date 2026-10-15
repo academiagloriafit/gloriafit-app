@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="marca">GLÓRIA <span>FIT</span></div>
+    </div>
+  </header>
+
+  <main class="pagina pagina-aluno">
+    <section class="painel painel-aluno" aria-labelledby="titulo-inicio">
+      <h1 id="titulo-inicio">Olá, {{ primeiro_nome }}!</h1>
+      <p class="texto-apoio">Você já está dentro. A tela com o seu treino ainda está sendo preparada.</p>
+      <button id="botao-sair" class="botao-link botao-largo" type="button">Sair</button>
+      <p id="aviso-sair" class="aviso-campo" role="status"></p>
+    </section>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='aluno_inicio.js') }}"></script>
+</body>
+</html>

@@ -81,8 +81,8 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 
 | Arquivo | Para quê |
 |---|---|
-| `app/schema.sql` | Desenho das tabelas (versão 11): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) e `importacao` (de quando é a última cópia do Data4U aplicada). Não há tabela de professores: o nome é digitado a cada treino |
-| `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco da versão 4, 5, 6 ou 7 até a 8 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
+| `app/schema.sql` | Desenho das tabelas (versão 12): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) `importacao` (de quando é a última cópia do Data4U aplicada) e o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`). Não há tabela de professores: o nome é digitado a cada treino |
+| `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco da versão 4 a 11 até a 12 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
 | `app/importar_exercicios.py` | Lê a planilha `dados/quadro_exercicios_v2.xlsx` e grava no banco |
 | `app/texto.py` | `normalizar`: minúsculas e sem acento ("Bíceps" → "biceps") |
 | `app/exercicios.py` | Consultas: grupos e busca de exercícios |
@@ -99,6 +99,8 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/datas.py` | Fuso de Brasília: dia local de um momento em UTC, "hoje", leitura rigorosa de `AAAA-MM-DD` |
 | `app/acesso.py` | Computadores autorizados: gera o código de uso único, troca o código por um cookie, reconhece o computador, revoga, limita tentativas erradas. O banco guarda só o hash (SHA-256) do código e do cookie |
 | `app/dispositivos.py` | Comando do servidor: `codigo --nome "..."` (gera o código), `listar`, `revogar <número>` |
+| `app/aluno_acesso.py` | **Login do aluno** (CPF + senha; primeiro acesso e "esqueci a senha" por código no WhatsApp): sorteia o código, guarda só o hash, confere, cria a senha (scrypt), as sessões do celular e **todos os limites de tentativa** (ver "Login do aluno: como funciona") |
+| `app/whatsapp.py` | Manda o código pela API da Meta (modelo `codigo_acesso_app`), em https e sem seguir redirecionamento. A chave da Meta fica em `/dados/whatsapp.json` (só o dono lê), nunca no banco nem no log. Comando do servidor: `python -m app.whatsapp configurar`, `situacao`, `testar <WhatsApp>` |
 | `app/web.py` | O servidor: páginas e rotas da API (tabela "Rotas" abaixo) e a guarda que barra quem não é computador autorizado |
 | `app/templates/`, `app/static/` | Páginas, estilo e JavaScript |
 | `app/static/zip_leitor.js` | Lê o `.zip` no navegador sem biblioteca: acha uma entrada pelo índice e descompacta só ela (deflate ou sem compressão); recusa senha, ZIP64, arquivo cortado, tamanho que não bate e "bomba de zip" |
@@ -112,12 +114,13 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/static/padrao_ficha.js` | Botão **Salvar como treino padrão** de cada treino na ficha do aluno |
 | `app/static/dom.js` | `el()`: cria elementos de tela só com `textContent` (nada vindo do banco vira HTML) |
 | `app/static/api.js` | `enviarJson` (POST em JSON) e `buscarJson` (GET) com limite de tempo (20 s) devolvendo status + corpo; `textoDoErro` escolhe a mensagem para mostrar; usado por salvar treino, WhatsApp e importar treino |
+| `app/static/aluno_entrar.js`, `aluno_modelo.js`, `aluno_inicio.js` | Telas do celular do aluno (`/aluno/entrar` e `/aluno`): entrar, pedir o código e criar a senha, sair. O que mostrar para cada resposta e as conferências rápidas ficam em `aluno_modelo.js` (testado à parte) |
 | `app/static/autorizar.js`, `autorizar_modelo.js` | Tela `/autorizar`: envia o código e mostra a resposta (o texto de cada resposta fica em `autorizar_modelo.js`, testado à parte) |
 | `app/static/novo_aluno.js`, `novo_aluno_modelo.js` | Tela `/alunos/novo`: envia o cadastro e mostra erros por campo ou os links de quem já tem o CPF (o que mostrar para cada resposta fica em `novo_aluno_modelo.js`, testado à parte) |
 | `app/static/alunos.js`, `ficha.js` | Busca de alunos (espera 200 ms depois de digitar e cancela a busca anterior) e a edição do WhatsApp na ficha |
 | `app/static/fila_ficha.js`, `filas_modelo.js`, `fila_padrao.js` | Cartão **Fila de treino** da ficha (escolher a fila, liberação, tirar da fila), a lógica pura de conferir o que o professor digitou (`filas_modelo.js`, testada à parte) e os campos **Fila** e **Número** do "Salvar como treino padrão" (sugere o próximo número livre) |
 | `app/static/ciclo_ficha.js` | Botões **Concluído** (com confirmação) e **Reativar** da ficha do aluno |
-| `tests/` | Testes do Python (pytest). `schema_v4.sql` a `schema_v10.sql` são cópias dos desenhos antigos, usadas para provar as migrações; `test_contrato_js_python.py` roda o JavaScript (Node) e entrega o pacote dele ao servidor; `test_enviar_alunos.py` confere que o programa do PC monta pacotes **iguais** aos do navegador e roda o envio contra um servidor de verdade |
+| `tests/` | Testes do Python (pytest). `schema_v4.sql` a `schema_v11.sql` são cópias dos desenhos antigos, usadas para provar as migrações; `test_contrato_js_python.py` roda o JavaScript (Node) e entrega o pacote dele ao servidor; `test_enviar_alunos.py` confere que o programa do PC monta pacotes **iguais** aos do navegador e roda o envio contra um servidor de verdade |
 | `tests_js/` | Testes do JavaScript (Vitest) |
 
 ## Como rodar
@@ -202,6 +205,12 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 | `GET /autorizar` | Tela onde se digita o código. **Pública.** Quem já está autorizado é levado para `/alunos` |
 | `POST /api/autorizar` | **Pública.** Corpo JSON: `{"codigo": "ABCDE-23456"}` (aceita minúsculas, espaço, sem hífen). `200 {"ok": true, "nome": "..."}` e o cookie do computador; `400` código inválido ou vencido (a mensagem é a mesma para errado, já usado e vencido); `429` depois de 5 códigos errados seguidos (trava as tentativas por até 15 min, para qualquer aparelho; computadores já autorizados não são afetados); `415` não é JSON |
 | `GET /` | Leva para `/alunos` |
+| `GET /aluno/entrar` | **Pública.** A tela do celular do aluno: entrar (CPF + senha), primeiro acesso / esqueci a senha, digitar o código. Aluno já logado vai para `/aluno` |
+| `GET /aluno` | **Pública** (confere o cookie do aluno). A primeira tela do aluno logado; sem login, `302` para `/aluno/entrar` |
+| `POST /api/aluno/codigo` | **Pública.** Corpo `{"cpf": "..."}`. Manda o código de 6 números ao WhatsApp do aluno, em segundo plano. `200 {"ok": true, "espera": 60, "validade_minutos": 10}` **igual** para CPF de aluno e CPF que não existe; `400` CPF mal digitado; `429` (espera, com `Retry-After`) pediu demais; `503` WhatsApp ainda não configurado ou teto de códigos do dia atingido; `415` |
+| `POST /api/aluno/primeiro-acesso` | **Pública.** Corpo `{"cpf", "codigo", "senha"}`. Troca o código certo pela senha nova e já entra (cookie `gloriafit_aluno`). `200 {"ok": true, "nome": "Ana"}`; `400` senha que não serve (o código **não** é gasto) ou código inválido/vencido (mesma mensagem para todos os motivos); `429`; `415` |
+| `POST /api/aluno/entrar` | **Pública.** Corpo `{"cpf", "senha"}`. `200 {"ok": true, "nome"}` e o cookie; `401 {"erro": "CPF ou senha incorretos."}` (igual para CPF que não existe, aluno sem senha, aluno que não pode entrar e senha errada); `429`; `415` |
+| `POST /api/aluno/sair` | **Pública.** Encerra este celular e apaga o cookie |
 | `GET /alunos` | A página de buscar aluno |
 | `GET /treinos/<id>/imprimir` | O cupom do treino para a térmica (404 se não existe), com o botão Imprimir |
 | `GET /alunos/novo` | A tela de cadastrar aluno provisório |
@@ -233,8 +242,8 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 | `POST /api/treinos/<id>/editar` | Edita **no lugar** o treino ATIVO criado no app. Corpo JSON igual ao de salvar treino (`nome_treino`, `montado_por`, `inicio`, `fim`, `sessoes_por_ficha`, `fichas`), com a mesma conferência. Troca os dados e **recria as fichas e os exercícios** na mesma gravação (tudo ou nada); o id, o `ativo` e o `criado_em` do treino não mudam. `200 {"id": N}`; `400 {"erros"}`; `404` treino inexistente; `409` treino do Data4U, treino já concluído, ou nome já usado em outro treino do aluno; `413`; `415` |
 | `GET /saude` | `{"ok": true}` se o app está de pé e enxerga o banco. **Pública** |
 
-**Todas as rotas acima, menos `/autorizar`, `/api/autorizar`, `/saude` e os arquivos de
-`/static`, exigem computador autorizado.** Sem a autorização, as páginas respondem `302` para
+**Todas as rotas acima, menos `/autorizar`, `/api/autorizar`, `/saude`, os arquivos de
+`/static` e as do aluno (`/aluno...` e `/api/aluno/...`, que usam o cookie do aluno e só mostram dados do próprio aluno), exigem computador autorizado.** Sem a autorização, as páginas respondem `302` para
 `/autorizar` e a API responde `401 {"erro": "..."}` (a mesma resposta exista o aluno ou não, para
 não dar para descobrir ids). Rota nova nasce protegida: a lista de rotas públicas
 (`ENDPOINTS_PUBLICOS` em `app/web.py`) é que precisa ser aumentada de propósito, e um teste
@@ -503,6 +512,49 @@ Pedido do Thiago de 14/10/2026 ("atualizar os alunos todo dia sem ninguém clica
 - **Não testado ainda no PC de verdade:** `--instalar` (criar a tarefa com `schtasks`) e a execução com `pythonw` só podem ser provados no
   Windows; o XML da tarefa tem teste de formato, mas não de execução.
 
+## Login do aluno: como funciona
+
+*Feito em 15/10/2026 (banco versão 12). O aluno entra pelo celular, em `/aluno/entrar`. A tela do aluno logado ainda é só "Olá, Ana!" e o botão Sair: o treino do aluno é um passo à parte.*
+
+**Primeiro acesso e "esqueci a senha" (o mesmo caminho):**
+1. O aluno digita o CPF e toca em "Enviar o código". O app sorteia um código de **6 números** (`secrets`), guarda **só o hash** (vale **10 minutos**, **5 tentativas**) e o manda ao WhatsApp cadastrado pelo modelo `codigo_acesso_app` da Meta (`app/whatsapp.py`), em segundo plano.
+2. A resposta da tela é **sempre a mesma**, com ou sem aluno, com ou sem WhatsApp ("se o CPF estiver liberado, o código chega..."): assim a tela não serve para descobrir quem é aluno. Por isso a tela **não mostra** o número com algumas casas escondidas (como o doc 24 sugeria): mostrar revelaria que o CPF existe.
+3. O aluno digita o código e escolhe a senha (8 a 128 caracteres; recusa as óbvias, como o CPF e `12345678`). Se o código confere, a senha é guardada com **scrypt** (o mesmo hash lento da senha de administrador) e ele já entra. Senha que não serve **não gasta** o código.
+4. Senha nova **derruba todos os outros celulares** em que ele estava logado (se o celular foi perdido, "esqueci a senha" resolve).
+
+**No dia a dia:** CPF + senha. O celular guarda o cookie `gloriafit_aluno` (HttpOnly, SameSite=Lax, Secure fora do localhost, 90 dias, renovado a cada hora de uso); o banco guarda só o hash. Sessão sem uso por 90 dias perde o acesso.
+
+**Quem pode entrar (regra de partida, a confirmar com o Thiago):** situação **Ativo** (`A`) no Data4U, **não** provisório, e dono **sozinho** do CPF entre os que podem entrar (o Data4U tem 4 CPFs repetidos: se só um dos dois cadastros é Ativo, entra por ele; se os dois são, ninguém entra até a recepção arrumar). A conferência vale **a cada pedido**: quem vira Desistente na cópia diária do Data4U perde o acesso no mesmo dia, mesmo com o celular logado. A regra é a constante `SITUACOES_QUE_PODEM_ENTRAR` em `app/aluno_acesso.py`. Quem não tem WhatsApp no app (ou o tem errado) não recebe o código: a recepção corrige na ficha do aluno (o número do app vale mais que o do Data4U).
+
+**Limites de tentativa (todos contam também CPF que não existe, com a mesma regra, para o bloqueio não revelar quem é aluno; CPF e endereço entram na tabela `aluno_evento` como hash e somem em 1 dia):**
+
+| O quê | Limite |
+|---|---|
+| Pedidos de código por CPF | 1 por minuto e 5 por dia |
+| Pedidos de código por endereço (IP) | 60 por hora (alto de propósito: a academia inteira usa o mesmo wi-fi) |
+| Códigos no app inteiro | 500 por dia (`CODIGOS_POR_DIA`; cada um é uma mensagem paga, cerca de R$ 0,035) |
+| Tentativas por código | 5 (depois ele morre) |
+| Códigos errados ou senhas erradas | 5 por CPF e 50 por endereço a cada 15 min (travado, nem confere o que vier; destrava sozinho) |
+
+Contas do pior caso: um CPF tem no máximo 25 palpites por dia contra 1.000.000 de códigos possíveis. "Esqueci a senha" ignora o travamento de login (quem prova que tem o WhatsApp destrava) e acertar zera os erros. Senha errada, CPF que não existe, aluno sem senha e aluno que não pode entrar dão **a mesma resposta e o mesmo trabalho** (o hash lento roda nos quatro casos).
+
+**Configurar a Meta (uma vez, no terminal do servidor; o Claude nunca vê o token):**
+```
+python -m app.whatsapp configurar     # pergunta o ID do número de telefone e o token (o token não aparece na tela)
+python -m app.whatsapp testar 27999998888   # manda o código de teste 000000 a esse WhatsApp
+python -m app.whatsapp situacao       # configurado? códigos das últimas 24 h (enviados, falharam, e os motivos)
+```
+Sem a configuração o pedido de código responde `503` ("o envio ainda não está liberado") e nada é criado. O arquivo `/dados/whatsapp.json` vale na hora, sem reiniciar o app. A versão da API da Meta (`v24.0`, a mais nova na página de versões da Meta em 15/10/2026) fica no arquivo e pode ser trocada com `configurar --versao`. "Enviado" no banco quer dizer que a **Meta aceitou** a mensagem; se chegou no celular só a Meta sabe.
+
+**Voltar atrás:** o banco versão 12 só acrescenta quatro tabelas. Para a imagem anterior (`842ef45`, que conhece até a versão 11): app parado, `PRAGMA user_version = 11` (as tabelas ficam lá, sem atrapalhar; as senhas criadas continuam valendo quando se sobe de novo), ou restaurar a cópia feita antes da migração (`/dados/antes-da-migracao`).
+
+**Limitações conhecidas:**
+- O envio de verdade pela Meta **não foi provado** (falta o token e o ID do número de telefone, que o Thiago coloca no servidor); a conversa com a Meta só foi testada contra um servidor de mentira. O formato da mensagem segue a página da Meta de modelos de autenticação com botão "Copiar código" (conferida em 15/10/2026).
+- Número de WhatsApp de 10 dígitos (DDD + 8) é enviado como está, com o `55` na frente; se a Meta o aceita ou não só o teste real mostra.
+- Quem tem a cópia do banco dentro dos 10 minutos de vida de um código pode achá-lo testando os 1.000.000 de possibilidades; mas quem tem a cópia do banco já tem tudo o que o app guarda.
+- Quem quiser atrapalhar o "esqueci a senha" de um aluno consegue travá-lo por 15 minutos (5 códigos errados no CPF dele); não consegue entrar.
+- A tela do aluno ainda não aparece em lugar nenhum além do link "É aluno da academia?" na tela de autorizar; o endereço do app no cupom (`GLORIAFIT_ENDERECO_DO_APP`) continua em aberto.
+
 ## Cuidados
 
 - **Cardio e exercícios sem dose:** séries e repetições podem ficar em branco (pedido do Thiago,
@@ -571,7 +623,7 @@ Pedido do Thiago de 14/10/2026 ("atualizar os alunos todo dia sem ninguém clica
 ## Ainda em aberto (de propósito, não decidido)
 
 - Qual dos ids do Data4U usar ao gravar um exercício que tem mais de um.
-- Como o login por CPF trata os 4 CPFs que aparecem em mais de uma pessoa no Data4U.
+- Login do aluno: os 4 CPFs repetidos no Data4U entram só se UM dos cadastros for Ativo (regra de partida, ver "Login do aluno"); confirmar com o Thiago quem mais pode entrar (Pendente? Trancado? aluno provisório?).
 - Como o app do aluno vai registrar "treino feito" (a tabela `sessao` e `registrar_sessao` esperam por ele) e como início/fim/meta voltam ao Data4U.
 - Tela de "aparelhos autorizados" dentro do app (hoje só pelo comando no servidor).
 - Aviso de "combinação nova no Data4U" (o desenho mostra na montagem e no salvar): precisa

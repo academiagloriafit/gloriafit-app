@@ -1,0 +1,58 @@
+// Telas do aluno (/aluno/entrar): o que mostrar para cada resposta do servidor e as conferências rápidas antes de enviar.
+// Fica separado de aluno_entrar.js (que mexe na página) para poder ser testado sozinho. Quem decide de verdade é o servidor:
+// estas conferências só poupam uma ida e volta.
+
+export const TAMANHO_DO_CODIGO = 6;
+export const MINIMO_DA_SENHA = 8;
+
+export const MENSAGEM_SEM_REDE =
+  "Não consegui falar com o servidor (sem resposta ou sem internet). Confira a internet e tente de novo.";
+
+// Só os algarismos comuns do texto, até `maximo` deles.
+export function soNumeros(texto, maximo = Infinity) {
+  return String(texto ?? "")
+    .replace(/[^0-9]/g, "")
+    .slice(0, maximo);
+}
+
+// '12345678909' -> '123.456.789-09' (aos poucos, enquanto a pessoa digita).
+export function formatarCpf(texto) {
+  const d = soNumeros(texto, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+// "" se o CPF tem 11 números; senão a frase para a tela. (Os dígitos verificadores quem confere é o servidor.)
+export function conferirCpf(texto) {
+  const n = soNumeros(texto).length;
+  return n === 11 ? "" : "Digite o CPF com os 11 números.";
+}
+
+// "" se o código tem 6 números; senão a frase para a tela.
+export function conferirCodigo(texto) {
+  return soNumeros(texto).length === TAMANHO_DO_CODIGO ? "" : "Digite os 6 números do código que chegou no WhatsApp.";
+}
+
+// "" se a senha nova e a repetição servem; senão a frase para a tela.
+export function conferirSenhaNova(senha, repetida) {
+  if (typeof senha !== "string" || senha.length < MINIMO_DA_SENHA) {
+    return `A senha precisa ter pelo menos ${MINIMO_DA_SENHA} letras ou números.`;
+  }
+  if (senha !== repetida) return "As duas senhas não são iguais.";
+  return "";
+}
+
+// Resposta do servidor ({ status, corpo }) -> { ok, mensagem }. 400, 401, 429 e 503 trazem a explicação pronta em `erro`.
+export function descreverResposta(status, corpo) {
+  if (status === 200 && corpo && corpo.ok === true) return { ok: true, mensagem: "" };
+  if (corpo && typeof corpo.erro === "string" && corpo.erro) return { ok: false, mensagem: corpo.erro };
+  return { ok: false, mensagem: `O servidor devolveu um erro (código ${status}). Tente de novo em instantes.` };
+}
+
+// Texto do botão de reenviar: com a contagem enquanto não pode, e sem ela quando pode.
+export function textoDoReenvio(segundosRestantes) {
+  const s = Math.ceil(Number(segundosRestantes));
+  return s > 0 ? `Enviar o código de novo (em ${s} s)` : "Enviar o código de novo";
+}

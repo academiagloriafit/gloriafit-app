@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Entrar · Glória Fit</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {# Tela do CELULAR do aluno. Sem o menu do professor: o aluno não vê nada da área da academia. #}
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="marca">GLÓRIA <span>FIT</span></div>
+    </div>
+  </header>
+
+  <main class="pagina pagina-aluno">
+    <section id="tela-entrar" class="painel painel-aluno" aria-labelledby="titulo-entrar">
+      <h1 id="titulo-entrar">Entrar</h1>
+      <form id="form-entrar" class="form-aluno" novalidate>
+        <div class="campo">
+          <label for="entrar-cpf">CPF</label>
+          <input id="entrar-cpf" name="cpf" type="text" inputmode="numeric" autocomplete="username"
+                 placeholder="000.000.000-00" maxlength="14" spellcheck="false" autofocus>
+        </div>
+        <div class="campo">
+          <label for="entrar-senha">Senha</label>
+          <input id="entrar-senha" name="senha" type="password" autocomplete="current-password" maxlength="128">
+        </div>
+        <label class="marca-mostrar"><input id="entrar-mostrar" type="checkbox"> Mostrar a senha</label>
+        <button id="entrar-botao" class="botao-principal botao-largo" type="submit">Entrar</button>
+        <p id="entrar-aviso" class="aviso-campo" role="status"></p>
+      </form>
+      <button id="abrir-primeiro-acesso" class="botao-link botao-largo" type="button">Primeiro acesso ou esqueci a senha</button>
+    </section>
+
+    <section id="tela-cpf" class="painel painel-aluno" aria-labelledby="titulo-cpf" hidden>
+      <h1 id="titulo-cpf">Primeiro acesso ou esqueci a senha</h1>
+      <p class="texto-apoio">
+        Digite o seu CPF. Se ele estiver liberado, mandamos um código de 6 números para o WhatsApp
+        que você cadastrou na academia.
+      </p>
+      <form id="form-cpf" class="form-aluno" novalidate>
+        <div class="campo">
+          <label for="cpf-cpf">CPF</label>
+          <input id="cpf-cpf" name="cpf" type="text" inputmode="numeric" autocomplete="username"
+                 placeholder="000.000.000-00" maxlength="14" spellcheck="false">
+        </div>
+        <button id="cpf-botao" class="botao-principal botao-largo" type="submit">Enviar o código</button>
+        <p id="cpf-aviso" class="aviso-campo" role="status"></p>
+      </form>
+      <button id="cpf-voltar" class="botao-link botao-largo" type="button">Voltar</button>
+    </section>
+
+    <section id="tela-codigo" class="painel painel-aluno" aria-labelledby="titulo-codigo" hidden>
+      <h1 id="titulo-codigo">Digite o código</h1>
+      <p class="texto-apoio">
+        Se o CPF estiver liberado, o código chega por WhatsApp em instantes e vale 10 minutos.
+        Não chegou? Veja na recepção da academia se o seu WhatsApp está certo no cadastro.
+      </p>
+      <form id="form-codigo" class="form-aluno" novalidate>
+        <div class="campo">
+          <label for="codigo-codigo">Código de 6 números</label>
+          <input id="codigo-codigo" name="codigo" class="campo-codigo-aluno" type="text" inputmode="numeric"
+                 autocomplete="one-time-code" placeholder="000000" maxlength="7" spellcheck="false">
+        </div>
+        <div class="campo">
+          <label for="codigo-senha">Escolha uma senha (mínimo 8 letras ou números)</label>
+          <input id="codigo-senha" name="senha" type="password" autocomplete="new-password" maxlength="128">
+        </div>
+        <div class="campo">
+          <label for="codigo-repetir">Digite a senha de novo</label>
+          <input id="codigo-repetir" name="repetir" type="password" autocomplete="new-password" maxlength="128">
+        </div>
+        <label class="marca-mostrar"><input id="codigo-mostrar" type="checkbox"> Mostrar a senha</label>
+        <button id="codigo-botao" class="botao-principal botao-largo" type="submit">Criar a senha e entrar</button>
+        <p id="codigo-aviso" class="aviso-campo" role="status"></p>
+      </form>
+      <button id="codigo-reenviar" class="botao-link botao-largo" type="button" disabled>Enviar o código de novo</button>
+      <button id="codigo-voltar" class="botao-link botao-largo" type="button">Voltar</button>
+    </section>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='aluno_entrar.js') }}"></script>
+</body>
+</html>

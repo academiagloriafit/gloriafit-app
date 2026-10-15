@@ -7,6 +7,7 @@ executa código de quem acessar.
 """
 
 import os
+import threading
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -16,6 +17,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from app import (
     acesso,
     administrador,
+    aluno_acesso,
     alunos,
     ciclo,
     cupom,
@@ -30,6 +32,7 @@ from app import (
     modelos,
     provisorios,
     treinos,
+    whatsapp,
 )
 
 # Um treino enorme (26 fichas x 100 exercícios) tem poucas dezenas de KB. Acima disto o
@@ -47,7 +50,22 @@ TAMANHO_MAXIMO_DA_IMPORTACAO = 25 * 1024 * 1024
 #   static: CSS e JavaScript, que não têm dado nenhum.
 #   saude: só diz "ok" (o servidor usa para saber se o app está de pé).
 #   pagina_autorizar / api_autorizar: a tela e a rota onde o código é digitado.
-ENDPOINTS_PUBLICOS = frozenset({"static", "saude", "pagina_autorizar", "api_autorizar"})
+#   pagina_aluno_* / api_aluno_*: o login do aluno, pelo celular dele (app/aluno_acesso.py). Não usam computador
+#     autorizado: cada uma confere o cookie do aluno (outro cookie, outra tabela) e só mostra dados do próprio aluno.
+ENDPOINTS_PUBLICOS = frozenset(
+    {
+        "static",
+        "saude",
+        "pagina_autorizar",
+        "api_autorizar",
+        "pagina_aluno_entrar",
+        "pagina_aluno_inicio",
+        "api_aluno_pedir_codigo",
+        "api_aluno_definir_senha",
+        "api_aluno_entrar",
+        "api_aluno_sair",
+    }
+)
 
 # Métodos que só leem. Os outros (POST etc.) mudam dados e passam pela checagem de origem.
 METODOS_QUE_SO_LEEM = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -131,6 +149,10 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     # (API falsa, sem fio) para nunca chamar a API de verdade.
     app.config["IA_CHAMADA"] = ia_treino.chamar_claude
     app.config["IA_EM_SEGUNDO_PLANO"] = True
+    # Código de acesso do aluno por WhatsApp: quem manda (a Meta; a configuração fica em /dados/whatsapp.json) e se o envio roda
+    # em segundo plano. Os testes trocam os dois (remetente falso, sem fio) para nunca falar com a Meta de verdade.
+    app.config["WHATSAPP"] = whatsapp.Remetente(whatsapp.caminho_da_configuracao(caminho))
+    app.config["WHATSAPP_EM_SEGUNDO_PLANO"] = True
 
     def conexao():
         # Uma conexão por pedido: o SQLite não deve ser compartilhado entre
@@ -163,6 +185,8 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             resposta.headers["Cache-Control"] = "no-store"
         if g.get("renovar_cookie"):
             definir_cookie_do_dispositivo(resposta, g.renovar_cookie)
+        if g.get("renovar_cookie_aluno"):
+            definir_cookie_do_aluno(resposta, g.renovar_cookie_aluno)
         return resposta
 
     # ------------------------------------------------------------ computador autorizado
@@ -186,6 +210,28 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             if g.dispositivo is not None and g.dispositivo.renovar_cookie:
                 g.renovar_cookie = token  # o after_request renova o cookie (mais 400 dias)
         return g.dispositivo
+
+    # ------------------------------------------------------------ aluno logado (celular do aluno)
+
+    def definir_cookie_do_aluno(resposta, token: str) -> None:
+        resposta.set_cookie(
+            aluno_acesso.NOME_DO_COOKIE,
+            token,
+            max_age=int(aluno_acesso.DURACAO_DO_COOKIE.total_seconds()),
+            httponly=True,  # JavaScript da página não consegue ler o cookie
+            secure=urlsplit("//" + request.host).hostname not in NOMES_LOCAIS,
+            samesite="Lax",
+            path="/",
+        )
+
+    def aluno_atual():
+        """O aluno logado neste pedido, ou None. Confere uma vez por pedido. Nada a ver com o computador autorizado."""
+        if "aluno" not in g:
+            token = request.cookies.get(aluno_acesso.NOME_DO_COOKIE)
+            g.aluno = aluno_acesso.identificar(conexao(), token) if token else None
+            if g.aluno is not None and g.aluno.renovar_cookie:
+                g.renovar_cookie_aluno = token  # o after_request renova o cookie
+        return g.aluno
 
     @app.before_request
     def guarda_da_area_do_professor():
@@ -326,6 +372,110 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(erro="Código inválido ou vencido."), 400
         resposta = jsonify(ok=True, nome=autorizacao.nome)
         definir_cookie_do_dispositivo(resposta, autorizacao.token)
+        return resposta
+
+    # ------------------------------------------------------------------ login do aluno
+
+    def primeiro_nome(nome: str) -> str:
+        return (nome.split() or [""])[0].capitalize()
+
+    def espera_recusada(erro: aluno_acesso.MuitasTentativas):
+        resposta = jsonify(erro=erro.mensagem)
+        resposta.status_code = 429
+        resposta.headers["Retry-After"] = str(erro.segundos)
+        return resposta
+
+    def cpf_do_pedido(dados) -> str:
+        if not isinstance(dados, dict):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        try:
+            return aluno_acesso.validar_cpf(dados.get("cpf"))
+        except provisorios.CpfInvalido as erro:
+            raise ErroDeEntrada(str(erro)) from None
+
+    @app.get("/aluno/entrar")
+    def pagina_aluno_entrar():
+        """Entrar (CPF + senha), primeiro acesso e esqueci a senha. Tela do celular do aluno."""
+        if aluno_atual() is not None:
+            return redirect(url_for("pagina_aluno_inicio"))
+        return render_template("aluno_entrar.html")
+
+    @app.get("/aluno")
+    def pagina_aluno_inicio():
+        """Primeira tela do aluno logado."""
+        aluno = aluno_atual()
+        if aluno is None:
+            return redirect(url_for("pagina_aluno_entrar"))
+        return render_template("aluno_inicio.html", primeiro_nome=primeiro_nome(aluno.nome))
+
+    @app.post("/api/aluno/codigo")
+    def api_aluno_pedir_codigo():
+        """Manda um código de 6 números ao WhatsApp do aluno. Corpo: {"cpf": "..."}.
+
+        A resposta é a mesma para CPF que é de aluno e CPF que não é: ninguém descobre quem é aluno por aqui.
+        """
+        cpf = cpf_do_pedido(corpo_json())
+        remetente = app.config["WHATSAPP"]
+        if not remetente.pronto():
+            return jsonify(erro="O envio do código ainda não está liberado. Fale com a recepção da academia."), 503
+        try:
+            envio = aluno_acesso.pedir_codigo(conexao(), cpf, request.remote_addr)
+        except aluno_acesso.MuitasTentativas as erro:
+            return espera_recusada(erro)
+        except aluno_acesso.LimiteDoDia:
+            return jsonify(erro="Não estamos conseguindo enviar códigos agora. Tente mais tarde ou fale com a recepção."), 503
+        if envio is not None:
+            trabalho = (app.config["CAMINHO_BANCO"], envio, remetente)
+            if app.config["WHATSAPP_EM_SEGUNDO_PLANO"]:
+                threading.Thread(target=aluno_acesso.executar_envio, args=trabalho, name=f"codigo-{envio.codigo_id}", daemon=True).start()
+            else:
+                aluno_acesso.executar_envio(*trabalho)
+        return jsonify(
+            ok=True,
+            espera=int(aluno_acesso.INTERVALO_ENTRE_PEDIDOS.total_seconds()),
+            validade_minutos=int(aluno_acesso.VALIDADE_DO_CODIGO.total_seconds() // 60),
+        )
+
+    @app.post("/api/aluno/primeiro-acesso")
+    def api_aluno_definir_senha():
+        """Troca o código pela senha nova e já entra. Corpo: {"cpf", "codigo", "senha"}."""
+        dados = corpo_json()
+        cpf = cpf_do_pedido(dados)
+        try:
+            entrada = aluno_acesso.definir_senha_com_codigo(
+                conexao(), cpf, dados.get("codigo"), dados.get("senha"), request.remote_addr
+            )
+        except aluno_acesso.SenhaInvalida as erro:
+            raise ErroDeEntrada(str(erro)) from None
+        except aluno_acesso.MuitasTentativas as erro:
+            return espera_recusada(erro)
+        except aluno_acesso.CodigoInvalido:
+            return jsonify(erro="Código inválido ou vencido. Confira os 6 números ou peça um código novo."), 400
+        resposta = jsonify(ok=True, nome=primeiro_nome(entrada.nome))
+        definir_cookie_do_aluno(resposta, entrada.token)
+        return resposta
+
+    @app.post("/api/aluno/entrar")
+    def api_aluno_entrar():
+        """Entra com CPF e senha. Corpo: {"cpf", "senha"}."""
+        dados = corpo_json()
+        cpf = cpf_do_pedido(dados)
+        try:
+            entrada = aluno_acesso.entrar(conexao(), cpf, dados.get("senha"), request.remote_addr)
+        except aluno_acesso.MuitasTentativas as erro:
+            return espera_recusada(erro)
+        except aluno_acesso.LoginInvalido:
+            return jsonify(erro="CPF ou senha incorretos."), 401
+        resposta = jsonify(ok=True, nome=primeiro_nome(entrada.nome))
+        definir_cookie_do_aluno(resposta, entrada.token)
+        return resposta
+
+    @app.post("/api/aluno/sair")
+    def api_aluno_sair():
+        """Sai deste celular (a sessão deixa de valer)."""
+        aluno_acesso.sair(conexao(), request.cookies.get(aluno_acesso.NOME_DO_COOKIE))
+        resposta = jsonify(ok=True)
+        resposta.delete_cookie(aluno_acesso.NOME_DO_COOKIE, path="/")
         return resposta
 
     @app.get("/api/grupos")

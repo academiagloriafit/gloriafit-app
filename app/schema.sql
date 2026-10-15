@@ -1,5 +1,8 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 11 (14/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA) e o registro de quando os alunos e o histórico de treinos foram atualizados.
+-- Versão 12 (15/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados e o login do aluno (senha, códigos por WhatsApp, sessões).
+-- Mudança da versão 11 para a 12 (login do aluno): nasceram as tabelas `aluno_senha` (o hash da senha de cada aluno), `aluno_codigo`
+-- (os códigos de 6 números enviados por WhatsApp, só o hash), `aluno_sessao` (os celulares em que o aluno está logado, só o hash do
+-- cookie) e `aluno_evento` (pedidos de código e erros, para limitar tentativas). Bancos da versão 11 são atualizados sozinhos na subida.
 -- Mudança da versão 10 para a 11 (atualização automática dos alunos): nasceu a tabela `importacao` (de quando é a última cópia do
 -- Data4U aplicada, para os alunos e para o histórico de treinos; serve para avisar na tela quando a atualização parar).
 -- Bancos da versão 10 são atualizados sozinhos na subida.
@@ -30,10 +33,10 @@
 -- Mudança da versão 1 para a 2: saiu a tabela de professores. Os professores da
 -- academia mudam muito, então cada treino guarda o NOME de quem montou (digitado
 -- na hora de salvar), em treino.montado_por.
--- Fora desta versão, de propósito: login do aluno, pendências da recepção e
--- mensalidade/produtos. Entram em versões seguintes, quando forem desenhados.
+-- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
+-- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -350,3 +353,57 @@ CREATE TABLE IF NOT EXISTS importacao (
     extraido_em TEXT NOT NULL CHECK (extraido_em GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]'),
     recebida_em TEXT NOT NULL CHECK (recebida_em GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]')
 );
+
+-- ------------------------------------------------------------------ login do aluno
+-- O aluno entra pelo celular com CPF + senha (app/aluno_acesso.py). Na primeira vez, e quando esquece a senha, ele
+-- pede um CÓDIGO de 6 números, que o app manda para o WhatsApp cadastrado (app/whatsapp.py), e cria a senha.
+-- Nada aqui guarda senha, código ou cookie em texto: só hash. Datas em UTC, 'AAAA-MM-DD HH:MM:SS'.
+
+-- A senha do aluno (uma por aluno). senha_hash: 'scrypt$N$r$p$sal$chave', o mesmo formato da senha de administrador.
+CREATE TABLE IF NOT EXISTS aluno_senha (
+    aluno_id    INTEGER PRIMARY KEY REFERENCES aluno(id),
+    senha_hash  TEXT    NOT NULL,
+    definida_em TEXT    NOT NULL
+);
+
+-- Cada código enviado. codigo_hash: SHA-256 de 'id do aluno:código'. Vale poucos minutos e só funciona uma vez.
+-- tentativas: quantas vezes alguém tentou este código (passando de 5, ele morre). usado_em: preenchido quando o código é
+-- usado ou trocado por um mais novo. envio: 'pendente' (ainda mandando), 'enviado' (a Meta aceitou) ou 'falhou' (envio_erro
+-- diz o motivo, sem nenhum dado secreto). Os antigos são apagados depois de alguns dias.
+CREATE TABLE IF NOT EXISTS aluno_codigo (
+    id          INTEGER PRIMARY KEY,
+    aluno_id    INTEGER NOT NULL REFERENCES aluno(id),
+    codigo_hash TEXT    NOT NULL,
+    criado_em   TEXT    NOT NULL,
+    expira_em   TEXT    NOT NULL,
+    tentativas  INTEGER NOT NULL DEFAULT 0 CHECK (tentativas >= 0),
+    usado_em    TEXT,
+    envio       TEXT    NOT NULL DEFAULT 'pendente' CHECK (envio IN ('pendente', 'enviado', 'falhou')),
+    envio_erro  TEXT    CHECK (envio_erro IS NULL OR length(envio_erro) <= 300)
+);
+CREATE INDEX IF NOT EXISTS ix_aluno_codigo_aluno ON aluno_codigo(aluno_id, criado_em);
+CREATE INDEX IF NOT EXISTS ix_aluno_codigo_criado ON aluno_codigo(criado_em);
+
+-- Um celular em que o aluno está logado. token_hash: SHA-256 do valor guardado no cookie. Como o computador autorizado
+-- (`dispositivo`), mas é outra tabela de propósito: o cookie do aluno nunca abre a área do professor.
+-- Fica sem uso por muito tempo = perde o acesso. Quando o aluno cria uma senha nova, todas as sessões antigas são revogadas.
+CREATE TABLE IF NOT EXISTS aluno_sessao (
+    id            INTEGER PRIMARY KEY,
+    aluno_id      INTEGER NOT NULL REFERENCES aluno(id),
+    token_hash    TEXT    NOT NULL UNIQUE,
+    criado_em     TEXT    NOT NULL,
+    ultimo_uso_em TEXT    NOT NULL,
+    revogado_em   TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_aluno_sessao_aluno ON aluno_sessao(aluno_id);
+
+-- Pedidos de código e erros (senha errada, código errado), para limitar tentativas. chave: 'cpf:' ou 'ip:' + SHA-256 do
+-- CPF ou do endereço (nunca o valor puro); vale também para CPF que não existe, para o limite não revelar quem é aluno.
+-- Os eventos com mais de um dia são apagados.
+CREATE TABLE IF NOT EXISTS aluno_evento (
+    id    INTEGER PRIMARY KEY,
+    tipo  TEXT    NOT NULL CHECK (tipo IN ('pedido_codigo', 'codigo_errado', 'login_errado')),
+    chave TEXT    NOT NULL,
+    em    TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_aluno_evento ON aluno_evento(tipo, chave, em);
