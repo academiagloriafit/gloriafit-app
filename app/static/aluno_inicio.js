@@ -89,7 +89,7 @@ function desenharRodape(treino, indice, mensagem, deuErro) {
     : el("button", {
         type: "button",
         classe: "botao-link botao-link-forte botao-largo",
-        texto: "Fiz esta ficha hoje",
+        texto: "✓ Treino concluído",
         aoClicar: (evento) => marcarFicha(treino, indice, "feito", evento.currentTarget),
       });
   const botaoDesfazer = ficha.feita_hoje
@@ -104,7 +104,7 @@ function desenharRodape(treino, indice, mensagem, deuErro) {
     "div",
     { classe: "meu-ficha-rodape" },
     el("p", { classe: "meu-ficha-andamento", texto: textoDoAndamento(ficha, treino.meta_por_ficha) }),
-    ficha.feita_hoje && el("p", { classe: "meu-ficha-feita", texto: "Marcada como feita hoje" }),
+    ficha.feita_hoje && el("p", { classe: "meu-ficha-feita", texto: "✓ Treino concluído hoje" }),
     botaoFeito,
     botaoDesfazer,
     aviso,

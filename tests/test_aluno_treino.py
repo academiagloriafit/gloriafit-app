@@ -338,7 +338,7 @@ def test_a_pagina_do_aluno_tem_os_pontos_que_o_javascript_usa(caminho, cliente_d
         assert f'id="{id_}"' in html, id_
 
 
-# ------------------------------------------------------------------ "Fiz esta ficha hoje"
+# ------------------------------------------------------------------ "Treino concluído"
 
 MEIO_DIA = datetime(2026, 10, 15, 15, 0, tzinfo=timezone.utc)  # 12h00 em Brasília
 

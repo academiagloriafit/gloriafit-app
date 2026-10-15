@@ -127,7 +127,7 @@ def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | N
     }
 
 
-# ------------------------------------------------------------------ "Fiz esta ficha hoje"
+# ------------------------------------------------------------------ "Treino concluído"
 
 
 class MarcacaoInvalida(Exception):

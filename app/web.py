@@ -503,7 +503,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.post("/api/aluno/treino/feito")
     def api_aluno_treino_feito():
-        """"Fiz esta ficha hoje". Corpo {"ficha": 1} (1 = A, 2 = B...). Conta no máximo uma vez por ficha por dia.
+        """"Treino concluído". Corpo {"ficha": 1} (1 = A, 2 = B...). Conta no máximo uma vez por ficha por dia.
 
         200 {"ok", "ficha", "ja_marcada", "feitas"}; 400 ficha inválida; 401 sem login; 404 a ficha não existe;
         409 sem treino ativo; 415 não é JSON.

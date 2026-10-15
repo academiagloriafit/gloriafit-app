@@ -103,7 +103,7 @@ export function fichaEscolhida(fichas, indice) {
   return Number.isInteger(indice) && indice >= 0 && indice < fichas.length ? indice : 0;
 }
 
-// ------------------------------------------------------------------ "Fiz esta ficha hoje"
+// ------------------------------------------------------------------ "Treino concluído"
 
 // "Você fez esta ficha 3 de 15 vezes" (com meta) / "Você fez esta ficha 1 vez" / "Você ainda não fez esta ficha".
 export function textoDoAndamento(ficha, meta) {
@@ -126,5 +126,5 @@ export function descreverMarcacao(status, corpo) {
   return { tipo: "erro", mensagem: `Não consegui salvar (código ${status}). Tente de novo em instantes.` };
 }
 
-export const TEXTO_FICHA_FEITA_HOJE = "Anotado. Bom treino!";
+export const TEXTO_FICHA_FEITA_HOJE = "Anotado. Parabéns!";
 export const TEXTO_JA_MARCADA = "Você já tinha marcado esta ficha hoje.";
