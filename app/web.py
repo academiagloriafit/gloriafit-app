@@ -70,6 +70,8 @@ ENDPOINTS_PUBLICOS = frozenset(
         "api_aluno_treino_feito",
         "api_aluno_treino_desfazer",
         "api_aluno_comentario",
+        "api_aluno_comentarios",
+        "api_aluno_comentarios_vistos",
     }
 )
 
@@ -564,6 +566,35 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(erro=str(erro)), erro.status
         return jsonify(ok=True, **resultado)
 
+    @app.get("/api/aluno/comentarios")
+    def api_aluno_comentarios():
+        """Os comentários do PRÓPRIO aluno com as respostas do professor (as não vistas primeiro).
+
+        200 {"total", "respostas_novas", "comentarios": [...]}; 401 sem login. O aluno vem do cookie, nunca da URL.
+        """
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        return jsonify(comentarios.listar_do_aluno(conexao(), aluno.id))
+
+    @app.post("/api/aluno/comentarios/vistos")
+    def api_aluno_comentarios_vistos():
+        """O aluno abriu as respostas. Corpo: {"ids": [3, 5]} (as que a tela mostrava; só valem as dele).
+
+        200 {"ok", "marcados", "respostas_novas"}; 400 lista inválida; 401; 415.
+        """
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        dados = corpo_json()
+        try:
+            resultado = comentarios.marcar_respostas_vistas(
+                conexao(), aluno.id, dados.get("ids") if isinstance(dados, dict) else None
+            )
+        except comentarios.ComentarioInvalido as erro:
+            return jsonify(erro=str(erro)), erro.status
+        return jsonify(ok=True, **resultado)
+
     @app.get("/api/grupos")
     def api_grupos():
         return jsonify(exercicios.listar_grupos(conexao()))
@@ -711,6 +742,23 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         if not comentarios.marcar_lido(conn, comentario_id):
             return jsonify(erro="Comentário não encontrado."), 404
         return jsonify(ok=True, nao_lidos=comentarios.contar_nao_lidos(conn))
+
+    @app.post("/api/comentarios/<int(max=9223372036854775807):comentario_id>/responder")
+    def api_comentario_responder(comentario_id: int):
+        """O professor responde o comentário. Corpo: {"professor": "nome digitado", "resposta": "texto"}.
+
+        200 {"ok", "respondido_por", "respondido_quando", "nao_lidos"} (responder também marca como lido); 400 nome ou texto
+        inválido; 404 não existe; 409 já foi respondido (uma resposta por comentário); 415.
+        """
+        dados = corpo_json()
+        if not isinstance(dados, dict):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        conn = conexao()
+        try:
+            resultado = comentarios.responder(conn, comentario_id, dados.get("professor"), dados.get("resposta"))
+        except comentarios.ComentarioInvalido as erro:
+            return jsonify(erro=str(erro)), erro.status
+        return jsonify(ok=True, nao_lidos=comentarios.contar_nao_lidos(conn), **resultado)
 
     @app.post("/api/alunos/<int(max=9223372036854775807):aluno_id>/comentarios/lidos")
     def api_comentarios_do_aluno_lidos(aluno_id: int):

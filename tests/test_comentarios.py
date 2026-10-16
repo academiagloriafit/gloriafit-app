@@ -1,6 +1,7 @@
 """Testes dos comentários do aluno sobre o treino (app/comentarios.py, a rota do celular e as telas do professor).
 
-Dados inventados. Entrega 1 de 2: o aluno escreve; o professor lê e marca como lido (a resposta é a entrega 2).
+Dados inventados. Entrega 1 de 2: o aluno escreve; o professor lê e marca como lido (a resposta é a entrega 2, em
+tests/test_comentarios_resposta.py).
 """
 
 import sqlite3
@@ -492,6 +493,10 @@ def test_listar_do_mais_novo_para_o_mais_antigo_com_data_de_brasilia(conn):
         "texto": "segundo",
         "quando": "15/10/2026 10:00",
         "lido": False,
+        "resposta": None,
+        "respondido_por": None,
+        "respondido_quando": None,
+        "resposta_vista": False,
     }
     assert primeiro["texto"] == "primeiro" and primeiro["quando"] == "15/10/2026 08:00"
     assert primeiro["ficha"] is None and primeiro["exercicio"] is None  # do treino inteiro

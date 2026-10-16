@@ -1,11 +1,17 @@
 // Telas do professor com comentários dos alunos: a página "Comentários" e o quadro na ficha do aluno.
 // Aqui só se marca como lido (um comentário, ou todos de um aluno) e se atualiza o que está na tela.
 // O texto dos comentários vem pronto do servidor, já escapado: este arquivo nunca monta HTML a partir dele.
-import { enviarJson } from "./api.js";
+import { MENSAGEM_NAO_AUTORIZADO, enviarJson } from "./api.js";
 import { el } from "./dom.js";
 import {
   MENSAGEM_SEM_REDE,
   descreverLeitura,
+  descreverResposta,
+  estourouOLimiteDaResposta,
+  LIMITE_DO_NOME,
+  pedidoDaResposta,
+  respostaPronta,
+  textoDoContadorDaResposta,
   textoDoFiltroNovos,
   textoDoResumoDaFicha,
   textoDoTotal,
@@ -46,7 +52,9 @@ function mostrarErro(local, mensagem) {
 
 // Depois de ler um: na página "Comentários" (só novos) a linha some; em "Todos" ela fica, como lida.
 function atualizarTelaDepoisDeLer(item, naoLidos) {
-  if (tela && tela.dataset.soNovos === "1") {
+  // Com a caixa de resposta aberta a linha não some (senão o texto que o professor estava escrevendo se perderia): vira "Lido".
+  const respondendo = item.querySelector("[data-responder-area]")?.childElementCount > 0;
+  if (tela && tela.dataset.soNovos === "1" && !respondendo) {
     item.remove();
     const restantes = lista.querySelectorAll("li.comentario").length;
     const resumo = document.getElementById("resumo-comentarios");
@@ -132,9 +140,118 @@ async function marcarTodosDoAluno(botao) {
   botao.disabled = false;
 }
 
+// ------------------------------------------------------------------ responder ao aluno
+
+// O último nome digitado NESTA página, só para não digitar de novo a cada resposta seguinte. Não é guardado em lugar
+// nenhum: ao recarregar a página começa vazio (o computador da recepção é de todos os professores).
+let nomeDoProfessor = "";
+
+// A resposta já enviada, no mesmo desenho que o servidor monta (texto sempre via textContent).
+function desenharResposta(respondidoPor, quando, texto) {
+  return el(
+    "div",
+    { classe: "comentario-resposta", tabindex: "-1" }, // tabindex -1: o foco vai para cá quando o botão "Enviar resposta" some
+    el("p", {
+      classe: "comentario-resposta-cabecalho",
+      texto: `Respondido por ${respondidoPor} · ${quando} · o aluno ainda não viu`,
+    }),
+    el("p", { classe: "comentario-resposta-texto", texto }),
+  );
+}
+
+// Depois de responder: o comentário vira "lido" (responder já conta como ler) e os números se acertam. A linha NÃO some
+// da página de "Novos", para o professor ver a resposta que acabou de mandar.
+function atualizarTelaDepoisDeResponder(item, naoLidos) {
+  const eraNovo = item.hasAttribute("data-comentario-novo");
+  virarLido(item);
+  mostrarContadorDoMenu(naoLidos);
+  const filtro = tela && tela.querySelector(".filtro-comentarios a");
+  if (filtro && naoLidos !== null) filtro.textContent = textoDoFiltroNovos(naoLidos);
+  if (eraNovo && quadroDaFicha) umLidoNaFicha();
+}
+
+function abrirFormularioDeResposta(botao) {
+  const item = botao.closest("li.comentario");
+  const id = botao.dataset.responder;
+  const area = item.querySelector("[data-responder-area]");
+  if (area.childElementCount) {
+    area.querySelector("textarea")?.focus();
+    return;
+  }
+  const aviso = item.querySelector("[data-erro-do-comentario]");
+  mostrarErro(aviso, "");
+
+  const campoNome = el("input", {
+    type: "text",
+    id: `responder-nome-${id}`,
+    maxlength: String(LIMITE_DO_NOME),
+    autocomplete: "off",
+  });
+  campoNome.value = nomeDoProfessor;
+  const campoTexto = el("textarea", { id: `responder-texto-${id}`, rows: "3" });
+  const contador = el("p", { classe: "comentario-contador", texto: textoDoContadorDaResposta("") });
+  const erro = el("p", { classe: "aviso-campo aviso-erro", role: "alert" });
+  const enviar = el("button", { type: "button", classe: "botao-link botao-link-forte", texto: "Enviar resposta" });
+  const cancelar = el("button", { type: "button", classe: "botao-link", texto: "Cancelar" });
+
+  campoTexto.addEventListener("input", () => {
+    contador.textContent = textoDoContadorDaResposta(campoTexto.value);
+    contador.classList.toggle("comentario-contador-estouro", estourouOLimiteDaResposta(campoTexto.value));
+  });
+  cancelar.addEventListener("click", () => {
+    area.replaceChildren();
+    botao.hidden = false;
+    botao.focus();
+  });
+  enviar.addEventListener("click", async () => {
+    if (enviar.disabled) return;
+    erro.textContent = "";
+    const pronto = respostaPronta(campoNome.value, campoTexto.value);
+    if (!pronto.ok) {
+      erro.textContent = pronto.mensagem;
+      (pronto.campo === "professor" ? campoNome : campoTexto).focus();
+      return;
+    }
+    enviar.disabled = true;
+    try {
+      const { status, corpo } = await enviarJson(
+        `/api/comentarios/${encodeURIComponent(id)}/responder`,
+        pedidoDaResposta(pronto.professor, pronto.resposta),
+      );
+      const resultado = descreverResposta(status, corpo);
+      if (resultado.tipo === "ok") {
+        nomeDoProfessor = resultado.respondidoPor;
+        const bloco = desenharResposta(resultado.respondidoPor, resultado.quando, pronto.resposta);
+        area.replaceChildren(bloco);
+        bloco.focus();
+        botao.remove();
+        atualizarTelaDepoisDeResponder(item, resultado.naoLidos);
+        return;
+      }
+      erro.textContent = resultado.mensagem;
+    } catch {
+      erro.textContent = MENSAGEM_SEM_REDE;
+    }
+    enviar.disabled = false;
+  });
+
+  area.replaceChildren(
+    el("div", { classe: "comentario-form-resposta" },
+      el("div", { classe: "campo" }, el("label", { for: campoNome.id, texto: "Seu nome (quem está respondendo)" }), campoNome),
+      el("div", { classe: "campo" }, el("label", { for: campoTexto.id, texto: "Resposta para o aluno" }), campoTexto),
+      contador,
+      el("div", { classe: "comentario-form-botoes" }, enviar, cancelar),
+      erro,
+    ),
+  );
+  botao.hidden = true;
+  (campoNome.value ? campoTexto : campoNome).focus();
+}
+
 document.addEventListener("click", (evento) => {
   const botao = evento.target.closest("button");
   if (!botao) return;
   if (botao.dataset.marcarLido !== undefined) marcarUm(botao);
   else if (botao.dataset.marcarTodosDoAluno !== undefined) marcarTodosDoAluno(botao);
+  else if (botao.dataset.responder !== undefined) abrirFormularioDeResposta(botao);
 });

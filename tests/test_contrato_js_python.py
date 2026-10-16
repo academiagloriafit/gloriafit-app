@@ -591,3 +591,159 @@ def test_o_pedido_de_comentario_montado_pelo_javascript_e_aceito_pelo_servidor(t
         {"ficha_nome": "B PERNA", "exercicio_nome": "CADEIRA ABDUTORA", "texto": "Dói o ombro"},
     ]
     conn.close()
+
+
+# ------------------------------------------------------------------ respostas do professor (computador -> servidor -> celular)
+
+MODULO_DO_PROFESSOR = (RAIZ / "app" / "static" / "comentarios_modelo.js").as_uri()
+
+
+def _banco_com_comentarios(tmp_path):
+    from app import comentarios
+
+    conn = conectar(tmp_path / "respostas.db")
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome, cpf, situacao) VALUES (1, 'ANA SOUZA', '11144477735', 'A')")
+    conn.execute("INSERT INTO aluno (id, nome, cpf, situacao) VALUES (2, 'BRUNO LIMA', '52998224725', 'A')")
+    conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('SUPINO RETO', 'app')")
+    conn.commit()
+    treinos.salvar_treino(
+        conn,
+        1,
+        {
+            "nome_treino": "TREINO ABC",
+            "montado_por": "ANA",
+            "fichas": [{"nome": "A PEITO", "itens": [{"exercicio_id": 1, "series": "4", "repeticoes": "12"}]}],
+        },
+    )
+    comentarios.enviar_comentario(conn, 1, "TREINO ABC", "Está leve demais")
+    comentarios.enviar_comentario(
+        conn, 1, "TREINO ABC", "Dói o ombro", ficha=1, item=1, exercicio="SUPINO RETO"
+    )
+    return conn
+
+
+def test_os_limites_da_resposta_sao_os_mesmos_nos_dois_lados():
+    from app import comentarios
+
+    js = _node(f"""
+        import * as m from "{MODULO_DO_PROFESSOR}";
+        console.log(JSON.stringify({{ resposta: m.LIMITE_DA_RESPOSTA, nome: m.LIMITE_DO_NOME }}));
+    """)
+
+    assert js["resposta"] == comentarios.LIMITE_DO_TEXTO
+    assert js["nome"] == treinos.LIMITE_QUEM_MONTOU
+
+
+def test_a_resposta_montada_pelo_javascript_e_aceita_pelo_servidor(tmp_path):
+    from app import comentarios
+
+    conn = _banco_com_comentarios(tmp_path)
+    js = _node(f"""
+        import * as m from "{MODULO_DO_PROFESSOR}";
+        const pronta = m.respostaPronta("  Thiago ", "  Pode trocar por 💪 supino inclinado.  ");
+        console.log(JSON.stringify({{ pronta, pedido: m.pedidoDaResposta(pronta.professor, pronta.resposta) }}));
+    """)
+
+    assert js["pronta"]["ok"] is True
+    pedido = js["pedido"]
+    resultado = comentarios.responder(conn, 2, pedido["professor"], pedido["resposta"])
+    assert resultado["respondido_por"] == "Thiago"
+    linha = conn.execute("SELECT resposta, respondido_por, lido_em FROM comentario WHERE id = 2").fetchone()
+    assert linha["resposta"] == "Pode trocar por 💪 supino inclinado."
+    assert linha["respondido_por"] == "Thiago"
+    assert linha["lido_em"] is not None  # responder também marca como lido
+    conn.close()
+
+
+def test_o_que_o_javascript_recusa_o_servidor_tambem_recusa(tmp_path):
+    """Os dois lados concordam sobre nome/resposta vazios ou grandes demais (a tela só poupa uma ida ao servidor)."""
+    from app import comentarios
+
+    conn = _banco_com_comentarios(tmp_path)
+    casos = [
+        ["", "Oi"],
+        ["   ", "Oi"],
+        ["Thiago", ""],
+        ["Thiago", "  \n "],
+        ["a" * 61, "Oi"],
+        ["Thiago", "a" * 501],
+    ]
+    js = _node(f"""
+        import * as m from "{MODULO_DO_PROFESSOR}";
+        const casos = {json.dumps(casos)};
+        console.log(JSON.stringify(casos.map(([nome, texto]) => m.respostaPronta(nome, texto).ok)));
+    """)
+
+    assert js == [False] * len(casos)
+    for nome, texto in casos:
+        with pytest.raises(comentarios.ComentarioInvalido) as erro:
+            comentarios.responder(conn, 1, nome, texto)
+        assert erro.value.status == 400
+    assert conn.execute("SELECT COUNT(*) FROM comentario WHERE resposta IS NOT NULL").fetchone()[0] == 0
+    conn.close()
+
+
+def test_os_limites_no_tamanho_exato_valem_nos_dois_lados(tmp_path):
+    from app import comentarios
+
+    conn = _banco_com_comentarios(tmp_path)
+    nome, texto = "n" * 60, "💪" * 500  # 500 emojis: 1.000 no .length do JavaScript, 500 letras para o servidor
+    js = _node(f"""
+        import * as m from "{MODULO_DO_PROFESSOR}";
+        console.log(JSON.stringify(m.respostaPronta({json.dumps(nome)}, {json.dumps(texto)}).ok));
+    """)
+
+    assert js is True
+    comentarios.responder(conn, 1, nome, texto)
+    assert conn.execute("SELECT resposta FROM comentario WHERE id = 1").fetchone()[0] == texto
+    conn.close()
+
+
+def test_a_lista_do_servidor_e_lida_pelo_celular_e_os_vistos_voltam_aceitos(tmp_path):
+    """Servidor -> celular: a lista de 'Seus comentários' é entendida; celular -> servidor: os ids dos 'vistos' são aceitos."""
+    from app import comentarios
+
+    conn = _banco_com_comentarios(tmp_path)
+    comentarios.responder(conn, 2, "Thiago", "Troque por supino inclinado.")
+    treinos.salvar_treino(
+        conn,
+        2,
+        {
+            "nome_treino": "TREINO X",
+            "montado_por": "ANA",
+            "fichas": [{"nome": "A", "itens": [{"exercicio_id": 1, "series": "3", "repeticoes": "10"}]}],
+        },
+    )
+    comentarios.enviar_comentario(conn, 2, "TREINO X", "Outro aluno")  # não pode aparecer na lista da Ana
+    lista = json.loads(json.dumps(comentarios.listar_do_aluno(conn, 1)))  # o que o celular recebe
+    js = _node(f"""
+        import * as m from "{MODULO_DO_ALUNO}";
+        const lista = {json.dumps(lista)};
+        const lida = m.descreverMeusComentarios(200, lista);
+        console.log(JSON.stringify({{
+          lida,
+          aviso: m.textoDoAvisoDeResposta(lida.respostasNovas),
+          botao: m.textoDoBotaoMeusComentarios(lida.total, lida.respostasNovas, false),
+          lugares: lida.comentarios.map(m.textoDoLugar),
+          ids: m.idsDasRespostasNovas(lida.comentarios),
+        }}));
+    """)
+
+    assert js["lida"]["tipo"] == "ok"
+    assert js["lida"]["total"] == 2
+    assert js["lida"]["respostasNovas"] == 1
+    assert js["aviso"] == "Você tem 1 resposta nova do professor."
+    assert js["botao"] == "Ver seus comentários (2) · 1 resposta nova"
+    assert js["lugares"] == ["A PEITO · SUPINO RETO", "Treino inteiro"]  # a resposta nova vem primeiro; depois o mais novo
+    assert js["ids"] == [2]
+
+    resultado = comentarios.marcar_respostas_vistas(conn, 1, js["ids"])
+    assert resultado["respostas_novas"] == 0
+    depois = _node(f"""
+        import * as m from "{MODULO_DO_ALUNO}";
+        const corpo = {json.dumps({"ok": True, **resultado})};
+        console.log(JSON.stringify(m.descreverVistos(200, corpo)));
+    """)
+    assert depois == {"tipo": "ok", "respostasNovas": 0}
+    conn.close()

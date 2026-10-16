@@ -12,6 +12,7 @@ import {
   TEXTO_FICHA_FEITA_HOJE,
   TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
+  TEXTO_SEM_RESPOSTA,
   TEXTO_SEM_TREINO,
   chaveDoRascunho,
   comentarioPronto,
@@ -21,17 +22,24 @@ import {
   descreverComentario,
   dicaDoComentario,
   descreverMarcacao,
+  descreverMeusComentarios,
   descreverResposta,
+  descreverVistos,
   descreverTreino,
   estourouOLimite,
   fichaEscolhida,
   formatarCpf,
+  idsDasRespostasNovas,
   linhasDoExercicio,
   pedidoDoComentario,
   soNumeros,
+  textoDaNotaDaLista,
   textoDasDatas,
   textoDoAndamento,
+  textoDoAvisoDeResposta,
+  textoDoBotaoMeusComentarios,
   textoDoContador,
+  textoDoLugar,
   textoDoReenvio,
 } from "../app/static/aluno_modelo.js";
 
@@ -465,5 +473,117 @@ describe("dicaDoComentario (a frase cinza da caixa)", () => {
     expect(DICA_DO_COMENTARIO_DO_EXERCICIO).toContain("dor");
     expect(DICA_DO_COMENTARIO_DO_EXERCICIO).toContain("dúvida");
     expect(DICA_DO_COMENTARIO_DO_TREINO).toContain("do treino");
+  });
+});
+
+describe("descreverMeusComentarios", () => {
+  const lista = [{ id: 1, texto: "oi", resposta: null }];
+
+  it("200 com a lista traz o total, as respostas novas e os comentários", () => {
+    expect(descreverMeusComentarios(200, { total: 3, respostas_novas: 1, comentarios: lista })).toEqual({
+      tipo: "ok",
+      total: 3,
+      respostasNovas: 1,
+      comentarios: lista,
+    });
+  });
+
+  it("sem o número de respostas novas, conta como zero", () => {
+    expect(descreverMeusComentarios(200, { total: 0, comentarios: [] })).toEqual({
+      tipo: "ok",
+      total: 0,
+      respostasNovas: 0,
+      comentarios: [],
+    });
+  });
+
+  it("401 manda entrar de novo", () => {
+    expect(descreverMeusComentarios(401, { erro: "x" })).toEqual({ tipo: "entrar" });
+  });
+
+  it.each([
+    [500, null],
+    [500, { erro: "x" }],
+    [200, null],
+    [200, { total: 1 }],
+    [200, { comentarios: [] }],
+    [200, { total: "1", comentarios: [] }],
+    [200, { total: 1, comentarios: "x" }],
+  ])("qualquer outra coisa (%s, %j) é só erro: a tela segue sem a lista", (status, corpo) => {
+    expect(descreverMeusComentarios(status, corpo)).toEqual({ tipo: "erro" });
+  });
+});
+
+describe("os textos de 'Seus comentários'", () => {
+  it("o aviso usa singular e plural", () => {
+    expect(textoDoAvisoDeResposta(1)).toBe("Você tem 1 resposta nova do professor.");
+    expect(textoDoAvisoDeResposta(3)).toBe("Você tem 3 respostas novas do professor.");
+  });
+
+  it("o botão fechado mostra o total e as respostas novas", () => {
+    expect(textoDoBotaoMeusComentarios(4, 0, false)).toBe("Ver seus comentários (4)");
+    expect(textoDoBotaoMeusComentarios(4, 1, false)).toBe("Ver seus comentários (4) · 1 resposta nova");
+    expect(textoDoBotaoMeusComentarios(4, 2, false)).toBe("Ver seus comentários (4) · 2 respostas novas");
+  });
+
+  it("o botão aberto só diz para esconder (as respostas já foram vistas)", () => {
+    expect(textoDoBotaoMeusComentarios(4, 2, true)).toBe("Esconder seus comentários (4)");
+  });
+
+  it("o lugar do comentário: ficha e exercício, ou o treino inteiro", () => {
+    expect(textoDoLugar({ ficha: "A PEITO", exercicio: "SUPINO RETO" })).toBe("A PEITO · SUPINO RETO");
+    expect(textoDoLugar({ ficha: null, exercicio: null })).toBe("Treino inteiro");
+  });
+
+  it("a frase de 'sem resposta' fala do professor", () => {
+    expect(TEXTO_SEM_RESPOSTA).toContain("professor");
+  });
+});
+
+describe("idsDasRespostasNovas", () => {
+  it("pega só os comentários com resposta que o aluno ainda não viu", () => {
+    const comentarios = [
+      { id: 5, resposta: { por: "Thiago", texto: "a", nova: true } },
+      { id: 4, resposta: { por: "Thiago", texto: "b", nova: false } },
+      { id: 3, resposta: null },
+      { id: 2, resposta: { por: "Ana", texto: "c", nova: true } },
+    ];
+    expect(idsDasRespostasNovas(comentarios)).toEqual([5, 2]);
+  });
+
+  it("lista vazia ou sem respostas novas dá lista vazia", () => {
+    expect(idsDasRespostasNovas([])).toEqual([]);
+    expect(idsDasRespostasNovas([{ id: 1, resposta: null }])).toEqual([]);
+  });
+});
+
+describe("descreverVistos", () => {
+  it("200 com ok traz quantas respostas novas ainda faltam", () => {
+    expect(descreverVistos(200, { ok: true, marcados: 2, respostas_novas: 0 })).toEqual({ tipo: "ok", respostasNovas: 0 });
+  });
+
+  it("401 manda entrar de novo", () => {
+    expect(descreverVistos(401, null)).toEqual({ tipo: "entrar" });
+  });
+
+  it.each([
+    [500, null],
+    [200, null],
+    [200, { ok: false }],
+    [200, { ok: true }],
+    [200, { ok: true, respostas_novas: "0" }],
+  ])("qualquer outra coisa (%s, %j) é só erro", (status, corpo) => {
+    expect(descreverVistos(status, corpo)).toEqual({ tipo: "erro" });
+  });
+});
+
+describe("textoDaNotaDaLista", () => {
+  it("avisa quando a lista é mais curta que o total", () => {
+    expect(textoDaNotaDaLista(45, 30)).toBe("Mostrando só os 30 comentários mais novos.");
+  });
+
+  it("não diz nada quando a lista mostra tudo", () => {
+    expect(textoDaNotaDaLista(30, 30)).toBe("");
+    expect(textoDaNotaDaLista(0, 0)).toBe("");
   });
 });

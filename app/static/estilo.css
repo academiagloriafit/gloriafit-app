@@ -1041,6 +1041,23 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .painel-comentarios .aviso-campo:empty, .comentario-acoes .aviso-campo:empty { display: none; }
 .painel-comentarios > .aviso-campo { margin: 0 16px 12px; }
 
+/* a resposta do professor, dentro do comentário */
+.comentario-resposta {
+  margin-top: 4px;
+  padding: 8px 12px;
+  border-left: 3px solid #1f5a2b;
+  background: #f1f7f2;
+  border-radius: 0 8px 8px 0;
+}
+.comentario-resposta-cabecalho { font-size: 15px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.comentario-resposta-texto { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; }
+.comentario-responder:empty { display: none; }
+.comentario-form-resposta { display: flex; flex-direction: column; gap: 10px; max-width: 640px; }
+.comentario-form-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.comentario-contador { font-size: 14px; color: var(--texto-suave); text-align: right; }
+.comentario-contador-estouro { color: #7a0016; font-weight: 600; }
+.comentario-form-resposta .aviso-campo:empty { display: none; }
+
 /* ---- comentar no celular do aluno ---- */
 .meu-comentario { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
 .meu-comentario p { margin: 0; }
@@ -1081,3 +1098,18 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
 .meu-comentario-botoes .botao-link { flex: 1 1 120px; justify-content: center; }
 .meu-comentario-treino { padding-top: 4px; border-top: 1px solid var(--borda); }
 .meu-comentario-treino:empty { display: none; }
+
+/* ---- "Seus comentários" e as respostas do professor, no celular do aluno ---- */
+.meu-aviso-resposta { background: #f1f7f2; border-color: #1f5a2b; color: #1f5a2b; font-weight: 700; }
+.meu-aviso-resposta[hidden], .meu-comentarios-lista[hidden] { display: none; }
+.meu-comentarios-titulo { margin: 0; font-size: 20px; font-weight: 700; }
+.meu-comentarios-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.meu-c { display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid var(--borda); }
+.meu-c p { margin: 0; }
+.meu-c-lugar { font-size: 14px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.meu-c-texto, .meu-c-resposta-texto { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; }
+.meu-c-sem-resposta { font-size: 15px; color: var(--texto-suave); }
+.meu-c-resposta { padding: 8px 12px; border-left: 3px solid #1f5a2b; background: #f1f7f2; border-radius: 0 8px 8px 0; }
+.meu-c-resposta-cabecalho { font-size: 14px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.meu-c-nota { font-size: 14px; color: var(--texto-suave); text-align: center; }
+.meu-c-nova { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #1f5a2b; color: #ffffff; font-size: 13px; font-weight: 700; }

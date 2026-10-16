@@ -19,6 +19,7 @@
       <h1 id="titulo-inicio">Olá, {{ primeiro_nome }}!</h1>
       <p id="aviso-treino" class="texto-apoio" role="status">Buscando o seu treino…</p>
       <button id="botao-de-novo" class="botao-link botao-largo" type="button" hidden>Tentar de novo</button>
+      <button id="aviso-resposta-nova" class="botao-link botao-largo meu-aviso-resposta" type="button" hidden></button>
     </section>
 
     <section id="treino" class="painel painel-aluno" aria-labelledby="titulo-treino" hidden>
@@ -29,6 +30,12 @@
       <div id="fichas-botoes" class="meu-fichas-botoes" role="group" aria-label="Fichas do treino"></div>
       <div id="ficha-atual" class="meu-ficha-atual"></div>
       <div id="comentario-treino" class="meu-comentario-treino"></div>
+    </section>
+
+    <section id="meus-comentarios" class="painel painel-aluno" aria-labelledby="titulo-meus-comentarios" hidden>
+      <h2 id="titulo-meus-comentarios" class="meu-comentarios-titulo">Seus comentários</h2>
+      <button id="botao-meus-comentarios" class="botao-link botao-largo" type="button" aria-expanded="false" aria-controls="lista-meus-comentarios"></button>
+      <ul id="lista-meus-comentarios" class="meu-comentarios-lista" hidden></ul>
     </section>
 
     <section class="painel painel-aluno painel-sair">

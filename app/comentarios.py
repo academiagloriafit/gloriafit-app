@@ -1,8 +1,9 @@
 """Comentários do aluno sobre o treino (tela /aluno) e a leitura deles pelo professor.
 
-O aluno comenta o treino INTEIRO ou UM exercício (pedido do Thiago, 09/10/2026; entrega 1 de 2: o aluno escreve, o
-professor lê e marca como lido; a resposta do professor é a entrega 2). O aluno só comenta: não pede troca de treino por
-botão, quem decide trocar é sempre o professor.
+O aluno comenta o treino INTEIRO ou UM exercício (pedido do Thiago, 09/10/2026). Entrega 1: o aluno escreve, o professor
+lê e marca como lido. Entrega 2: o professor responde (uma resposta por comentário, com o nome que ele digita) e o aluno
+lê a resposta na lista "Seus comentários". O aluno só comenta: não pede troca de treino por botão, quem decide trocar é
+sempre o professor.
 
 Regras de segurança, porque o texto é livre e vem de fora:
 - O aluno vem do cookie (nunca do corpo do pedido) e só comenta o PRÓPRIO treino ativo.
@@ -19,7 +20,7 @@ import sqlite3
 import unicodedata
 from datetime import datetime, timedelta
 
-from app import aluno_treino
+from app import aluno_treino, treinos
 from app.datas import agora_utc, limites_do_dia, momento_local, momento_para_texto
 
 LIMITE_DO_TEXTO = 500
@@ -44,26 +45,33 @@ class ComentarioInvalido(Exception):
 # ------------------------------------------------------------------ o aluno comenta
 
 
-def _texto_limpo(texto: object) -> str:
-    """O texto sem as bordas em branco e com quebra de linha única, ou ComentarioInvalido."""
+def _texto_limpo(
+    texto: object,
+    vazio: str = "Escreva o seu comentário.",
+    longo: str = f"O comentário pode ter até {LIMITE_DO_TEXTO} letras.",
+) -> str:
+    """O texto sem as bordas em branco e com quebra de linha única, ou ComentarioInvalido (400).
+
+    Serve para o comentário do aluno e para a resposta do professor: as mesmas regras (e a mesma conta de letras).
+    """
     if not isinstance(texto, str):
-        raise ComentarioInvalido("Escreva o seu comentário.", 400)
+        raise ComentarioInvalido(vazio, 400)
     texto = texto.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not texto:
-        raise ComentarioInvalido("Escreva o seu comentário.", 400)
+        raise ComentarioInvalido(vazio, 400)
     if len(texto) > LIMITE_DO_TEXTO:
-        raise ComentarioInvalido(f"O comentário pode ter até {LIMITE_DO_TEXTO} letras.", 400)
+        raise ComentarioInvalido(longo, 400)
     tem_algo_visivel = False
     for letra in texto:
         categoria = unicodedata.category(letra)
         # "Cs" = metade solta de um par de letras (o SQLite não consegue gravar); "Cc" = controles como o byte nulo.
         if categoria == "Cs" or letra in _DIRECAO_DO_TEXTO or (categoria == "Cc" and letra not in _PERMITIDOS_DE_CONTROLE):
-            raise ComentarioInvalido("O comentário tem um caractere que não posso aceitar.", 400)
-        # "Cf" (formato) fica permitido: o emoji composto (família, bandeira) usa um. Mas só ele não é um comentário.
+            raise ComentarioInvalido("O texto tem um caractere que não posso aceitar.", 400)
+        # "Cf" (formato) fica permitido: o emoji composto (família, bandeira) usa um. Mas só ele não é um texto.
         if categoria != "Cf" and not letra.isspace():
             tem_algo_visivel = True
     if not tem_algo_visivel:
-        raise ComentarioInvalido("Escreva o seu comentário.", 400)
+        raise ComentarioInvalido(vazio, 400)
     return texto
 
 
@@ -163,7 +171,12 @@ def contar_nao_lidos(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM comentario WHERE lido_em IS NULL").fetchone()[0]
 
 
+def _quando(texto_utc: str) -> str:
+    return momento_local(texto_utc).strftime("%d/%m/%Y %H:%M")
+
+
 def _para_exibir(linha: sqlite3.Row) -> dict:
+    respondido = linha["resposta"] is not None
     return {
         "id": linha["id"],
         "aluno_id": linha["aluno_id"],
@@ -172,8 +185,12 @@ def _para_exibir(linha: sqlite3.Row) -> dict:
         "ficha": linha["ficha_nome"],  # None = comentário do treino inteiro
         "exercicio": linha["exercicio_nome"],  # None = comentário do treino inteiro
         "texto": linha["texto"],
-        "quando": momento_local(linha["criado_em"]).strftime("%d/%m/%Y %H:%M"),
+        "quando": _quando(linha["criado_em"]),
         "lido": linha["lido_em"] is not None,
+        "resposta": linha["resposta"],  # None = ainda sem resposta
+        "respondido_por": linha["respondido_por"],
+        "respondido_quando": _quando(linha["respondido_em"]) if respondido else None,
+        "resposta_vista": linha["resposta_vista_em"] is not None,  # o aluno já abriu a resposta
     }
 
 
@@ -196,7 +213,7 @@ def listar(
     linhas = conn.execute(
         f"""
         SELECT c.id, c.aluno_id, a.nome AS aluno_nome, c.treino_nome, c.ficha_nome, c.exercicio_nome,
-               c.texto, c.criado_em, c.lido_em
+               c.texto, c.criado_em, c.lido_em, c.resposta, c.respondido_por, c.respondido_em, c.resposta_vista_em
         FROM comentario c JOIN aluno a ON a.id = c.aluno_id
         {onde}
         ORDER BY c.criado_em DESC, c.id DESC
@@ -230,6 +247,17 @@ def marcar_lido(conn: sqlite3.Connection, comentario_id: int, agora: datetime | 
     return True
 
 
+def _ids_validos(ids: object) -> list[int]:
+    """A lista de ids que a tela mostrava (de 1 a LIMITE_DA_LISTA números inteiros válidos), ou ComentarioInvalido (400)."""
+    if (
+        not isinstance(ids, list)
+        or not 1 <= len(ids) <= LIMITE_DA_LISTA
+        or not all(isinstance(i, int) and not isinstance(i, bool) and 1 <= i <= _MAIOR_ID for i in ids)
+    ):
+        raise ComentarioInvalido("Pedido inválido. Atualize a página.", 400)
+    return ids
+
+
 def marcar_lidos_do_aluno(conn: sqlite3.Connection, aluno_id: int, ids: object, agora: datetime | None = None) -> int:
     """O professor marcou como lidos os comentários `ids` deste aluno (botão da ficha). Devolve quantos mudaram.
 
@@ -237,12 +265,7 @@ def marcar_lidos_do_aluno(conn: sqlite3.Connection, aluno_id: int, ids: object, 
     mandou depois de a ficha abrir, ou um antigo que a ficha não mostra (ela mostra só os mais novos), ficaria marcado como
     lido sem ninguém ter lido. Um id de outro aluno ou que não existe é ignorado.
     """
-    if (
-        not isinstance(ids, list)
-        or not 1 <= len(ids) <= LIMITE_DA_LISTA
-        or not all(isinstance(i, int) and not isinstance(i, bool) and 1 <= i <= _MAIOR_ID for i in ids)
-    ):
-        raise ComentarioInvalido("Pedido inválido. Atualize a página.", 400)
+    ids = _ids_validos(ids)
     agora = agora or agora_utc()
     marcadores = ",".join("?" * len(ids))  # só "?" separados por vírgula; os números vão como parâmetro
     with conn:
@@ -250,3 +273,117 @@ def marcar_lidos_do_aluno(conn: sqlite3.Connection, aluno_id: int, ids: object, 
             f"UPDATE comentario SET lido_em = ? WHERE aluno_id = ? AND lido_em IS NULL AND id IN ({marcadores})",
             [momento_para_texto(agora), aluno_id, *ids],
         ).rowcount
+
+
+# ------------------------------------------------------------------ o professor responde
+
+
+def responder(
+    conn: sqlite3.Connection, comentario_id: int, professor: object, resposta: object, agora: datetime | None = None
+) -> dict:
+    """O professor responde um comentário. Devolve {"respondido_por", "respondido_quando"}.
+
+    Uma resposta por comentário e ela não muda depois (se o aluno quiser dizer mais, comenta de novo). O nome do professor
+    é digitado, como no campo "Professor" ao lançar treino: o app não tem login por professor. Responder também marca o
+    comentário como lido. ComentarioInvalido: 400 nome ou texto inválido, 404 o comentário não existe, 409 já respondido.
+    """
+    problemas: list[str] = []
+    nome = treinos.validar_texto(professor, "O nome do professor", treinos.LIMITE_QUEM_MONTOU, True, problemas)
+    if problemas:
+        raise ComentarioInvalido(problemas[0], 400)
+    texto = _texto_limpo(
+        resposta, "Escreva a resposta.", f"A resposta pode ter até {LIMITE_DO_TEXTO} letras."
+    )
+    agora = agora or agora_utc()
+    momento = momento_para_texto(agora)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        linha = conn.execute("SELECT resposta FROM comentario WHERE id = ?", (comentario_id,)).fetchone()
+        if linha is None:
+            raise ComentarioInvalido("Comentário não encontrado.", 404)
+        if linha["resposta"] is not None:
+            raise ComentarioInvalido("Este comentário já foi respondido. Atualize a página para ver a resposta (se a sua tinha dado erro de internet, ela pode ter sido salva).", 409)
+        conn.execute(
+            """
+            UPDATE comentario
+            SET resposta = ?, respondido_por = ?, respondido_em = ?, lido_em = COALESCE(lido_em, ?)
+            WHERE id = ?
+            """,
+            (texto, nome, momento, momento, comentario_id),
+        )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    return {"respondido_por": nome, "respondido_quando": _quando(momento)}
+
+
+# ------------------------------------------------------------------ o aluno lê as respostas
+
+
+def listar_do_aluno(conn: sqlite3.Connection, aluno_id: int, limite: int = 30) -> dict:
+    """Os comentários do PRÓPRIO aluno com as respostas: {"total", "respostas_novas", "comentarios": [...]}.
+
+    As respostas que ele ainda não viu vêm primeiro (nunca ficam de fora por serem antigas); depois, os mais novos.
+    `respostas_novas` conta todas as não vistas, mesmo as que não cabem na lista.
+    """
+    total, respostas_novas = conn.execute(
+        """
+        SELECT COUNT(*), COALESCE(SUM(resposta IS NOT NULL AND resposta_vista_em IS NULL), 0)
+        FROM comentario WHERE aluno_id = ?
+        """,
+        (aluno_id,),
+    ).fetchone()
+    linhas = conn.execute(
+        """
+        SELECT id, treino_nome, ficha_nome, exercicio_nome, texto, criado_em,
+               resposta, respondido_por, respondido_em, resposta_vista_em
+        FROM comentario
+        WHERE aluno_id = ?
+        ORDER BY (resposta IS NOT NULL AND resposta_vista_em IS NULL) DESC, criado_em DESC, id DESC
+        LIMIT ?
+        """,
+        (aluno_id, min(limite, LIMITE_DA_LISTA)),
+    ).fetchall()
+    comentarios = []
+    for linha in linhas:
+        resposta = None
+        if linha["resposta"] is not None:
+            resposta = {
+                "por": linha["respondido_por"],
+                "quando": _quando(linha["respondido_em"]),
+                "texto": linha["resposta"],
+                "nova": linha["resposta_vista_em"] is None,
+            }
+        comentarios.append(
+            {
+                "id": linha["id"],
+                "treino": linha["treino_nome"],
+                "ficha": linha["ficha_nome"],  # None = comentário do treino inteiro
+                "exercicio": linha["exercicio_nome"],
+                "texto": linha["texto"],
+                "quando": _quando(linha["criado_em"]),
+                "resposta": resposta,
+            }
+        )
+    return {"total": total, "respostas_novas": respostas_novas, "comentarios": comentarios}
+
+
+def marcar_respostas_vistas(conn: sqlite3.Connection, aluno_id: int, ids: object, agora: datetime | None = None) -> dict:
+    """O aluno abriu as respostas `ids` (as que a tela mostrava). Só vale para respostas dele. {"marcados", "respostas_novas"}."""
+    ids = _ids_validos(ids)
+    agora = agora or agora_utc()
+    marcadores = ",".join("?" * len(ids))  # só "?" separados por vírgula; os números vão como parâmetro
+    with conn:
+        marcados = conn.execute(
+            f"""
+            UPDATE comentario SET resposta_vista_em = ?
+            WHERE aluno_id = ? AND resposta IS NOT NULL AND resposta_vista_em IS NULL AND id IN ({marcadores})
+            """,
+            [momento_para_texto(agora), aluno_id, *ids],
+        ).rowcount
+    restantes = conn.execute(
+        "SELECT COUNT(*) FROM comentario WHERE aluno_id = ? AND resposta IS NOT NULL AND resposta_vista_em IS NULL",
+        (aluno_id,),
+    ).fetchone()[0]
+    return {"marcados": marcados, "respostas_novas": restantes}

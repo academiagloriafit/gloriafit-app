@@ -203,3 +203,60 @@ export function descreverComentario(status, corpo) {
       : `Não consegui enviar (código ${status}). Tente de novo em instantes.`;
   return { tipo: status === 409 ? "atualizar" : "erro", mensagem };
 }
+
+// ------------------------------------------------------------------ "Seus comentários" e as respostas do professor
+
+export const TEXTO_SEM_RESPOSTA = "Ainda sem resposta do professor.";
+
+// Resposta de GET /api/aluno/comentarios ({ status, corpo }) -> o que a tela faz:
+//   { tipo: "entrar" }                                          sessão perdida
+//   { tipo: "ok", total, respostasNovas, comentarios }          mostrar a lista
+//   { tipo: "erro" }                                            qualquer outra coisa (a lista é um extra: a tela segue sem ela)
+export function descreverMeusComentarios(status, corpo) {
+  if (status === 401) return { tipo: "entrar" };
+  if (status === 200 && corpo && Array.isArray(corpo.comentarios) && Number.isInteger(corpo.total)) {
+    return {
+      tipo: "ok",
+      total: corpo.total,
+      respostasNovas: Number.isInteger(corpo.respostas_novas) ? corpo.respostas_novas : 0,
+      comentarios: corpo.comentarios,
+    };
+  }
+  return { tipo: "erro" };
+}
+
+// "Você tem 1 resposta nova do professor." / "Você tem 3 respostas novas do professor."
+export function textoDoAvisoDeResposta(quantas) {
+  return quantas === 1 ? "Você tem 1 resposta nova do professor." : `Você tem ${quantas} respostas novas do professor.`;
+}
+
+// O botão que abre e fecha a lista: "Ver seus comentários (3)", com as respostas novas quando há.
+export function textoDoBotaoMeusComentarios(total, respostasNovas, aberta) {
+  const base = `${aberta ? "Esconder" : "Ver"} seus comentários (${total})`;
+  if (!aberta && respostasNovas > 0) return `${base} · ${respostasNovas === 1 ? "1 resposta nova" : `${respostasNovas} respostas novas`}`;
+  return base;
+}
+
+// Embaixo da lista, quando ela é mais curta que o total (o servidor manda só os mais novos): "Mostrando só os 30 comentários mais novos."
+export function textoDaNotaDaLista(total, mostrados) {
+  return mostrados < total ? `Mostrando só os ${mostrados} comentários mais novos.` : "";
+}
+
+// "A PEITO · SUPINO RETO" ou, no comentário do treino inteiro, "Treino inteiro".
+export function textoDoLugar(comentario) {
+  return comentario.exercicio ? `${comentario.ficha} · ${comentario.exercicio}` : "Treino inteiro";
+}
+
+// Os ids das respostas que o aluno ainda não tinha visto (os que se mandam ao servidor ao abrir a lista).
+export function idsDasRespostasNovas(comentarios) {
+  return comentarios.filter((c) => c.resposta && c.resposta.nova === true).map((c) => c.id);
+}
+
+// Resposta do servidor ao marcar como vistas ({ status, corpo }) -> { tipo: "entrar" } | { tipo: "ok", respostasNovas } | { tipo: "erro" }.
+export function descreverVistos(status, corpo) {
+  if (status === 401) return { tipo: "entrar" };
+  if (status === 200 && corpo && corpo.ok === true && Number.isInteger(corpo.respostas_novas)) {
+    return { tipo: "ok", respostasNovas: corpo.respostas_novas };
+  }
+  return { tipo: "erro" };
+}

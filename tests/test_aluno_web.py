@@ -134,7 +134,7 @@ def test_aluno_sem_login_que_abre_a_tela_inicial_vai_para_a_de_entrar(cliente):
 
 
 def test_os_arquivos_das_telas_do_aluno_abrem_sem_autorizacao(cliente):
-    for arquivo in ("aluno_entrar.js", "aluno_inicio.js", "aluno_modelo.js", "estilo.css"):
+    for arquivo in ("aluno_entrar.js", "aluno_inicio.js", "aluno_modelo.js", "aluno_comentarios.js", "estilo.css"):
         assert cliente.get(f"/static/{arquivo}").status_code == 200
 
 
@@ -509,7 +509,7 @@ def test_as_rotas_do_aluno_estao_na_lista_de_publicas_e_so_elas(app):
     rotas_do_aluno = {e for e in rotas_do_aluno if e.startswith(("pagina_aluno_", "api_aluno_"))}
 
     assert rotas_do_aluno == {e for e in ENDPOINTS_PUBLICOS if e.startswith(("pagina_aluno_", "api_aluno_"))}
-    assert len(rotas_do_aluno) == 10
+    assert len(rotas_do_aluno) == 12
 
 
 def test_nenhuma_resposta_do_aluno_mostra_cpf_hash_ou_token(cliente, remetente, caminho):
@@ -522,3 +522,22 @@ def test_nenhuma_resposta_do_aluno_mostra_cpf_hash_ou_token(cliente, remetente, 
     texto = "".join(r.get_data(as_text=True) for r in respostas)
 
     assert CPF_ANA not in texto and "scrypt" not in texto and _cookie(cliente) not in texto
+
+
+def test_a_tela_do_aluno_tem_os_elementos_que_o_javascript_dos_comentarios_procura(cliente, caminho):
+    """Se um id sumir do HTML, o JavaScript da lista quebra ao abrir e leva junto a tela do treino (o import é estático)."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parent.parent / "app" / "static" / "aluno_comentarios.js").read_text(encoding="utf-8")
+    ids = set(re.findall(r'getElementById\("([^"]+)"\)', js))
+    assert ids == {"meus-comentarios", "aviso-resposta-nova", "botao-meus-comentarios", "lista-meus-comentarios"}
+    conn = conectar(caminho)
+    with conn:
+        token = aluno_acesso._criar_sessao(conn, 1, datetime.now(timezone.utc))
+    conn.close()
+    cliente.set_cookie(aluno_acesso.NOME_DO_COOKIE, token)
+
+    html = cliente.get("/aluno").get_data(as_text=True)
+
+    for id_ in ids:
+        assert f'id="{id_}"' in html

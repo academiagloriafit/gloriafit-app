@@ -1,6 +1,7 @@
 // Tela /aluno: o treino do aluno (fichas e exercícios) e o botão Sair.
 // Texto sempre via textContent (o helper `el`): nada que vem do banco é interpretado como HTML.
 import { buscarJson, enviarJson } from "./api.js";
+import { atualizarMeusComentarios } from "./aluno_comentarios.js";
 import { el } from "./dom.js";
 import {
   MENSAGEM_SEM_REDE,
@@ -99,6 +100,7 @@ function desenharComentario(treino, ficha = null, exercicio = null) {
     }
     estado.enviando = false;
     estado.redesenhar(estado.aberto ? "" : "botao");
+    if (!estado.aberto) atualizarMeusComentarios(); // o comentário novo entra na lista "Seus comentários"
   }
 
   function montar() {
@@ -348,3 +350,4 @@ botaoSair.addEventListener("click", async () => {
 });
 
 carregarTreino();
+atualizarMeusComentarios();
