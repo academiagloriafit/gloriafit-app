@@ -33,6 +33,7 @@ import {
   linhasDoExercicio,
   pedidoDoComentario,
   soNumeros,
+  temDose,
   textoDaNotaDaLista,
   textoDasDatas,
   textoDoAndamento,
@@ -236,6 +237,28 @@ describe("textoDasDatas", () => {
     expect(textoDasDatas({ inicio: "06/10/2026", fim: null })).toBe("Início 06/10/2026");
     expect(textoDasDatas({ inicio: null, fim: "06/11/2026" })).toBe("Fim 06/11/2026");
     expect(textoDasDatas({ inicio: null, fim: null })).toBe("");
+  });
+});
+
+describe("temDose", () => {
+  it("é verdadeiro com séries × repetições, com carga, ou com os dois", () => {
+    expect(temDose({ dose: "4 × 12", carga: "" })).toBe(true);
+    expect(temDose({ dose: "", carga: "20 kg" })).toBe(true);
+    expect(temDose({ dose: "4 × 12", carga: "20 kg" })).toBe(true);
+  });
+
+  it("é falso quando só há intervalo ou observação (um cardio, por exemplo)", () => {
+    expect(temDose({ dose: "", carga: "", intervalo: "1 min", observacao: "15 minutos" })).toBe(false);
+    expect(temDose({ dose: "  ", carga: null })).toBe(false);
+    expect(temDose({})).toBe(false);
+  });
+
+  it("concorda com a primeira linha de linhasDoExercicio", () => {
+    const comDose = { dose: "3 × 15", carga: "", intervalo: "", observacao: "Devagar" };
+    const semDose = { dose: "", carga: "", intervalo: "", observacao: "Devagar" };
+    expect(temDose(comDose) && linhasDoExercicio(comDose)[0]).toBe("3 × 15");
+    expect(temDose(semDose)).toBe(false);
+    expect(linhasDoExercicio(semDose)[0]).toBe("Obs.: Devagar");
   });
 });
 

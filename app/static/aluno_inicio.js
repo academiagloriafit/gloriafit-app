@@ -21,6 +21,7 @@ import {
   fichaEscolhida,
   linhasDoExercicio,
   pedidoDoComentario,
+  temDose,
   textoDasDatas,
   textoDoAndamento,
   textoDoContador,
@@ -184,7 +185,9 @@ function desenharExercicio(exercicio, treino, ficha) {
       "div",
       { classe: "meu-exercicio-corpo" },
       el("p", { classe: "meu-exercicio-nome", texto: exercicio.exercicio }),
-      linhasDoExercicio(exercicio).map((linha) => el("p", { classe: "meu-exercicio-detalhe", texto: linha })),
+      linhasDoExercicio(exercicio).map((linha, posicao) =>
+        el("p", { classe: posicao === 0 && temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: linha }),
+      ),
       desenharComentario(treino, ficha, exercicio),
     ),
   );

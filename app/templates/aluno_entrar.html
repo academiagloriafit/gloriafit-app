@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Entrar · Glória Fit</title>
+  <link rel="preload" href="{{ url_for('static', filename='fontes/archivo-latin-wdth-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
 </head>
 <body>
   {# Tela do CELULAR do aluno. Sem o menu do professor: o aluno não vê nada da área da academia. #}
   <header class="topo">
     <div class="topo-conteudo">
-      <div class="marca">GLÓRIA <span>FIT</span></div>
+      <div class="marca"><img src="{{ url_for('static', filename='marca/logo-gloria-fit.png') }}" alt="" width="36" height="36"><span>Glória Fit</span></div>
     </div>
   </header>
 

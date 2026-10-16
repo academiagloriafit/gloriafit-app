@@ -88,10 +88,20 @@ export function textoDasDatas(treino) {
   return partes.join(" · ");
 }
 
+function partesDaDose(exercicio) {
+  return [exercicio.dose, exercicio.carga].filter((parte) => parte && String(parte).trim());
+}
+
+// O exercício tem séries × repetições e/ou carga? Se tem, essa é a PRIMEIRA linha de `linhasDoExercicio`
+// (a tela a desenha em letra grande); sem isso (um cardio só com observação), a primeira linha é outra coisa.
+export function temDose(exercicio) {
+  return partesDaDose(exercicio).length > 0;
+}
+
 // "4 × 12 · 20 kg · Intervalo: 1 min 30 s" (só o que existe) -> lista de linhas curtas do exercício.
 export function linhasDoExercicio(exercicio) {
   const linhas = [];
-  const dose = [exercicio.dose, exercicio.carga].filter((parte) => parte && String(parte).trim());
+  const dose = partesDaDose(exercicio);
   if (dose.length) linhas.push(dose.join(" · "));
   if (exercicio.intervalo) linhas.push(`Intervalo: ${exercicio.intervalo}`);
   if (exercicio.observacao) linhas.push(`Obs.: ${exercicio.observacao}`);
