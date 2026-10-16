@@ -15,6 +15,7 @@ import {
   descreverComentario,
   descreverMarcacao,
   descreverTreino,
+  dicaDoComentario,
   estourouOLimite,
   fichaEscolhida,
   linhasDoExercicio,
@@ -136,6 +137,7 @@ function desenharComentario(treino, ficha = null, exercicio = null) {
       id: idDaCaixa,
       classe: "meu-comentario-caixa",
       rows: "4",
+      placeholder: dicaDoComentario(Boolean(exercicio)),
       aoDigitar: (evento) => {
         estado.texto = evento.currentTarget.value;
         atualizarContador();

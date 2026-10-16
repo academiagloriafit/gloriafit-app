@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DICA_DO_COMENTARIO_DO_EXERCICIO,
+  DICA_DO_COMENTARIO_DO_TREINO,
   LIMITE_DO_COMENTARIO,
   MENSAGEM_SEM_REDE,
   MINIMO_DA_SENHA,
@@ -17,6 +19,7 @@ import {
   conferirCpf,
   conferirSenhaNova,
   descreverComentario,
+  dicaDoComentario,
   descreverMarcacao,
   descreverResposta,
   descreverTreino,
@@ -444,5 +447,23 @@ describe("estourouOLimite", () => {
     expect(estourouOLimite(undefined)).toBe(false);
     expect(estourouOLimite(null)).toBe(false);
     expect(estourouOLimite(42)).toBe(false);
+  });
+});
+
+describe("dicaDoComentario (a frase cinza da caixa)", () => {
+  it("cada caixa tem a sua frase", () => {
+    expect(dicaDoComentario(true)).toBe(DICA_DO_COMENTARIO_DO_EXERCICIO);
+    expect(dicaDoComentario(false)).toBe(DICA_DO_COMENTARIO_DO_TREINO);
+    expect(DICA_DO_COMENTARIO_DO_EXERCICIO).not.toBe(DICA_DO_COMENTARIO_DO_TREINO);
+  });
+
+  it("diz que é para o professor e dá exemplos do que contar", () => {
+    for (const dica of [DICA_DO_COMENTARIO_DO_EXERCICIO, DICA_DO_COMENTARIO_DO_TREINO]) {
+      expect(dica).toContain("Conte ao professor");
+      expect(dica.length).toBeLessThan(80); // a caixa do exercício é estreita: precisa caber em umas 3 linhas
+    }
+    expect(DICA_DO_COMENTARIO_DO_EXERCICIO).toContain("dor");
+    expect(DICA_DO_COMENTARIO_DO_EXERCICIO).toContain("dúvida");
+    expect(DICA_DO_COMENTARIO_DO_TREINO).toContain("do treino");
   });
 });

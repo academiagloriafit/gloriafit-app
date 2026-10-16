@@ -1073,6 +1073,8 @@ a.botao-link:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px
   line-height: 1.4;
   resize: vertical;
 }
+/* A dica cinza: mais clara que o texto digitado (para não parecer que já está escrito), mas com contraste bom (AA). */
+.meu-comentario-caixa::placeholder { color: #6b6a63; opacity: 1; }
 .meu-comentario-contador { font-size: 14px; color: var(--texto-suave); text-align: right; }
 .meu-comentario-contador-estouro { color: #7a0016; font-weight: 600; }
 .meu-comentario-botoes { display: flex; flex-wrap: wrap; gap: 8px; }

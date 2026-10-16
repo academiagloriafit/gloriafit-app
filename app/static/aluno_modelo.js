@@ -136,6 +136,16 @@ export const TEXTO_COMENTARIO_VAZIO = "Escreva o seu comentário.";
 export const TEXTO_COMENTARIO_ENVIADO = "Comentário enviado. O professor vai ler.";
 export const TEXTO_COMENTARIO_REPETIDO = "Este comentário já tinha sido enviado.";
 
+// A frase cinza dentro da caixa (some quando o aluno começa a escrever): diz para que serve o comentário e dá exemplos
+// do que contar, porque o aluno não sabe de antemão o que o professor quer ler.
+// Curtas de propósito: a caixa do exercício é estreita no celular e só cabem umas 3 linhas.
+export const DICA_DO_COMENTARIO_DO_EXERCICIO = "Conte ao professor o que achou: leve, pesado, dor ou dúvida.";
+export const DICA_DO_COMENTARIO_DO_TREINO = "Conte ao professor o que achou do treino: fácil, difícil, alguma dúvida.";
+
+export function dicaDoComentario(deExercicio) {
+  return deExercicio ? DICA_DO_COMENTARIO_DO_EXERCICIO : DICA_DO_COMENTARIO_DO_TREINO;
+}
+
 // Conta letras como o servidor (Python): um emoji vale 1, não 2 como no `.length` do JavaScript.
 function contarLetras(texto) {
   return [...texto].length;
