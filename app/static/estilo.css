@@ -39,6 +39,32 @@
   --alerta-fundo: #fdeee8;
   --alerta-texto: #8a2a08;
   --foco: #f25420;
+  --texto: var(--tinta);
+  --realce: #f7f8f8;           /* linha sob o mouse, blocos de apoio */
+  --campo: #f3f4f5;            /* fundo dos campos de séries/repetições/peso */
+  --cinza-leve: #eceef0;
+  --bloco: #f4f5f6;
+  --laranja-leve: #fffaf7;
+  --laranja-leve-forte: #fff3ec;
+  --verde-leve: #f4faf5;
+  --verde-fundo-forte: #dcecdf;
+  --verde-ponto: #2f9e4f;
+  --desativado: #b9bcc0;
+  --contorno-forte: var(--tinta);
+  --contorno-suave: #c4c7cb;
+  --placeholder: #70747a;
+  --numeral: #a3a7ac;
+  --erro-borda: #e6b3b3;
+  --ativo-fundo: var(--tinta); /* chip ou botão "ligado" (grupo marcado, ficha aberta, Salvar escuro) */
+  --ativo-texto: #ffffff;
+  --ativo-hover: var(--grafite);
+  --sobre-laranja: var(--tinta);
+  --topo-fundo: var(--tinta);
+  --topo-texto: #f4f4f5;
+  --topo-suave: #a9adb2;
+  --topo-menu: #b4b8bd;
+  --topo-menu-ativo: #ffffff;
+  --topo-borda: 0;
 
   --fonte: "Archivo Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* Títulos: a mesma fonte, mais estreita e pesada (como os cartazes da academia) */
@@ -55,7 +81,7 @@
 body {
   margin: 0;
   background: var(--fundo);
-  color: var(--tinta);
+  color: var(--texto);
   font-family: var(--fonte);
   font-size: 16px;
   line-height: 1.45;
@@ -81,7 +107,7 @@ a:not([class]) { color: var(--laranja-texto); text-underline-offset: 3px; }
 a:not([class]):hover { color: var(--alerta-texto); }
 
 /* ---- topo ---- */
-.topo { background: var(--tinta); color: #f4f4f5; }
+.topo { background: var(--topo-fundo); color: var(--topo-texto); border-bottom: var(--topo-borda); }
 .topo-conteudo {
   max-width: 1280px;
   margin: 0 auto;
@@ -106,7 +132,7 @@ a:not([class]):hover { color: var(--alerta-texto); }
   line-height: 1;
 }
 .marca img { display: block; width: 36px; height: 36px; border-radius: 50%; }
-.topo-nota { font-size: 14px; color: #a9adb2; }
+.topo-nota { font-size: 14px; color: var(--topo-suave); }
 
 /* ---- página ---- */
 .pagina { max-width: 1280px; margin: 0 auto; padding: 28px 32px 48px; }
@@ -133,11 +159,11 @@ a:not([class]):hover { color: var(--alerta-texto); }
   padding: 0 14px;
   font: inherit;
   font-size: 18px;
-  color: var(--tinta);
+  color: var(--texto);
   background: var(--papel);
 }
-.campo input:hover { border-color: var(--tinta); }
-.campo input::placeholder { color: #70747a; }
+.campo input:hover { border-color: var(--contorno-forte); }
+.campo input::placeholder { color: var(--placeholder); }
 
 /* ---- botões de grupo muscular ---- */
 .grupos { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -147,17 +173,17 @@ a:not([class]):hover { color: var(--alerta-texto); }
   border: 1px solid var(--contorno);
   border-radius: 999px;
   background: var(--papel);
-  color: var(--tinta);
+  color: var(--texto);
   font: inherit;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
 }
-.grupo:hover { border-color: var(--tinta); }
+.grupo:hover { border-color: var(--contorno-forte); }
 .grupo[aria-pressed="true"] {
-  background: var(--tinta);
-  border-color: var(--tinta);
-  color: #ffffff;
+  background: var(--ativo-fundo);
+  border-color: var(--ativo-fundo);
+  color: var(--ativo-texto);
 }
 
 /* ---- resultados ---- */
@@ -209,21 +235,21 @@ button { font-family: inherit; }
   padding: 0 16px;
   border: 1px solid var(--contorno);
   background: var(--papel);
-  color: var(--tinta);
+  color: var(--texto);
   font-size: 15px;
 }
-.botao-adicionar:hover, .botao-discreto:hover, .botao-icone:hover:not(:disabled) { border-color: var(--tinta); background: var(--fundo); }
+.botao-adicionar:hover, .botao-discreto:hover, .botao-icone:hover:not(:disabled) { border-color: var(--contorno-forte); background: var(--fundo); }
 .botao-escuro, .botao-principal {
   min-height: 44px;
   padding: 0 18px;
   border: 0;
-  background: var(--tinta);
-  color: #ffffff;
+  background: var(--ativo-fundo);
+  color: var(--ativo-texto);
   font-size: 15px;
 }
-.botao-escuro:hover:not(:disabled) { background: var(--grafite); }
-.botao-escuro:disabled { background: #b9bcc0; cursor: not-allowed; }
-.botao-principal { min-height: 52px; padding: 0 28px; font-size: 17px; background: var(--laranja); color: var(--tinta); }
+.botao-escuro:hover:not(:disabled) { background: var(--ativo-hover); }
+.botao-escuro:disabled { background: var(--desativado); cursor: not-allowed; }
+.botao-principal { min-height: 52px; padding: 0 28px; font-size: 17px; background: var(--laranja); color: var(--sobre-laranja); }
 .botao-principal:hover:not(:disabled) { background: #ff6a38; }
 .botao-perigo { min-height: 44px; padding: 0 16px; border: 0; background: var(--alerta-texto); color: #ffffff; font-size: 15px; }
 .botao-discreto {
@@ -231,7 +257,7 @@ button { font-family: inherit; }
   padding: 0 14px;
   border: 1px solid var(--contorno);
   background: var(--papel);
-  color: var(--tinta);
+  color: var(--texto);
   font-size: 14px;
   font-weight: 600;
 }
@@ -240,11 +266,11 @@ button { font-family: inherit; }
   height: 44px;
   border: 1px solid var(--contorno);
   background: var(--papel);
-  color: var(--tinta);
+  color: var(--texto);
   font-size: 18px;
   line-height: 1;
 }
-.botao-icone:disabled { color: #b9bcc0; border-color: var(--linha); cursor: not-allowed; }
+.botao-icone:disabled { color: var(--desativado); border-color: var(--linha); cursor: not-allowed; }
 .botao-icone { width: 34px; height: 34px; font-size: 15px; }
 .botao-texto {
   min-height: 36px;
@@ -256,7 +282,7 @@ button { font-family: inherit; }
   font-size: 14px;
   font-weight: 600;
   text-decoration: underline;
-  text-decoration-color: #c4c7cb;
+  text-decoration-color: var(--contorno-suave);
   text-underline-offset: 4px;
   cursor: pointer;
 }
@@ -313,9 +339,9 @@ button { font-family: inherit; }
   font-weight: 600;
   cursor: pointer;
 }
-.aba:hover { color: var(--tinta); }
+.aba:hover { color: var(--texto); }
 .aba-ativa, .aba-ativa:hover {
-  color: var(--tinta);
+  color: var(--texto);
   font-weight: 750;
   border-bottom-color: var(--laranja);
 }
@@ -373,9 +399,9 @@ button { font-family: inherit; }
 .linha { padding: 8px 12px; border-top: 1px solid var(--linha); background: var(--papel); }
 .titulos-colunas + .linhas > .linha:first-child { border-top: 0; }
 /* exercício dentro de um bi-set: um fio laranja à esquerda junta os dois */
-.linha-bloco { background: #fffaf7; box-shadow: inset 3px 0 0 var(--laranja); }
+.linha-bloco { background: var(--laranja-leve); box-shadow: inset 3px 0 0 var(--laranja); }
 .celula-marcar, .celula-vazia { width: 32px; height: 38px; flex: none; display: flex; align-items: center; justify-content: center; }
-.celula-marcar input { width: 18px; height: 18px; accent-color: var(--tinta); }
+.celula-marcar input { width: 18px; height: 18px; accent-color: var(--ativo-fundo); }
 .etiqueta {
   flex: none;
   width: 34px;
@@ -387,7 +413,7 @@ button { font-family: inherit; }
   font-weight: 800;
   font-size: 22px;
   line-height: 1;
-  color: #8f9398;
+  color: var(--numeral);
   font-variant-numeric: tabular-nums;
 }
 .linha-bloco .etiqueta { color: var(--laranja-texto); }
@@ -405,12 +431,12 @@ button { font-family: inherit; }
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: center;
-  background: #f3f4f5;
-  color: var(--tinta);
+  background: var(--campo);
+  color: var(--texto);
 }
-.campo-prescricao:hover { background: #eceef0; }
+.campo-prescricao:hover { background: var(--cinza-leve); }
 .campo-prescricao:focus { background: var(--papel); border-bottom-color: var(--laranja); }
-.campo-prescricao::placeholder { color: #8f9398; font-weight: 400; }
+.campo-prescricao::placeholder { color: var(--placeholder); font-weight: 400; }
 .campo-prescricao[aria-invalid="true"], .campo input[aria-invalid="true"] { border-color: var(--erro); background: var(--erro-fundo); }
 .celula-acoes { display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
 .celula-intervalo { display: flex; align-items: center; gap: 4px; }
@@ -429,16 +455,16 @@ button { font-family: inherit; }
   font: inherit;
   font-size: 14.5px;
   background: transparent;
-  color: var(--tinta);
+  color: var(--texto);
 }
-.campo-observacao::placeholder { color: #8f9398; }
-.campo-observacao:hover { background: #f6f7f8; }
+.campo-observacao::placeholder { color: var(--placeholder); }
+.campo-observacao:hover { background: var(--realce); }
 .campo-observacao:focus { background: var(--papel); border-bottom: 1.5px solid var(--laranja); }
 .campo-observacao:not(:placeholder-shown) { border-bottom-color: var(--contorno); }
 .campo-observacao[aria-invalid="true"] { border-bottom-color: var(--erro); background: var(--erro-fundo); }
 
 .cabecalho-bloco {
-  background: #fffaf7;
+  background: var(--laranja-leve);
   box-shadow: inset 3px 0 0 var(--laranja);
   padding: 6px 14px 6px 15px;
   display: flex;
@@ -460,7 +486,7 @@ button { font-family: inherit; }
 .painel-biblioteca .grupos { gap: 6px; }
 .painel-biblioteca .grupo { min-height: 32px; padding: 0 12px; font-size: 13.5px; }
 .painel-biblioteca .lista { max-height: calc(100vh - 320px); min-height: 200px; overflow-y: auto; }
-.filtro-grupos { border: 1px solid var(--linha); border-radius: 8px; background: #f7f8f8; }
+.filtro-grupos { border: 1px solid var(--linha); border-radius: 8px; background: var(--realce); }
 .filtro-grupos summary { min-height: 40px; padding: 0 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14.5px; }
 .filtro-grupos .grupos { padding: 4px 12px 12px; }
 .painel-biblioteca .item { padding: 7px 2px; }
@@ -489,7 +515,7 @@ button { font-family: inherit; }
   padding: 10px 16px 10px 36px;
   border-radius: 8px;
   background: var(--erro-fundo);
-  border: 1px solid #e6b3b3;
+  border: 1px solid var(--erro-borda);
   color: var(--erro-texto);
   font-size: 14.5px;
 }
@@ -520,7 +546,7 @@ button { font-family: inherit; }
   padding: 10px 14px;
   border-radius: 6px;
   background: var(--verde-fundo);
-  color: #1b4d2a;
+  color: var(--verde);
   font-size: 15px;
   line-height: 1.4;
 }
@@ -575,15 +601,15 @@ button { font-family: inherit; }
   padding: 0 14px;
   display: flex;
   align-items: center;
-  color: #b4b8bd;
+  color: var(--topo-menu);
   font-size: 15px;
   font-weight: 500;
   text-decoration: none;
   border-bottom: 3px solid transparent;
   transition: color 0.12s;
 }
-.topo-menu a:hover { color: #ffffff; }
-.topo-menu a.ativo { color: #ffffff; font-weight: 650; border-bottom-color: var(--laranja); }
+.topo-menu a:hover { color: var(--topo-menu-ativo); }
+.topo-menu a.ativo { color: var(--topo-menu-ativo); font-weight: 650; border-bottom-color: var(--laranja); }
 
 /* ---- títulos e links de página ---- */
 .titulo-grande {
@@ -602,7 +628,7 @@ button { font-family: inherit; }
   font-weight: 600;
   text-decoration: none;
 }
-.voltar:hover { color: var(--tinta); text-decoration: underline; text-underline-offset: 3px; }
+.voltar:hover { color: var(--texto); text-decoration: underline; text-underline-offset: 3px; }
 .botao-link {
   min-height: 44px;
   padding: 0 18px;
@@ -610,16 +636,16 @@ button { font-family: inherit; }
   border-radius: 8px;
   display: inline-flex;
   align-items: center;
-  color: var(--tinta);
+  color: var(--texto);
   background: var(--papel);
   font-size: 15px;
   font-weight: 650;
   text-decoration: none;
   transition: background-color 0.12s, border-color 0.12s;
 }
-.botao-link:hover:not(:disabled) { border-color: var(--tinta); background: var(--fundo); }
+.botao-link:hover:not(:disabled) { border-color: var(--contorno-forte); background: var(--fundo); }
 button.botao-link { font-family: inherit; cursor: pointer; }
-.botao-link-forte { min-height: 48px; padding: 0 22px; border: 0; background: var(--laranja); color: var(--tinta); font-size: 16px; font-weight: 700; }
+.botao-link-forte { min-height: 48px; padding: 0 22px; border: 0; background: var(--laranja); color: var(--sobre-laranja); font-size: 16px; font-weight: 700; }
 .botao-link-forte:hover:not(:disabled) { background: #ff6a38; border: 0; }
 .botao-largo { width: 100%; }
 a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
@@ -644,12 +670,12 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   min-height: 62px;
   padding: 8px 20px;
   border-top: 1px solid var(--linha);
-  color: var(--tinta);
+  color: var(--texto);
   text-decoration: none;
   font-size: 16px;
 }
 .titulos-alunos + .linhas > .linha-aluno:first-child, .titulos-alunos + .linhas > li:first-child > .linha-aluno { border-top: 0; }
-.linha-aluno:hover { background: #f7f8f8; }
+.linha-aluno:hover { background: var(--realce); }
 .linha-aluno:focus-visible { outline: 2px solid var(--foco); outline-offset: -2px; }
 .aluno-nome-lista { font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; overflow-wrap: anywhere; }
 .aluno-treino, .aluno-data, .aluno-matricula { font-size: 15px; overflow-wrap: anywhere; }
@@ -664,13 +690,13 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--tinta);
+  color: var(--texto);
   font-size: 15px;
   font-weight: 650;
 }
 .selo-situacao::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--laranja); }
-.situacao-A::before { background: #2f9e4f; }
-.situacao-D::before, .situacao-I::before, .situacao-C::before { background: #a3a7ac; }
+.situacao-A::before { background: var(--verde-ponto); }
+.situacao-D::before, .situacao-I::before, .situacao-C::before { background: var(--numeral); }
 .situacao-D, .situacao-I, .situacao-C { color: var(--texto-suave); }
 .matricula-ficha { font-size: 16px; color: var(--texto-suave); }
 /* 700px: abaixo disso a coluna do WhatsApp desce para baixo da tabela, e a tabela ganha a largura toda */
@@ -720,7 +746,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .titulos-treinos + .linhas > .linha-treino:first-child, .titulos-treinos + .linha-treino { border-top: 0; }
 .resumo-treino { min-height: 54px; padding: 8px 16px; list-style: none; cursor: pointer; }
 .resumo-treino::-webkit-details-marker { display: none; }
-.resumo-treino:hover { background: #f7f8f8; }
+.resumo-treino:hover { background: var(--realce); }
 .resumo-treino:focus-visible { outline: 2px solid var(--foco); outline-offset: -2px; }
 .treino-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 700; }
 /* "break-word" (e não "anywhere"): o selo "Data4U" desce para a linha de baixo em vez de espremer o nome */
@@ -731,8 +757,8 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .treino-inicio, .treino-fim, .treino-sessoes, .treino-professor { font-size: 14.5px; color: var(--texto-suave); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .treino-situacao { display: flex; flex-wrap: wrap; gap: 4px; }
 /* o treino ativo (só um por aluno) é o destacado; os inativos são o histórico */
-.treino-ativo { background: #fffaf7; border-left-color: var(--laranja); }
-.treino-ativo > .resumo-treino:hover { background: #fff3ec; }
+.treino-ativo { background: var(--laranja-leve); border-left-color: var(--laranja); }
+.treino-ativo > .resumo-treino:hover { background: var(--laranja-leve-forte); }
 .treino-inativo .treino-nome { font-weight: 600; }
 .selo-treino {
   padding: 2px 8px;
@@ -742,8 +768,8 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   white-space: nowrap;
 }
 .selo-treino-ativo { background: var(--verde-fundo); color: var(--verde); }
-.selo-treino-inativo { background: #eceef0; color: var(--texto-suave); }
-.selo-treino-trocar { background: var(--laranja); color: var(--tinta); }
+.selo-treino-inativo { background: var(--cinza-leve); color: var(--texto-suave); }
+.selo-treino-trocar { background: var(--laranja); color: var(--sobre-laranja); }
 .aviso-troca-ficha { margin: 0; border-radius: 0; }
 .treino-conteudo { padding: 4px 16px 16px 40px; display: flex; flex-direction: column; gap: 8px; }
 .acoes-treino { margin: 0 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
@@ -760,7 +786,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   font-size: 15px;
   font-weight: 400;
   background: var(--papel);
-  color: var(--tinta);
+  color: var(--texto);
 }
 .dados-do-treino { margin: 0; font-size: 14.5px; color: var(--texto-suave); }
 .ficha-sessoes { margin-left: auto; font-size: 14.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -770,7 +796,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   .treino-inicio, .treino-fim, .treino-sessoes, .treino-professor { display: none; }
   .treino-conteudo { padding-left: 16px; }
 }
-.ficha-detalhe { border: 1px solid var(--linha); border-radius: 8px; background: #f9fafa; }
+.ficha-detalhe { border: 1px solid var(--linha); border-radius: 8px; background: var(--realce); }
 .ficha-detalhe summary {
   min-height: 48px;
   padding: 8px 14px;
@@ -799,7 +825,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   margin-left: 0;
   padding: 2px 8px;
   border-radius: 4px;
-  background: #eceef0;
+  background: var(--cinza-leve);
   color: var(--texto-suave);
   font-size: 12.5px;
   font-weight: 700;
@@ -849,8 +875,8 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--tinta);
-  color: #ffffff;
+  background: var(--ativo-fundo);
+  color: var(--ativo-texto);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -869,7 +895,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   margin: 0;
   padding: 16px;
   border-radius: 8px;
-  background: #f4f5f6;
+  background: var(--bloco);
   font: 13.5px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -887,7 +913,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   padding: 0 10px;
   font: inherit;
   font-size: 16px;
-  color: var(--tinta);
+  color: var(--texto);
   background: var(--papel);
 }
 .form-padrao select, .form-padrao-ficha select { width: auto; height: 40px; font-size: 15px; font-weight: 400; }
@@ -904,9 +930,9 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   font-size: 15px;
   font-weight: 400;
   background: var(--papel);
-  color: var(--tinta);
+  color: var(--texto);
 }
-.form-padrao input:disabled, .form-padrao-ficha input:disabled { background: #eceef0; cursor: not-allowed; }
+.form-padrao input:disabled, .form-padrao-ficha input:disabled { background: var(--cinza-leve); cursor: not-allowed; }
 .form-padrao .dica, .form-padrao-ficha .dica { flex-basis: 100%; font-weight: 400; }
 .campo select[aria-invalid="true"], .campo input[aria-invalid="true"], .linha-marcar input[aria-invalid="true"] { outline: 2px solid var(--erro); }
 
@@ -916,12 +942,12 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   display: inline-block;
   padding: 2px 10px;
   border-radius: 4px;
-  background: var(--tinta);
-  color: #ffffff;
+  background: var(--ativo-fundo);
+  color: var(--ativo-texto);
   font-size: 13px;
   font-weight: 700;
 }
-.selo-fila-padrao { background: var(--tinta); color: #ffffff; margin-left: 8px; }
+.selo-fila-padrao { background: var(--ativo-fundo); color: var(--ativo-texto); margin-left: 8px; }
 .fila-treinos { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--linha); }
 .fila-treinos li {
   display: grid;
@@ -937,17 +963,17 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .fila-selos { grid-area: selos; display: flex; flex-wrap: wrap; gap: 4px; }
 .fila-nome { grid-area: nome; }
 .fila-treinos .botao-link { grid-area: abrir; }
-.fila-treinos .fila-treino-atual { border-left-color: #2f9e4f; background: #f4faf5; }
-.fila-treinos .fila-treino-sugerido { border-left-color: var(--laranja); background: #fffaf7; }
+.fila-treinos .fila-treino-atual { border-left-color: var(--verde-ponto); background: var(--verde-leve); }
+.fila-treinos .fila-treino-sugerido { border-left-color: var(--laranja); background: var(--laranja-leve); }
 .fila-numero { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .fila-nome { font-size: 14.5px; color: var(--texto-suave); overflow-wrap: anywhere; }
 .fila-treinos .botao-link { min-height: 40px; padding: 0 14px; font-size: 14px; }
 .fila-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .form-fila { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--linha); }
 .painel-fila .aviso-campo:empty { display: none; }
-.bloco-liberacao { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 8px; background: #f4f5f6; }
+.bloco-liberacao { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 8px; background: var(--bloco); }
 .linha-marcar { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
-.linha-marcar input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--tinta); }
+.linha-marcar input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--ativo-fundo); }
 .aviso-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .aviso-fila strong { flex: 1 1 100%; }
 
@@ -957,8 +983,8 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   margin-left: 6px;
   padding: 1px 8px;
   border-radius: 4px;
-  background: var(--tinta);
-  color: #ffffff;
+  background: var(--ativo-fundo);
+  color: var(--ativo-texto);
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -974,18 +1000,18 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   padding: 10px 14px;
   font: inherit;
   font-size: 17px;
-  color: var(--tinta);
+  color: var(--texto);
   background: var(--papel);
   resize: vertical;
 }
-.campo textarea:hover { border-color: var(--tinta); }
-.campo textarea::placeholder { color: #70747a; }
+.campo textarea:hover { border-color: var(--contorno-forte); }
+.campo textarea::placeholder { color: var(--placeholder); }
 .campo textarea[aria-invalid="true"] { border-color: var(--erro); background: var(--erro-fundo); }
-.campo select:disabled, .campo textarea:disabled { background: #eceef0; cursor: not-allowed; }
+.campo select:disabled, .campo textarea:disabled { background: var(--cinza-leve); cursor: not-allowed; }
 .botoes-ia { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* a conversa com a IA: o que ela já perguntou e as perguntas novas, cada uma com a sua caixa de resposta */
-.conversa-ia { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 8px; background: #f4f5f6; }
+.conversa-ia { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 8px; background: var(--bloco); }
 .titulo-conversa { margin: 0; font-size: 16px; font-weight: 700; }
 .selo-rodada {
   display: inline-block;
@@ -1005,7 +1031,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .historico-resposta { font-weight: 650; overflow-wrap: anywhere; }
 .historico-vazia { font-weight: 400; font-style: italic; color: var(--texto-suave); }
 .perguntas-ia { display: flex; flex-direction: column; gap: 12px; }
-.perguntas-ia .campo label { font-size: 15px; color: var(--tinta); }
+.perguntas-ia .campo label { font-size: 15px; color: var(--texto); }
 .perguntas-ia .campo textarea { min-height: 64px; }
 @media (max-width: 900px) {
   .form-ia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1019,7 +1045,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .painel-aluno { max-width: none; padding: 20px; gap: 14px; }
 .form-aluno { display: flex; flex-direction: column; gap: 14px; }
 .marca-mostrar { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 15px; color: var(--texto-suave); }
-.marca-mostrar input { width: 22px; height: 22px; flex: none; accent-color: var(--tinta); }
+.marca-mostrar input { width: 22px; height: 22px; flex: none; accent-color: var(--ativo-fundo); }
 .botao-largo { justify-content: center; }
 .campo input.campo-codigo-aluno {
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
@@ -1043,14 +1069,14 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   border: 1px solid var(--contorno);
   border-radius: 8px;
   background: var(--papel);
-  color: var(--tinta);
+  color: var(--texto);
   font-family: inherit;
   font-size: 15px;
   font-weight: 650;
   cursor: pointer;
   overflow-wrap: anywhere;
 }
-.meu-ficha-botao[aria-pressed="true"] { background: var(--tinta); border-color: var(--tinta); color: var(--papel); }
+.meu-ficha-botao[aria-pressed="true"] { background: var(--ativo-fundo); border-color: var(--ativo-fundo); color: var(--ativo-texto); }
 .meu-ficha-atual { display: flex; flex-direction: column; gap: 0; }
 .meu-exercicios { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
 .meu-exercicio { display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 8px; align-items: start; padding: 14px 0; }
@@ -1062,7 +1088,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   font-weight: 800;
   font-size: 26px;
   line-height: 1;
-  color: #a3a7ac;
+  color: var(--numeral);
   font-variant-numeric: tabular-nums;
 }
 .meu-exercicio-corpo { min-width: 0; }
@@ -1076,7 +1102,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   font-weight: 750;
   font-size: 26px;
   line-height: 1.1;
-  color: var(--tinta);
+  color: var(--texto);
   letter-spacing: 0.01em;
 }
 .meu-exercicio-detalhe { margin-top: 2px; font-size: 14.5px; color: var(--texto-suave); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -1109,13 +1135,13 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   align-items: center;
   justify-content: center;
   background: var(--laranja);
-  color: var(--tinta);
+  color: var(--sobre-laranja);
   font-size: 13px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
 .filtro-comentarios { display: flex; flex-wrap: wrap; gap: 8px; }
-.filtro-comentarios .filtro-ativo { background: var(--tinta); color: #ffffff; }
+.filtro-comentarios .filtro-ativo { background: var(--ativo-fundo); color: var(--ativo-texto); }
 .lista-comentarios { list-style: none; margin: 0; padding: 0; }
 .comentario {
   padding: 16px 16px 16px 19px;
@@ -1127,13 +1153,13 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .comentario:first-child { border-top: 0; }
 .comentario p { margin: 0; }
 /* só o que ainda não foi lido ganha cor: um fio laranja e um fundo leve */
-.comentario-novo { background: #fffaf7; box-shadow: inset 3px 0 0 var(--laranja); }
+.comentario-novo { background: var(--laranja-leve); box-shadow: inset 3px 0 0 var(--laranja); }
 .comentario-cabecalho { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-.comentario-aluno { font-weight: 750; font-size: 17px; color: var(--tinta); text-transform: uppercase; letter-spacing: 0.01em; text-decoration: none; }
+.comentario-aluno { font-weight: 750; font-size: 17px; color: var(--texto); text-transform: uppercase; letter-spacing: 0.01em; text-decoration: none; }
 a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4px; }
 .comentario-quando { font-size: 14px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
 .comentario-lugar { font-size: 14px; color: var(--texto-suave); overflow-wrap: anywhere; }
-.comentario-lugar strong { color: var(--tinta); }
+.comentario-lugar strong { color: var(--texto); }
 /* pre-wrap: as quebras de linha que o aluno digitou aparecem; o texto continua sendo só texto */
 .comentario-texto { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; }
 .comentario-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
@@ -1146,7 +1172,7 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 .comentario-resposta {
   margin-top: 4px;
   padding: 10px 14px;
-  background: #f4faf5;
+  background: var(--verde-leve);
   border-radius: 6px;
 }
 .comentario-resposta-cabecalho { font-size: 14px; color: var(--texto-suave); overflow-wrap: anywhere; }
@@ -1174,11 +1200,11 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
   font-size: 14.5px;
   font-weight: 600;
   text-decoration: underline;
-  text-decoration-color: #c4c7cb;
+  text-decoration-color: var(--contorno-suave);
   text-underline-offset: 4px;
   cursor: pointer;
 }
-.meu-comentario-abrir:hover { color: var(--tinta); text-decoration-color: var(--tinta); }
+.meu-comentario-abrir:hover { color: var(--texto); text-decoration-color: var(--texto); }
 .meu-comentario-form { display: flex; flex-direction: column; gap: 8px; }
 .meu-comentario-rotulo { font-size: 14px; font-weight: 600; color: var(--texto-suave); }
 .meu-comentario-caixa {
@@ -1188,14 +1214,14 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
   border: 1px solid var(--contorno);
   border-radius: 8px;
   background: var(--papel);
-  color: var(--tinta);
+  color: var(--texto);
   font-family: inherit;
   font-size: 17px; /* 16 ou mais: o iPhone não dá zoom na tela ao tocar na caixa */
   line-height: 1.4;
   resize: vertical;
 }
 /* A dica cinza: mais clara que o texto digitado (para não parecer que já está escrito), mas com contraste bom (AA). */
-.meu-comentario-caixa::placeholder { color: #70747a; opacity: 1; }
+.meu-comentario-caixa::placeholder { color: var(--placeholder); opacity: 1; }
 .meu-comentario-contador { font-size: 13px; color: var(--texto-suave); text-align: right; }
 .meu-comentario-contador-estouro { color: var(--erro-texto); font-weight: 600; }
 .meu-comentario-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1205,7 +1231,7 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 
 /* ---- "Seus comentários" e as respostas do professor, no celular do aluno ---- */
 .meu-aviso-resposta { background: var(--verde-fundo); border-color: transparent; color: var(--verde); font-weight: 700; }
-.meu-aviso-resposta:hover:not(:disabled) { background: #dcecdf; border-color: transparent; }
+.meu-aviso-resposta:hover:not(:disabled) { background: var(--verde-fundo-forte); border-color: transparent; }
 .meu-aviso-resposta[hidden], .meu-comentarios-lista[hidden] { display: none; }
 .meu-comentarios-titulo { margin: 0; font-size: 18px; font-weight: 700; }
 .meu-comentarios-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
@@ -1214,7 +1240,104 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 .meu-c-lugar { font-size: 13.5px; color: var(--texto-suave); overflow-wrap: anywhere; }
 .meu-c-texto, .meu-c-resposta-texto { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; }
 .meu-c-sem-resposta { font-size: 14.5px; color: var(--texto-suave); }
-.meu-c-resposta { padding: 10px 14px; background: #f4faf5; border-radius: 6px; }
+.meu-c-resposta { padding: 10px 14px; background: var(--verde-leve); border-radius: 6px; }
 .meu-c-resposta-cabecalho { font-size: 13.5px; color: var(--texto-suave); overflow-wrap: anywhere; }
 .meu-c-nota { font-size: 13.5px; color: var(--texto-suave); text-align: center; }
 .meu-c-nova { margin-left: 8px; padding: 1px 8px; border-radius: 4px; background: var(--verde); color: #ffffff; font-size: 12.5px; font-weight: 700; }
+
+
+/* =====================================================================================================
+   Duas "roupas" sobre o desenho de base, cada uma só nas suas telas (a classe vai no <html> da página):
+   - tema-palco: celular do aluno (/aluno/entrar e /aluno). Escuro, como as artes da academia.
+   - tema-largo: computador dos professores (todo o resto). Fundo branco, régua preta no topo dos quadros,
+     títulos largos e cantos retos, como uma ficha de papel.
+   Quem não tem classe nenhuma (uma tela nova, por esquecimento) fica com o desenho de base, que também funciona.
+   ===================================================================================================== */
+
+/* ---- Palco (celular do aluno) ---- */
+:root.tema-palco {
+  color-scheme: dark;
+  --texto: #f2f3f4;
+  --fundo: #0d0d0d;
+  --papel: #17181a;
+  --linha: #2a2c2f;
+  --contorno: #6e7379;
+  --contorno-forte: #f2f3f4;
+  --contorno-suave: #4a4e53;
+  --texto-suave: #a5a9af;
+  --campo: #232528;
+  --realce: #1e2022;
+  --cinza-leve: #2a2c30;
+  --bloco: #1e2022;
+  --laranja-leve: #1d1612;
+  --laranja-leve-forte: #261a14;
+  --laranja-texto: #ff7a4a;
+  --verde: #72d08c;
+  --verde-fundo: #14281b;
+  --verde-fundo-forte: #1b3a26;
+  --verde-leve: #132019;
+  --verde-ponto: #3ecf6e;
+  --erro: #ff6b6b;
+  --erro-texto: #ffa0a0;
+  --erro-fundo: #2b1516;
+  --erro-borda: #5a2a2c;
+  --alerta-fundo: #2b1a12;
+  --alerta-texto: #ffa57a;
+  --placeholder: #8c9097;
+  --numeral: #6e7379;
+  --desativado: #3a3d41;
+  --ativo-fundo: #f2f3f4;
+  --ativo-texto: #0d0d0d;
+  --ativo-hover: #d9dbde;
+  --topo-fundo: #000000;
+  --topo-borda: 1px solid #26282b;
+}
+.tema-palco .botao-principal:disabled { background: #5a3326; color: #c9a496; }
+.tema-palco .botao-perigo, .tema-palco .meu-c-nova { color: #0d0d0d; }
+.tema-palco .painel { border-color: #26282b; }
+
+/* ---- Largo (computador dos professores) ---- */
+:root.tema-largo {
+  --fundo: #ffffff;
+  --papel: #ffffff;
+  --linha: #d9dcdf;
+  --campo: #f1f2f3;
+  --realce: #f6f7f7;
+  --topo-fundo: #ffffff;
+  --topo-texto: #0d0d0d;
+  --topo-suave: #5b5f64;
+  --topo-menu: #5b5f64;
+  --topo-menu-ativo: #0d0d0d;
+  --topo-borda: 3px solid #0d0d0d;
+  --fonte-titulo: "Archivo Variable", Arial, sans-serif;
+}
+.tema-largo .titulo-pagina, .tema-largo .titulo-grande, .tema-largo .painel h1, .tema-largo .marca, .tema-largo .passo-numero {
+  font-stretch: 125%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.tema-largo .titulo-grande { font-size: 38px; }
+.tema-largo .titulo-pagina { font-size: 28px; }
+.tema-largo .painel h1 { font-size: 24px; }
+.tema-largo .painel-salvo h1 { font-size: 26px; }
+.tema-largo .marca { font-size: 17px; letter-spacing: 0; }
+.tema-largo .etiqueta { font-stretch: 100%; font-size: 20px; }
+/* cantos retos */
+.tema-largo .painel, .tema-largo .cartao, .tema-largo .cartao-lista, .tema-largo .coluna-lateral, .tema-largo .filtro-grupos,
+.tema-largo .ficha-detalhe, .tema-largo .problemas, .tema-largo .aviso-troca, .tema-largo .aviso-importado, .tema-largo .conversa-ia,
+.tema-largo .bloco-liberacao, .tema-largo .relatorio-importacao, .tema-largo .comentario-resposta,
+.tema-largo .botao-adicionar, .tema-largo .botao-escuro, .tema-largo .botao-principal, .tema-largo .botao-perigo, .tema-largo .botao-discreto,
+.tema-largo .botao-icone, .tema-largo .botao-link, .tema-largo .campo input, .tema-largo .campo select, .tema-largo .campo textarea,
+.tema-largo .form-padrao input, .tema-largo .form-padrao-ficha input, .tema-largo .form-padrao select, .tema-largo .form-padrao-ficha select,
+.tema-largo .campo-senha-admin, .tema-largo .selo, .tema-largo .selo-treino, .tema-largo .selo-origem, .tema-largo .selo-fila,
+.tema-largo .selo-ia, .tema-largo .contador-menu, .tema-largo .campo-busca-aluno input {
+  border-radius: 2px;
+}
+/* quadros: régua preta no topo */
+.tema-largo .painel, .tema-largo .cartao, .tema-largo .cartao-lista, .tema-largo .coluna-lateral {
+  border-top: 3px solid #0d0d0d;
+}
+.tema-largo .coluna-lateral .painel { border-top: 0; }
+.tema-largo .coluna-lateral .painel + .painel { border-top: 1px solid var(--linha); }
+.tema-largo .botao-principal, .tema-largo .botao-link-forte { font-weight: 800; }
+.tema-largo .aba-ativa, .tema-largo .aba-ativa:hover { border-bottom-color: #0d0d0d; }
