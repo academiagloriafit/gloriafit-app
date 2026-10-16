@@ -1,0 +1,9 @@
+{# Só as telas do celular do aluno: deixa o aluno guardar o app na tela inicial, com ícone e sem a barra do navegador.
+   O "cartão de visita" do app (nome, ícones, cores) está em static/aluno.webmanifest. #}
+<link rel="manifest" href="{{ url_for('static', filename='aluno.webmanifest') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='marca/apple-touch-icon.png') }}">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Glória Fit">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
