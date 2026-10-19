@@ -1106,6 +1106,19 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   letter-spacing: 0.01em;
 }
 .meu-exercicio-detalhe { margin-top: 2px; font-size: 14.5px; color: var(--texto-suave); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+/* "Ver como fazer": duas fotos (início e fim) trocando devagar; sem animação, ficam lado a lado */
+.como-fazer { margin-top: 10px; }
+.como-fazer-botao { min-height: 40px; padding: 0 14px; font-size: 14.5px; }
+.como-fazer-area { margin-top: 10px; }
+.como-fazer-fotos { position: relative; border-radius: 12px; overflow: hidden; background: var(--fundo); line-height: 0; }
+.como-fazer-foto { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: cover; }
+.como-fazer-foto-fim { position: absolute; inset: 0; height: 100%; opacity: 0; animation: como-fazer-troca 3.6s ease-in-out infinite; }
+@keyframes como-fazer-troca { 0%, 22% { opacity: 0; } 38%, 72% { opacity: 1; } 88%, 100% { opacity: 0; } }
+.como-fazer-aviso { margin: 6px 0 0; font-size: 13px; line-height: 1.35; color: var(--texto-suave); }
+@media (prefers-reduced-motion: reduce) {
+  .como-fazer-fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .como-fazer-foto-fim { position: static; opacity: 1; animation: none; }
+}
 .meu-grupo-simples { border-top: 1px solid var(--linha); }
 .meu-ficha-atual > :first-child { border-top: 0; }
 /* bi-set: os dois exercícios ficam ligados por um fio laranja */

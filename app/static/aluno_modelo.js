@@ -130,6 +130,19 @@ export function linhasDoExercicio(exercicio) {
   return linhas;
 }
 
+// Fotos de "Como fazer" (posição inicial e final). O servidor manda só o NOME do par (`exercicio.foto`); o endereço
+// é montado aqui. Nome que não seja letras, números, sublinhado e hífen é ignorado: nunca vira parte de um endereço.
+export const TEXTO_VER_COMO_FAZER = "Ver como fazer";
+export const TEXTO_ESCONDER_COMO_FAZER = "Esconder";
+export const TEXTO_AVISO_COMO_FAZER = "Foto de referência: a máquina da academia pode ser um pouco diferente. Na dúvida, pergunte ao professor.";
+const NOME_DE_FOTO_VALIDO = /^[A-Za-z0-9_-]{1,80}$/;
+
+export function fotosDoExercicio(exercicio) {
+  const nome = exercicio && exercicio.foto;
+  if (typeof nome !== "string" || !NOME_DE_FOTO_VALIDO.test(nome)) return null;
+  return { inicio: `/static/exercicios/${nome}_0.jpg`, fim: `/static/exercicios/${nome}_1.jpg` };
+}
+
 // Qual ficha mostrar: a pedida, se existir; senão a primeira. Número fora da lista não quebra nada.
 export function fichaEscolhida(fichas, indice) {
   return Number.isInteger(indice) && indice >= 0 && indice < fichas.length ? indice : 0;

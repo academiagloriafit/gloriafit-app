@@ -5,12 +5,15 @@ import { atualizarMeusComentarios } from "./aluno_comentarios.js";
 import { el } from "./dom.js";
 import {
   MENSAGEM_SEM_REDE,
+  TEXTO_AVISO_COMO_FAZER,
   TEXTO_COMENTARIO_ENVIADO,
   TEXTO_COMENTARIO_REPETIDO,
+  TEXTO_ESCONDER_COMO_FAZER,
   TEXTO_FICHA_FEITA_HOJE,
   TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
   TEXTO_SEM_TREINO,
+  TEXTO_VER_COMO_FAZER,
   chaveDoRascunho,
   comentarioPronto,
   decidirAtualizacaoDoTreino,
@@ -20,6 +23,7 @@ import {
   dicaDoComentario,
   estourouOLimite,
   fichaEscolhida,
+  fotosDoExercicio,
   linhasDoExercicio,
   pedidoDoComentario,
   temDose,
@@ -184,6 +188,40 @@ function desenharComentario(treino, ficha = null, exercicio = null) {
   return raiz;
 }
 
+// O botão "Ver como fazer": as duas fotos (início e fim) só são pedidas ao servidor quando o aluno toca.
+function desenharComoFazer(exercicio) {
+  const fotos = fotosDoExercicio(exercicio);
+  if (!fotos) return null;
+  const raiz = el("div", { classe: "como-fazer" });
+  const botao = el("button", { type: "button", classe: "botao-link como-fazer-botao", texto: TEXTO_VER_COMO_FAZER, "aria-expanded": "false" });
+  let area = null;
+  botao.addEventListener("click", () => {
+    if (area) {
+      area.remove();
+      area = null;
+      botao.textContent = TEXTO_VER_COMO_FAZER;
+      botao.setAttribute("aria-expanded", "false");
+      return;
+    }
+    area = el(
+      "div",
+      { classe: "como-fazer-area" },
+      el(
+        "div",
+        { classe: "como-fazer-fotos" },
+        el("img", { classe: "como-fazer-foto", src: fotos.inicio, alt: `${exercicio.exercicio}: posição inicial`, decoding: "async" }),
+        el("img", { classe: "como-fazer-foto como-fazer-foto-fim", src: fotos.fim, alt: `${exercicio.exercicio}: posição final`, decoding: "async" }),
+      ),
+      el("p", { classe: "como-fazer-aviso", texto: TEXTO_AVISO_COMO_FAZER }),
+    );
+    raiz.append(area);
+    botao.textContent = TEXTO_ESCONDER_COMO_FAZER;
+    botao.setAttribute("aria-expanded", "true");
+  });
+  raiz.prepend(botao);
+  return raiz;
+}
+
 function desenharExercicio(exercicio, treino, ficha) {
   return el(
     "li",
@@ -196,6 +234,7 @@ function desenharExercicio(exercicio, treino, ficha) {
       linhasDoExercicio(exercicio).map((linha, posicao) =>
         el("p", { classe: posicao === 0 && temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: linha }),
       ),
+      desenharComoFazer(exercicio),
       desenharComentario(treino, ficha, exercicio),
     ),
   );

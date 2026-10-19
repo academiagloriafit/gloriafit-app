@@ -21,6 +21,7 @@ from datetime import datetime
 from app import ciclo, treinos
 from app.alunos import dose_do_item, etiquetas_dos_itens, texto_da_pausa
 from app.datas import agora_utc, formatar_dia, limites_do_dia, momento_para_texto
+from app.fotos_exercicios import foto_do_exercicio
 
 _NOME_DO_BLOCO = {2: "Bi-set", 3: "Tri-set"}
 
@@ -41,6 +42,7 @@ def _exercicio(item: dict, etiqueta: str) -> dict:
         "carga": (item["carga"] or "").strip(),
         "intervalo": texto_da_pausa(item["pausa"]),
         "observacao": (item["observacao"] or "").strip(),
+        "foto": foto_do_exercicio(item["exercicio"]),  # nome do par de fotos de "Como fazer", ou None
     }
 
 

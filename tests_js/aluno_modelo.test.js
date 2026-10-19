@@ -30,6 +30,7 @@ import {
   estourouOLimite,
   fichaEscolhida,
   formatarCpf,
+  fotosDoExercicio,
   idsDasRespostasNovas,
   linhasDoExercicio,
   pedidoDoComentario,
@@ -672,5 +673,28 @@ describe("textoDaNotaDaLista", () => {
   it("não diz nada quando a lista mostra tudo", () => {
     expect(textoDaNotaDaLista(30, 30)).toBe("");
     expect(textoDaNotaDaLista(0, 0)).toBe("");
+  });
+});
+
+describe("fotosDoExercicio", () => {
+  it("monta os dois endereços a partir do nome do par", () => {
+    expect(fotosDoExercicio({ foto: "Leg_Press" })).toEqual({
+      inicio: "/static/exercicios/Leg_Press_0.jpg",
+      fim: "/static/exercicios/Leg_Press_1.jpg",
+    });
+    expect(fotosDoExercicio({ foto: "Wide-Grip_Lat_Pulldown" }).fim).toBe("/static/exercicios/Wide-Grip_Lat_Pulldown_1.jpg");
+  });
+
+  it("sem foto (ou nada), não devolve nada", () => {
+    expect(fotosDoExercicio({ foto: null })).toBeNull();
+    expect(fotosDoExercicio({})).toBeNull();
+    expect(fotosDoExercicio(null)).toBeNull();
+    expect(fotosDoExercicio(undefined)).toBeNull();
+  });
+
+  it("nome com barra, ponto, aspas, espaço ou que não é texto nunca vira endereço", () => {
+    for (const foto of ["../segredo", "a/b", "x.jpg", 'x" onerror="y', "a b", "", 42, ["Leg_Press"], { a: 1 }, "A".repeat(81)]) {
+      expect(fotosDoExercicio({ foto })).toBeNull();
+    }
   });
 });
