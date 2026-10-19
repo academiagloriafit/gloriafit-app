@@ -19,6 +19,7 @@ import {
   conferirCodigo,
   conferirCpf,
   conferirSenhaNova,
+  decidirAtualizacaoDoTreino,
   descreverComentario,
   dicaDoComentario,
   descreverMarcacao,
@@ -225,6 +226,69 @@ describe("descreverTreino", () => {
   it("as frases de aviso mandam falar com o professor", () => {
     expect(TEXTO_SEM_TREINO).toContain("professor");
     expect(TEXTO_SEM_EXERCICIOS).toContain("professor");
+  });
+});
+
+describe("decidirAtualizacaoDoTreino (o aluno voltou para o app)", () => {
+  const ficha = { nome: "A", ordem: 1, feitas: 2, feita_hoje: false, grupos: [] };
+  const naTela = { nome: "TREINO ABC", inicio: "06/10/2026", fim: null, meta_por_ficha: 12, fichas: [ficha] };
+  const igual = () => JSON.parse(JSON.stringify(naTela)); // o servidor manda outra cópia, igual em conteúdo
+  const resposta = (treino) => [200, { treino }];
+
+  it("treino igual ao da tela: não mexe em nada (nem desenha de novo)", () => {
+    expect(decidirAtualizacaoDoTreino(naTela, ...resposta(igual()), false)).toEqual({ acao: "nada" });
+  });
+
+  it("o professor trocou o treino: mostra o novo", () => {
+    const novo = { ...igual(), nome: "TREINO NOVO" };
+    expect(decidirAtualizacaoDoTreino(naTela, ...resposta(novo), false)).toEqual({ acao: "mostrar", treino: novo });
+  });
+
+  it("mudou só o andamento (virou o dia, ou marcou em outro aparelho): também atualiza", () => {
+    const outroDia = igual();
+    outroDia.fichas[0].feita_hoje = true;
+    outroDia.fichas[0].feitas = 3;
+    expect(decidirAtualizacaoDoTreino(naTela, ...resposta(outroDia), false)).toEqual({ acao: "mostrar", treino: outroDia });
+  });
+
+  it("a tela estava num aviso (sem treino, erro): mostra o treino que chegou", () => {
+    expect(decidirAtualizacaoDoTreino(null, ...resposta(igual()), false)).toEqual({ acao: "mostrar", treino: igual() });
+  });
+
+  it("o aluno ficou sem treino ou sem exercícios: mostra o aviso certo", () => {
+    expect(decidirAtualizacaoDoTreino(naTela, ...resposta(null), false)).toEqual({ acao: "aviso", texto: TEXTO_SEM_TREINO });
+    expect(decidirAtualizacaoDoTreino(naTela, ...resposta({ ...igual(), fichas: [] }), false)).toEqual({
+      acao: "aviso",
+      texto: TEXTO_SEM_EXERCICIOS,
+    });
+  });
+
+  it("sessão perdida (401): manda para a tela de entrar", () => {
+    expect(decidirAtualizacaoDoTreino(naTela, 401, { erro: "Você precisa entrar de novo." }, false)).toEqual({ acao: "entrar" });
+  });
+
+  it.each([
+    [500, null],
+    [503, { erro: "x" }],
+    [200, null],
+    [200, { treino: "texto" }],
+  ])("erro do servidor (%s, %j) NÃO apaga o treino da tela", (status, corpo) => {
+    expect(decidirAtualizacaoDoTreino(naTela, status, corpo, false)).toEqual({ acao: "nada" });
+  });
+
+  it("com o aluno escrevendo um comentário, nada muda, aconteça o que acontecer", () => {
+    const novo = { ...igual(), nome: "TREINO NOVO" };
+    expect(decidirAtualizacaoDoTreino(naTela, ...resposta(novo), true)).toEqual({ acao: "nada" });
+    expect(decidirAtualizacaoDoTreino(naTela, ...resposta(null), true)).toEqual({ acao: "nada" });
+    expect(decidirAtualizacaoDoTreino(naTela, 401, null, true)).toEqual({ acao: "nada" }); // o envio é que manda entrar, sem perder o texto antes
+  });
+
+  it("não altera o treino da tela nem o da resposta", () => {
+    const antes = JSON.stringify(naTela);
+    const novo = { ...igual(), nome: "OUTRO" };
+    decidirAtualizacaoDoTreino(naTela, ...resposta(novo), false);
+    expect(JSON.stringify(naTela)).toBe(antes);
+    expect(novo.nome).toBe("OUTRO");
   });
 });
 

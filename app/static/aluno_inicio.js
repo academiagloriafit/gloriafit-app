@@ -13,6 +13,7 @@ import {
   TEXTO_SEM_TREINO,
   chaveDoRascunho,
   comentarioPronto,
+  decidirAtualizacaoDoTreino,
   descreverComentario,
   descreverMarcacao,
   descreverTreino,
@@ -43,6 +44,13 @@ const areaDoComentarioDoTreino = document.getElementById("comentario-treino");
 // Cada rascunho também guarda `enviando` (há um envio no ar) e `redesenhar` (a função da caixa que está NA TELA agora):
 // se a ficha for redesenhada no meio de um envio, a resposta atualiza a caixa nova, não uma que já saiu da tela.
 const rascunhos = new Map();
+
+// O que está na tela agora, para saber se o treino mudou quando o aluno voltar para o app (ver `atualizarTreinoAoVoltar`).
+let treinoNaTela = null; // null: a tela mostra um aviso (carregando, sem treino, erro), não um treino
+let fichaNaTela = 0; // a ficha (A, B...) que o aluno estava vendo: continua nela depois de atualizar
+let buscandoOTreino = false;
+let ultimaBuscaDoTreino = 0;
+const MINIMO_ENTRE_BUSCAS = 30_000; // ao voltar para o app, busca de novo no máximo a cada 30 segundos (igual à lista de comentários)
 
 function estadoDoRascunho(chave) {
   if (!rascunhos.has(chave)) {
@@ -266,6 +274,7 @@ function desenharRodape(treino, indice, mensagem, deuErro) {
 
 function mostrarFicha(treino, indice, mensagem = "", deuErro = false) {
   const escolhida = fichaEscolhida(treino.fichas, indice);
+  fichaNaTela = escolhida;
   botoesDasFichas.querySelectorAll("button").forEach((botao, i) => {
     botao.setAttribute("aria-pressed", i === escolhida ? "true" : "false");
   });
@@ -275,7 +284,8 @@ function mostrarFicha(treino, indice, mensagem = "", deuErro = false) {
   );
 }
 
-function mostrarTreino(treino) {
+function mostrarTreino(treino, indiceDaFicha = 0) {
+  treinoNaTela = treino;
   tituloDoTreino.textContent = treino.nome;
   datasDoTreino.textContent = textoDasDatas(treino);
   datasDoTreino.hidden = !datasDoTreino.textContent;
@@ -291,13 +301,15 @@ function mostrarTreino(treino) {
     ),
   );
   botoesDasFichas.hidden = treino.fichas.length < 2; // uma ficha só: não precisa de botão
-  mostrarFicha(treino, 0);
+  mostrarFicha(treino, indiceDaFicha);
   areaDoComentarioDoTreino.replaceChildren(desenharComentario(treino));
   areaDoTreino.hidden = false;
   avisoTreino.hidden = true;
+  botaoDeNovo.hidden = true; // pode ter ficado visível se a tela estava num erro quando o treino chegou
 }
 
 function mostrarAviso(texto, comBotaoDeNovo) {
+  treinoNaTela = null;
   areaDoTreino.hidden = true;
   avisoTreino.hidden = false;
   avisoTreino.textContent = texto;
@@ -307,12 +319,16 @@ function mostrarAviso(texto, comBotaoDeNovo) {
 async function carregarTreino() {
   botaoDeNovo.hidden = true;
   mostrarAviso("Buscando o seu treino…", false);
+  buscandoOTreino = true;
+  ultimaBuscaDoTreino = Date.now();
   let resposta;
   try {
     resposta = await buscarJson("/api/aluno/treino");
   } catch {
     mostrarAviso(MENSAGEM_SEM_REDE, true);
     return;
+  } finally {
+    buscandoOTreino = false;
   }
   const o_que_fazer = descreverTreino(resposta.status, resposta.corpo);
   switch (o_que_fazer.tipo) {
@@ -334,6 +350,45 @@ async function carregarTreino() {
 }
 
 botaoDeNovo.addEventListener("click", carregarTreino);
+
+// Há uma caixa de comentário aberta (mesmo vazia) ou um envio no ar?
+function alunoEstaEscrevendo() {
+  return [...rascunhos.values()].some((estado) => estado.aberto || estado.enviando);
+}
+
+// O app do celular fica aberto em segundo plano por horas ou dias (principalmente guardado na tela inicial): ao voltar para ele,
+// busca o treino de novo, para o aluno não treinar pelo treino velho nem ver "treino concluído hoje" de ontem.
+// Só mexe na tela se algo mudou, e nunca enquanto o aluno escreve (ver `decidirAtualizacaoDoTreino`).
+async function atualizarTreinoAoVoltar() {
+  if (buscandoOTreino) return;
+  buscandoOTreino = true;
+  ultimaBuscaDoTreino = Date.now();
+  try {
+    let resposta;
+    try {
+      resposta = await buscarJson("/api/aluno/treino");
+    } catch {
+      return; // sem rede: a tela fica como está (o treino que o aluno já tem continua valendo)
+    }
+    // Perguntado só DEPOIS da resposta: o aluno pode ter aberto uma caixa enquanto a busca andava.
+    const decisao = decidirAtualizacaoDoTreino(treinoNaTela, resposta.status, resposta.corpo, alunoEstaEscrevendo());
+    if (decisao.acao === "entrar") {
+      window.location.assign("/aluno/entrar");
+    } else if (decisao.acao === "mostrar") {
+      rascunhos.clear(); // os rascunhos são de "ficha:exercício" do treino velho: no treino novo apontariam para outro exercício
+      mostrarTreino(decisao.treino, fichaNaTela);
+    } else if (decisao.acao === "aviso") {
+      rascunhos.clear();
+      mostrarAviso(decisao.texto, false);
+    }
+  } finally {
+    buscandoOTreino = false;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && Date.now() - ultimaBuscaDoTreino > MINIMO_ENTRE_BUSCAS) atualizarTreinoAoVoltar();
+});
 
 botaoSair.addEventListener("click", async () => {
   if (botaoSair.disabled) return;

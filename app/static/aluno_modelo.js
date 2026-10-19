@@ -80,6 +80,28 @@ export function descreverTreino(status, corpo) {
 export const TEXTO_SEM_TREINO = "Você ainda não tem um treino ativo. Fale com o seu professor na academia.";
 export const TEXTO_SEM_EXERCICIOS = "O seu treino ainda não tem exercícios. Fale com o seu professor na academia.";
 
+// O aluno VOLTOU para o app (ele fica aberto em segundo plano por horas ou dias) e o treino foi buscado de novo.
+// O que a tela faz com a resposta?
+//   `naTela`      o treino que está desenhado agora (null se a tela mostra um aviso, como "sem treino")
+//   `escrevendo`  há uma caixa de comentário aberta ou um envio no ar: o aluno não pode perder o que está fazendo,
+//                 então nada muda (se o treino mudou, o servidor recusa o comentário e a caixa oferece "Atualizar a página")
+// Devolve:
+//   { acao: "nada" }                  deixa a tela como está (nada mudou, sem rede, erro do servidor ou aluno escrevendo)
+//   { acao: "entrar" }                a sessão acabou: ir para a tela de entrar
+//   { acao: "mostrar", treino }       desenhar o treino novo
+//   { acao: "aviso", texto }          o aluno ficou sem treino (ou sem exercícios): mostrar o aviso
+// Erro e falta de rede NUNCA apagam o treino da tela: o aluno pode estar na academia com a internet ruim.
+export function decidirAtualizacaoDoTreino(naTela, status, corpo, escrevendo) {
+  const novo = descreverTreino(status, corpo);
+  if (novo.tipo === "erro" || escrevendo) return { acao: "nada" };
+  if (novo.tipo === "entrar") return { acao: "entrar" };
+  if (novo.tipo === "sem-treino") return { acao: "aviso", texto: TEXTO_SEM_TREINO };
+  if (novo.tipo === "sem-exercicios") return { acao: "aviso", texto: TEXTO_SEM_EXERCICIOS };
+  // Os dois vêm do mesmo servidor, com as chaves na mesma ordem: comparar o JSON basta (e pega até "treino concluído hoje" mudando).
+  if (naTela && JSON.stringify(naTela) === JSON.stringify(novo.treino)) return { acao: "nada" };
+  return { acao: "mostrar", treino: novo.treino };
+}
+
 // "Início 06/10/2026 · Fim 06/11/2026" (só o que existe; sem nenhuma das duas datas, vazio).
 export function textoDasDatas(treino) {
   const partes = [];
