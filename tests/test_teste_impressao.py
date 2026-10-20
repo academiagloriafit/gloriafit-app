@@ -1,6 +1,7 @@
 """Folha de teste da impressora térmica (/teste-de-impressao). Sem aluno, sem treino, não grava nada."""
 
 import re
+import struct
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,8 @@ IMAGENS_DA_FOLHA = (
     "teste_impressao/logo-384.png",
     "teste_impressao/logo-grosso.png",
     "teste_impressao/logo-vetor.svg",
+    "teste_impressao/logo-invertido-redondo.png",
+    "teste_impressao/logo-invertido-total.png",
     "teste_impressao/pontos-1x1.png",
 )
 
@@ -55,6 +58,7 @@ def test_mostra_as_cinco_partes_do_teste(cliente):
         "3 PONTOS",
         "4 SIMBOLO: A ATUAL / B 384 PONTOS",
         "4 SIMBOLO: C GROSSO / D VETOR",
+        "4 SIMBOLO INVERTIDO: REDONDO / TOTAL",
         "5 LETRAS",
         "FIM DO TESTE",
     ):
@@ -96,6 +100,42 @@ def test_o_simbolo_vetorial_nao_tem_o_quadrado_de_fundo(cliente):
     primeiro_contorno = re.search(r' d="(M[^M]*)', svg).group(1)
     assert not primeiro_contorno.startswith("M0.0,384.0L0.0,0.0")  # canto do quadrado inteiro
     assert 'viewBox="0 0 768 768"' in svg and "fill-rule=\"evenodd\"" in svg
+
+
+def _cabecalho_png(arquivo):
+    """(largura, altura, bits por ponto) lidos do cabeçalho do PNG. Sem Pillow: a integração contínua não a instala."""
+    dados = arquivo.read_bytes()[:33]
+    assert dados[:8] == b"\x89PNG\r\n\x1a\n" and dados[12:16] == b"IHDR"
+    largura, altura, bits = struct.unpack(">IIB", dados[16:25])
+    return largura, altura, bits
+
+
+@pytest.mark.parametrize("nome", ["logo-invertido-redondo.png", "logo-invertido-total.png"])
+def test_os_simbolos_invertidos_tem_o_mesmo_tamanho_e_so_preto_e_branco(nome):
+    atual = _cabecalho_png(PASTA_ESTATICA / "marca" / "logo-cupom.png")
+
+    assert _cabecalho_png(PASTA_ESTATICA / "teste_impressao" / nome) == atual == (192, 192, 1)
+
+
+def test_os_simbolos_invertidos_sao_mesmo_o_contrario_do_atual():
+    """Total = o contrário de cada ponto. Redondo = o contrário só dentro do círculo; os cantos ficam papel branco."""
+    pil = pytest.importorskip("PIL.Image")  # só local: a integração contínua não tem Pillow
+    numpy = pytest.importorskip("numpy")
+
+    def pretos(caminho):
+        return numpy.array(pil.open(caminho).convert("L")) < 128
+
+    atual = pretos(PASTA_ESTATICA / "marca" / "logo-cupom.png")
+    total = pretos(PASTA_ESTATICA / "teste_impressao" / "logo-invertido-total.png")
+    redondo = pretos(PASTA_ESTATICA / "teste_impressao" / "logo-invertido-redondo.png")
+
+    linhas, colunas = numpy.mgrid[0:192, 0:192]
+    distancia = numpy.hypot(linhas - 95.5, colunas - 95.5)
+
+    assert (total == ~atual).all()
+    assert (redondo[distancia <= 80] == ~atual[distancia <= 80]).all()  # bem dentro do círculo: o contrário do atual
+    assert not redondo[distancia >= 96].any()  # cantos (fora do círculo): papel branco
+    assert redondo.sum() < total.sum()  # o redondo tem menos preto que o quadrado
 
 
 def test_a_folha_nao_depende_de_aluno_nem_de_treino(cliente):
