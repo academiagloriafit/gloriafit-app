@@ -318,3 +318,19 @@ def test_ficha_que_o_treino_nao_tem_e_erro(conn):
     treino = _treino_com_duas_fichas(conn)
     with pytest.raises(FichaInexistente):
         montar_cupom(conn, treino, ficha=9)
+
+
+def test_com_uma_ficha_so_o_cabecalho_leva_o_nome_da_ficha_e_nao_o_do_treino(conn):
+    # Pedido do Thiago em 20/10/2026: imprimindo o treino B, o cabeçalho não pode listar o treino todo ("ABC").
+    treino = _treino_com_duas_fichas(conn)
+    so_b = montar_cupom(conn, treino, ficha=2)
+    assert ("TREINO", "B PERNAS") in so_b["cabecalho"]
+    assert ("TREINO", "T") not in so_b["cabecalho"]
+    assert so_b["mostrar_nome_da_ficha"] is False  # o nome já está no cabeçalho: não se repete embaixo
+
+
+def test_com_todas_as_fichas_o_cabecalho_continua_com_o_nome_do_treino(conn):
+    treino = _treino_com_duas_fichas(conn)
+    todas = montar_cupom(conn, treino)
+    assert ("TREINO", "T") in todas["cabecalho"]
+    assert todas["mostrar_nome_da_ficha"] is True  # cada ficha leva o seu título

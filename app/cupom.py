@@ -109,18 +109,22 @@ def montar_cupom(
     if ficha is not None and ficha not in {f["ordem"] for f in treino["fichas"]}:
         raise FichaInexistente(ficha)
     a_imprimir = treino["fichas"] if ficha is None else [f for f in treino["fichas"] if f["ordem"] == ficha]
+    # Pedido do Thiago em 20/10/2026: com uma ficha só, o cabeçalho leva o nome DELA ("TREINO A"), não o nome do treino
+    # inteiro ("TREINO ABC"), e o nome da ficha não se repete embaixo. Com todas as fichas, fica como era.
+    uma_ficha_so = ficha is not None
     return {
         "academia": NOME_DA_ACADEMIA,
         "aluno_id": aluno["id"],
         "cabecalho": [
             ("ALUNO", aluno["nome"]),
-            ("TREINO", treino["nome"]),
+            ("TREINO", a_imprimir[0]["nome"] if uma_ficha_so else treino["nome"]),
             ("DATA", data_local(treino["criado_em"])),
             ("PROF.", treino["montado_por"]),
         ],
         "fichas": [{"nome": f["nome"], "linhas": _linhas_da_ficha(f["itens"])} for f in a_imprimir],
         "treino_id": treino_id,
         "ficha_escolhida": ficha,  # None = todas
+        "mostrar_nome_da_ficha": not uma_ficha_so,  # com uma ficha só, o nome já está no cabeçalho
         "opcoes_de_ficha": [{"ordem": f["ordem"], "nome": f["nome"]} for f in com_exercicios],
         "endereco_do_app": endereco,
     }

@@ -73,7 +73,7 @@
   background: #fff;
   color: #000;
   font-family: "Courier New", Courier, ui-monospace, monospace;
-  font-size: 3.1mm; /* letra de ~1,9 mm de largura: cabem ~38 letras na largura útil (pedido do Thiago em 20/10/2026: letra maior) */
+  font-size: 3.5mm; /* letra de ~2,1 mm de largura: cabem ~34 letras na largura útil (pedido do Thiago em 20/10/2026: letra maior; era 2,5 mm e depois 3,1 mm) */
   line-height: 1.65;
   /* Térmica imprime fraco com traço fino: o texto normal ganha um contorno de 0,07 mm (a Bematech tem 8 pontos
      por mm) e o que é forte (aluno, treino, ficha, nome do exercício) vai em negrito, que já é grosso.

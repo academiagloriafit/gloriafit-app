@@ -58,8 +58,10 @@ def test_mostra_o_cupom_do_desenho(cliente):
     html = _pagina(cliente)
 
     # (as letras viram maiúsculas na tela e no papel pelo estilo; no HTML ficam como foram digitadas)
-    for texto in ("Academia Glória Fit", "ALUNO: MARIANA COSTA", "TREINO: TREINO ABC", "PROF.: Ana", "TREINO A"):
+    # O cabeçalho leva só o nome da ficha que está sendo impressa ("TREINO A"), não o do treino inteiro ("TREINO ABC").
+    for texto in ("Academia Glória Fit", "ALUNO: MARIANA COSTA", "TREINO: TREINO A<", "PROF.: Ana"):
         assert texto in html
+    assert "TREINO ABC" not in html
     assert "SUPINO RETO COM BARRA" in html
     assert "BI-SET: FAÇA A1 E A2 SEGUIDOS" in html
     assert "4 X 12" in html and "30 KG" in html
@@ -203,7 +205,7 @@ def test_css_do_cupom_pede_letra_forte_e_grande_para_a_termica():
     assert "font-weight: 700" in forte  # aluno, treino, ficha e nome do exercício em negrito (opção A)
     assert re.search(r"\.cupom\s*\{[^}]*font-weight: 400", css)  # o resto normal: tudo em negrito ficava preto demais
     tamanho = float(re.search(r"font-size:\s*([\d.]+)mm", css).group(1))
-    assert tamanho >= 3.0  # era 2,5 mm: letra pequena e fina saía fraca
+    assert tamanho >= 3.4  # era 2,5 mm, depois 3,1 mm: o Thiago pediu "um pouco mais" em 20/10/2026
 
 
 # ------------------------------------------------------------ escolher a ficha a imprimir (20/10/2026)
@@ -245,9 +247,18 @@ def test_escolher_a_ficha_b_imprime_so_a_b(cliente_com_duas_fichas):
     assert "A PEITO" not in cupom and "SUPINO" not in cupom
 
 
+def test_cabecalho_da_ficha_escolhida_leva_so_o_nome_dela_uma_vez(cliente_com_duas_fichas):
+    # Pedido do Thiago em 20/10/2026: nada de listar o treino todo no cabeçalho.
+    cupom = _cupom_html(cliente_com_duas_fichas.get("/treinos/1/imprimir?ficha=2").get_data(as_text=True))
+    assert "TREINO: B PERNAS" in cupom
+    assert "TREINO: T<" not in cupom  # o nome do treino inteiro ("T") não aparece
+    assert cupom.count("B PERNAS") == 1  # e o nome da ficha não se repete embaixo
+
+
 def test_todas_as_fichas_continua_possivel(cliente_com_duas_fichas):
     cupom = _cupom_html(cliente_com_duas_fichas.get("/treinos/1/imprimir?ficha=todas").get_data(as_text=True))
     assert "A PEITO" in cupom and "B PERNAS" in cupom
+    assert "TREINO: T<" in cupom  # com todas as fichas o cabeçalho leva o nome do treino, como antes
 
 
 @pytest.mark.parametrize("pedido", ["9", "0", "abc", "-1", "1.5", "99999", "%3Cscript%3E", "２"])

@@ -40,7 +40,9 @@
       {% endfor %}
       {% for ficha in cupom.fichas %}
       <hr class="cupom-separador">
+      {% if cupom.mostrar_nome_da_ficha %}
       <div class="cupom-linha cupom-forte cupom-ficha">{{ ficha.nome }}</div>
+      {% endif %}
       {% for linha in ficha.linhas %}
       {% if linha.tipo == "exercicio" %}
       <div class="cupom-linha cupom-forte cupom-exercicio"><span class="cupom-etiqueta">{{ linha.etiqueta }}</span><span>{{ linha.esquerda }}</span></div>
