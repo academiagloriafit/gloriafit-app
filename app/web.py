@@ -855,6 +855,44 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(erro=erro.mensagem), 409
         return jsonify(ok=True)
 
+    # ------------------------------------------------- impressão na recepção conta como "treino feito"
+
+    def ficha_do_pedido_de_impressao() -> int:
+        """O número da ficha ({"ficha": 2}) do pedido de marcar/desfazer a impressão. Só inteiro de 1 a 9999."""
+        dados = corpo_json()
+        ficha = dados.get("ficha") if isinstance(dados, dict) else None
+        if isinstance(ficha, bool) or not isinstance(ficha, int) or not 1 <= ficha <= 9999:
+            raise ErroDeEntrada("Escolha a ficha de novo.")
+        return ficha
+
+    @app.post("/api/treinos/<int:treino_id>/impressao")
+    def api_marcar_impressao(treino_id: int):
+        """A recepção imprimiu UMA ficha: conta como treino feito hoje daquela ficha (uma vez por ficha por dia).
+
+        Corpo {"ficha": 2}. 200 {"ok", "ficha", "ja_marcada", "feitas"}; 404 treino não existe; 409 treino concluído ou
+        sem essa ficha. Quem não usa o app pede um papel novo a cada treino (Thiago, 20/10/2026).
+        """
+        ficha = ficha_do_pedido_de_impressao()
+        try:
+            resultado = ciclo.marcar_impressao(conexao(), treino_id, ficha)
+        except ciclo.TreinoNaoEncontrado:
+            return jsonify(erro="Treino não encontrado."), 404
+        except ciclo.CicloInvalido as erro:
+            return jsonify(erro=erro.mensagem), 409
+        return jsonify(ok=True, **resultado)
+
+    @app.post("/api/treinos/<int:treino_id>/impressao/desfazer")
+    def api_desfazer_impressao(treino_id: int):
+        """Desfaz a marcação de HOJE da impressão (a recepção imprimiu a ficha errada). Corpo {"ficha": 2}."""
+        ficha = ficha_do_pedido_de_impressao()
+        try:
+            resultado = ciclo.desfazer_impressao(conexao(), treino_id, ficha)
+        except ciclo.TreinoNaoEncontrado:
+            return jsonify(erro="Treino não encontrado."), 404
+        except ciclo.CicloInvalido as erro:
+            return jsonify(erro=erro.mensagem), 409
+        return jsonify(ok=True, **resultado)
+
     # ------------------------------------------------- treinos padrão e cópia de treinos ("Importar treino")
 
     @app.get("/api/modelos")

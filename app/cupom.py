@@ -125,6 +125,8 @@ def montar_cupom(
         "treino_id": treino_id,
         "ficha_escolhida": ficha,  # None = todas
         "mostrar_nome_da_ficha": not uma_ficha_so,  # com uma ficha só, o nome já está no cabeçalho
+        # Imprimir UMA ficha conta como treino feito (a tela avisa o servidor ao clicar em Imprimir). Todas, não.
+        "registra_treino_feito": uma_ficha_so,
         "opcoes_de_ficha": [{"ordem": f["ordem"], "nome": f["nome"]} for f in com_exercicios],
         "endereco_do_app": endereco,
     }

@@ -20,7 +20,7 @@ from datetime import datetime
 
 from app import ciclo, treinos
 from app.alunos import dose_do_item, etiquetas_dos_itens, texto_da_pausa
-from app.datas import agora_utc, formatar_dia, limites_do_dia, momento_para_texto
+from app.datas import agora_utc, formatar_dia, limites_do_dia
 from app.fotos_exercicios import foto_do_exercicio
 
 _NOME_DO_BLOCO = {2: "Bi-set", 3: "Tri-set"}
@@ -144,12 +144,6 @@ def _ficha_do_treino_ativo(conn: sqlite3.Connection, aluno_id: int, ficha_ordem:
     return ativo["id"]
 
 
-def _quantas_vezes(conn: sqlite3.Connection, treino_id: int, ficha_ordem: int) -> int:
-    return conn.execute(
-        "SELECT COUNT(*) FROM sessao WHERE treino_id = ? AND ficha_ordem = ?", (treino_id, ficha_ordem)
-    ).fetchone()[0]
-
-
 def marcar_ficha_feita(
     conn: sqlite3.Connection, aluno_id: int, ficha_ordem: object, agora: datetime | None = None
 ) -> dict:
@@ -160,20 +154,10 @@ def marcar_ficha_feita(
     ou o mesmo aluno em dois celulares, nunca gravam duas vezes.
     """
     agora = agora or agora_utc()
-    comeco, fim = limites_do_dia(agora)
     conn.execute("BEGIN IMMEDIATE")
     try:
         treino_id = _ficha_do_treino_ativo(conn, aluno_id, ficha_ordem)
-        ja_marcada = conn.execute(
-            "SELECT 1 FROM sessao WHERE treino_id = ? AND ficha_ordem = ? AND feita_em >= ? AND feita_em < ?",
-            (treino_id, ficha_ordem, comeco, fim),
-        ).fetchone() is not None
-        if not ja_marcada:
-            conn.execute(
-                "INSERT INTO sessao (treino_id, ficha_ordem, feita_em) VALUES (?, ?, ?)",
-                (treino_id, ficha_ordem, momento_para_texto(agora)),
-            )
-        feitas = _quantas_vezes(conn, treino_id, ficha_ordem)
+        ja_marcada, feitas = ciclo.gravar_sessao_do_dia(conn, treino_id, ficha_ordem, agora)
         conn.commit()
     except BaseException:
         conn.rollback()
@@ -189,15 +173,10 @@ def desfazer_marcacao_de_hoje(
     Devolve {"ficha", "feitas"} (quantas ficaram). Se não havia marcação hoje, não muda nada.
     """
     agora = agora or agora_utc()
-    comeco, fim = limites_do_dia(agora)
     conn.execute("BEGIN IMMEDIATE")
     try:
         treino_id = _ficha_do_treino_ativo(conn, aluno_id, ficha_ordem)
-        conn.execute(
-            "DELETE FROM sessao WHERE treino_id = ? AND ficha_ordem = ? AND feita_em >= ? AND feita_em < ?",
-            (treino_id, ficha_ordem, comeco, fim),
-        )
-        feitas = _quantas_vezes(conn, treino_id, ficha_ordem)
+        feitas = ciclo.apagar_sessoes_do_dia(conn, treino_id, ficha_ordem, agora)
         conn.commit()
     except BaseException:
         conn.rollback()

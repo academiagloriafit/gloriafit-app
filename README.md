@@ -286,6 +286,15 @@ Pedido do Thiago em 08/10/2026 (decisões dele, uma a uma):
   tem **todas** as fichas na meta, ou quando **hoje é depois do fim** (no próprio dia do fim ainda vale). O professor lança o treino
   novo ou clica em Concluído.
 - **Quem registra que o aluno treinou:** o próprio aluno, no celular (decisão do Thiago), pelo botão **"Treino concluído"** da tela `/aluno` (desde 15/10/2026; ver "Meu treino" em "Login do aluno"). **Conta no máximo uma vez por ficha por dia** (decisão do Thiago em 15/10: se o aluno tocar de novo no mesmo dia, o app não conta outra vez). A conta e o aviso "hora de trocar" do professor usam essa contagem. `app/ciclo.py:registrar_sessao` continua sendo o registro de baixo nível (sem a regra do dia); o botão do aluno usa `app/aluno_treino.py:marcar_ficha_feita`.
+- **Quem não usa o app (20/10/2026):** esse aluno pede, na recepção, **um papel novo do treino do dia a cada vez que vai treinar**
+  (Thiago). Por isso **imprimir UMA ficha conta como treino feito** daquela ficha (`app/ciclo.py:marcar_impressao`, rota
+  `POST /api/treinos/<id>/impressao`), com a **mesma regra do botão do aluno**: no máximo uma vez por ficha por dia (dia de
+  Brasília) e só no **treino ativo**. Segunda via, papel perdido ou clique duplo no mesmo dia não contam de novo; quem marcou no
+  celular e depois imprime também não conta duas vezes. **"Todas as fichas" não conta**, e só abrir a tela (ou trocar de A para B)
+  também não: quem conta é o clique em **Imprimir** (a tela avisa o servidor sem atrasar a janela de impressão; se o servidor
+  não responder, imprime igual e o aviso diz que não registrou). Se a recepção imprimir a ficha errada, o botão **Desfazer** da
+  tela apaga a marcação de hoje daquela ficha. Limite conhecido: é a impressão que conta, não a presença; quem pega o papel e
+  não treina fica contado.
 - **Treinos antigos do Data4U** (migração para a versão 6): de cada aluno, só o treino **mais recente** continua ativo; os outros viram
   inativos. `inicio` do histórico = o dia do lançamento. O importador não mexe em ativo/início/fim/meta/sessões de treino que já veio;
   treino novo do Data4U entra inativo, e só vira o ativo do aluno se for o mais recente dele (o ativo de antes é concluído).

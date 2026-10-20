@@ -53,6 +53,25 @@
   margin-right: 4px;
 }
 
+.linha-registro {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.aviso-registro {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--verde);
+}
+
+.aviso-registro.aviso-erro {
+  color: var(--erro-texto);
+}
+
 .acoes-impressao {
   display: flex;
   gap: 10px;

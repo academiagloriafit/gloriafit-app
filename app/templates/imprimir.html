@@ -17,8 +17,14 @@
     </div>
     <div class="acoes-impressao">
       <a class="botao-link botao-link-grande" href="{{ url_for('pagina_ficha', aluno_id=cupom.aluno_id) }}">Voltar</a>
-      <button type="button" id="botao-imprimir" class="botao-principal">Imprimir</button>
+      <button type="button" id="botao-imprimir" class="botao-principal"{% if cupom.registra_treino_feito %} data-treino="{{ cupom.treino_id }}" data-ficha="{{ cupom.ficha_escolhida }}" data-nome="{{ cupom.fichas[0].nome }}"{% endif %}>Imprimir</button>
     </div>
+    {% if cupom.registra_treino_feito %}
+    <div class="linha-registro">
+      <p id="aviso-registro" class="aviso-registro" role="status" aria-live="polite">Ao clicar em Imprimir, esta ficha conta como treino feito hoje.</p>
+      <button type="button" id="botao-desfazer" class="botao-discreto" hidden>Desfazer</button>
+    </div>
+    {% endif %}
     {% if cupom.opcoes_de_ficha|length > 1 %}
     <nav class="escolha-ficha" aria-label="Escolha o que imprimir">
       <span class="escolha-ficha-titulo">Imprimir:</span>
