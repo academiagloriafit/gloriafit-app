@@ -90,6 +90,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/importar_alunos.py` | Lê a cópia diária do Data4U (só 3 tabelas: `PESSOA`, `PESSOA_STATUS`, `CONTATO_PESSOA`), confere se está inteira (manifesto) e grava os alunos, tudo ou nada. Imprime um relatório só com contagens |
 | `app/importar_treinos.py` | Recebe o pacote do histórico de treinos, confere colunas e tipos, e espelha no banco (acrescenta, atualiza, remove; nunca toca em treino do app). Tudo ou nada; devolve só contagens. Aceita `"simular": true` (faz tudo e desfaz) |
 | `app/backup.py`, `app/backup_agendado.py` | Cópia segura do banco (à mão) e o agendador que a faz todo dia às 03:00, guardando 30 cópias |
+| `app/backup_drive.py` | Envio diário da cópia, CRIPTOGRAFADA, para o Google Drive da academia (fora do servidor) e comandos `configurar`, `situacao`, `enviar-agora`, `descriptografar` |
 | `app/provisorios.py` | Aluno provisório: valida nome e CPF (dígitos verificadores) e cadastra, recusando CPF que já exista (a conferência e a gravação são um comando só no SQLite, então dois pedidos juntos não passam os dois) |
 | `app/cupom.py` | Monta o conteúdo do cupom do treino (linhas, etiquetas, avisos de bi-set/tri-set); o desenho fica em `templates/imprimir.html` e `static/imprimir.css` |
 | `app/treinos.py` | Salvar e ler treinos: confere tudo de novo no servidor e grava tudo-ou-nada (inclui início, fim, meta e a conclusão do treino ativo anterior) |
@@ -184,11 +185,45 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
   ligar, se a cópia mais nova tem mais de 20 h, faz uma na hora; se uma falhar, escreve
   `BACKUP FALHOU` no registro do contêiner e tenta de novo em 1 h. Se passar de 30 h sem cópia nova,
   o Docker marca o contêiner `backup` como "unhealthy" no painel. **Decisão do Thiago (07/10/2026):
-  as cópias ficam só no servidor.** Isso protege contra erro (apagar aluno sem querer, banco
-  quebrado), **não** contra perder o servidor inteiro; para isso existe só o backup semanal do VPS
-  na Hostinger. A etiqueta da imagem está nos **dois** serviços do compose: trocar nos dois.
+  as cópias de `/backups` ficam só no servidor.** Isso protege contra erro (apagar aluno sem querer, banco
+  quebrado), **não** contra perder o servidor inteiro; para isso existe o backup semanal do VPS
+  na Hostinger e, **a partir de 20/10/2026 (pedido do Thiago), o envio opcional, criptografado, ao Google
+  Drive da academia** (próximo item). A etiqueta da imagem está nos **dois** serviços do compose: trocar nos dois.
   **Restaurar ainda não foi ensaiado no servidor.** A cópia é um arquivo SQLite comum (testes abrem
   uma cópia e leem os dados); os passos de restauração no servidor ficam para testar com calma.
+- **Cópia diária para o Google Drive (20/10/2026)** (`app/backup_drive.py`, no mesmo serviço `backup`): depois de cada
+  cópia das 03:00, o servidor **criptografa** a cópia (Fernet: AES + assinatura, biblioteca `cryptography`; chave derivada de
+  uma senha que só o Thiago sabe, por scrypt, com sal novo a cada arquivo) e a coloca numa pasta do Drive. São **7 arquivos**,
+  um por dia da semana (`app-segunda.gfbk` ... `app-domingo.gfbk`), cada um substituído uma vez por semana: nada a apagar, e o
+  Drive guarda versões antigas de um arquivo substituído por cerca de 30 dias. Perda máxima se o servidor sumir: 1 dia.
+  - **Só funciona depois de configurado**; sem o arquivo `/dados/drive_backup.json` nada muda. Não depende de conector do
+    Claude: quem fala com o Google é o próprio servidor, por HTTPS direto, com o escopo `drive.file` (só enxerga a pasta e os
+    arquivos que ele mesmo criou, nunca o resto do Drive).
+  - **Preparo no Google (quem faz é o Thiago, com a conta Google da academia; é grátis):** criar um projeto no Google Cloud,
+    ativar a **Google Drive API**, configurar a tela de consentimento como **externa** e **publicá-la ("Em produção")**
+    (em modo "Teste" o Google vence a autorização a cada 7 dias), e criar um **ID de cliente OAuth do tipo "TVs e dispositivos de
+    entrada limitada"**. Contas de serviço NÃO servem: não têm espaço próprio num Gmail normal.
+  - **Ligar:** no terminal do contêiner `backup` (ou `app`), `python -m app.backup_drive configurar`. Pede o ID e o segredo do
+    cliente, a **senha da criptografia** (mínimo 16 caracteres; duas vezes) e mostra um endereço e um código curto: o Thiago os
+    digita no celular, entra na conta Google da academia e aprova. O comando cria a pasta "Backup do app Glória Fit", grava as
+    credenciais em `/dados/drive_backup.json` (0600) e já faz o primeiro envio. Nenhum segredo aparece na tela nem no registro.
+  - **Guarde a senha da criptografia FORA do servidor** (gerenciador de senhas, papel): se o servidor for perdido, a senha que
+    estava nele se perde junto, e **sem ela a cópia do Drive não abre** (não há como recuperar).
+  - **Acompanhar:** `python -m app.backup_drive situacao` (configurado? quando foi o último envio?). Falha de envio aparece no
+    registro do contêiner como `ENVIO AO DRIVE FALHOU (tentativa N de 4)` (rede fora do ar, Google com problema: tenta de
+    hora em hora, 4 vezes, e desiste até a cópia do dia seguinte; a cópia local nunca é afetada). Com o Drive configurado, se
+    passar de 30 h sem envio o Docker marca o contêiner `backup` como "unhealthy" no painel. `python -m app.backup_drive
+    enviar-agora` manda a cópia local mais nova na hora. Se o Google retirar a autorização (`invalid_grant`), rodar
+    `configurar` de novo **com a mesma senha**.
+  - **Restaurar a partir do Drive:** baixar o `.gfbk` do dia desejado; `python -m app.backup_drive descriptografar
+    app-terca.gfbk restaurado.db` (pede a senha; não precisa de configuração, serve em qualquer computador com Python e a
+    biblioteca `cryptography`); conferir o banco aberto com `python -m app.backup restaurado.db <pasta>`; depois seguir os passos
+    de restauração acima. Sem o código do app, qualquer ferramenta Fernet abre o miolo do arquivo (depois do cabeçalho
+    `GFBK1\n` e dos 16 bytes de sal; chave = base64 url-safe de `scrypt(senha, sal, n=2**15, r=8, p=1, dklen=32)`).
+  - **Limites e riscos aceitos:** os testes automáticos usam um servidor de mentira; **o primeiro teste contra o Google de
+    verdade é o `configurar`**. A cópia vai por inteiro para a memória ao criptografar (hoje ~10 MB; avaliar de novo se o banco
+    passar de centenas de MB). Quem tem a senha e acesso ao Drive abre as cópias. O arquivo `drive_backup.json` guarda a senha
+    em texto no servidor (preciso dela todo dia às 03:00): quem lê `/dados` já lê o banco, mas não perca o acesso à senha original.
 - Autorizar os computadores no servidor: no painel da Hostinger, Gerenciador Docker, projeto `gloriafit-app`,
   link **Terminal** (abre um shell dentro do contêiner do app), e lá
   `python -m app.dispositivos codigo --nome "..."`. O código vale 15 minutos e só funciona uma vez:

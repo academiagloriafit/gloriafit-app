@@ -32,7 +32,8 @@ services:
   # novas em /backups (app/backup_agendado.py). Mesma imagem do app, outro comando. Não tem
   # "ports" nem rótulos do Traefik: não atende ninguém. Se ficar 30 h sem cópia nova, o Docker
   # marca este contêiner como "unhealthy" (visível no painel).
-  # ATENÇÃO: as cópias ficam no MESMO servidor; não protegem contra perder o servidor inteiro.
+  # ATENÇÃO: as cópias de /backups ficam no MESMO servidor; não protegem contra perder o servidor inteiro. Para isso há o envio
+  # opcional, criptografado, ao Google Drive (python -m app.backup_drive configurar, ver README); sem configurar, nada muda.
   backup:
     image: ghcr.io/academiagloriafit/gloriafit-app:COMMIT_COMPLETO_AQUI
     restart: unless-stopped
