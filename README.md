@@ -612,6 +612,12 @@ Pedido do Thiago (09/10/2026), em **duas entregas**. **Entrega 1 (no ar desde 15
   perdeu o sentido (decisão do Thiago, 08/10/2026). `app/texto.py: nome_para_exibir` tira só o
   número do INÍCIO ("(15) ", "( 7 ) " e "9)") na lista de exercícios, na ficha do aluno e no cupom.
   O banco guarda o nome original (é a chave do exercício e a ligação com o Data4U); só a exibição muda.
+- **Nome do exercício sem o "APAGADO" (20/10/2026):** o Data4U marca com "APAGADO" no fim do nome o exercício
+  que o professor apagou ou renomeou, e os treinos antigos continuam apontando para ele (87% dos treinos ativos
+  tinham ao menos um). `app/texto.py: tirar_apagado` tira só a palavra inteira no FIM do nome, sem diferenciar
+  maiúscula, na tela do aluno, no cupom e na ficha (`treinos._item_para_exibir`), e a foto de "Como fazer" é
+  procurada com o nome limpo. A tela de montar do professor **mantém** o "APAGADO": lá ele explica por que o
+  exercício está indisponível. O banco não muda.
 - `app.db` vai ter CPF e WhatsApp de alunos (dado pessoal, LGPD). Não vai para o Git
   (`.gitignore`), a pasta do servidor onde ele fica não pode ser pública e a cópia de
   segurança precisa sair do servidor com acesso restrito.

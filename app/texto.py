@@ -9,6 +9,12 @@ import unicodedata
 # Parênteses no meio do nome ("BOM DIA ( SQUAT MACHINE )") e números sem ")" ("5' ESTEIRA") ficam como estão.
 _NUMERO_DA_MAQUINA = re.compile(r"^\s*\(?\s*[0-9]+\s*\)\s*")
 
+# O Data4U marca com a palavra APAGADO no FIM do nome o exercício que o professor apagou ou renomeou
+# ("CADEIRA EXTENSORA APAGADO"). O treino antigo continua apontando para ele, então o importador mantém o nome.
+# Para o aluno e para o cupom a palavra só atrapalha (pedido do Thiago, 20/10/2026): ela sai da EXIBIÇÃO.
+# Só no fim, como palavra inteira ("APAGADOR" e "APAGADO" no meio ficam como estão), sem diferenciar maiúscula.
+_APAGADO_NO_FIM = re.compile(r"(?:\s+APAGADO)+\s*$", re.IGNORECASE)
+
 
 def normalizar(texto: str | None) -> str:
     """Deixa o texto em minúsculas e sem acento: "Bíceps" vira "biceps".
@@ -35,4 +41,16 @@ def nome_para_exibir(nome: str | None) -> str:
     if not nome:
         return ""
     limpo = _NUMERO_DA_MAQUINA.sub("", nome, count=1).strip()
+    return limpo or nome
+
+
+def tirar_apagado(nome: str | None) -> str:
+    """"CADEIRA EXTENSORA APAGADO" vira "CADEIRA EXTENSORA". Só a palavra inteira no fim do nome.
+
+    Não mexe no banco (o nome guardado continua com APAGADO: ele é a chave do exercício vinda do Data4U).
+    Se o nome fosse só "APAGADO", devolve o nome original em vez de um texto vazio.
+    """
+    if not nome:
+        return ""
+    limpo = _APAGADO_NO_FIM.sub("", nome).strip()
     return limpo or nome

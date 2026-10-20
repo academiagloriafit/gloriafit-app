@@ -130,6 +130,21 @@ def test_o_exercicio_sai_em_texto_pronto(conn):
     assert segundo["ordem"] == 2 and segundo["etiqueta"] == "2" and segundo["carga"] == "" and segundo["intervalo"] == "" and segundo["observacao"] == ""
 
 
+def test_exercicio_apagado_no_data4u_aparece_sem_a_palavra_apagado_e_com_a_foto(conn):
+    """Treinos importados do Data4U trazem "CADEIRA EXTENSORA APAGADO"; o aluno vê o nome limpo e a foto do exercício."""
+    conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('CADEIRA EXTENSORA APAGADO', 'app')")
+    conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('(15) CADEIRA ABDUTORA APAGADO', 'app')")
+    conn.commit()
+    _salvar(conn, fichas=[("A PERNAS", [_item(7), _item(8)])])
+
+    primeiro, segundo = (g["exercicios"][0] for g in treino_do_aluno(conn, 1)["fichas"][0]["grupos"])
+
+    assert primeiro["exercicio"] == "CADEIRA EXTENSORA" and primeiro["foto"] is not None
+    assert segundo["exercicio"] == "CADEIRA ABDUTORA" and segundo["foto"] == "Thigh_Abductor"
+    # o nome guardado no banco continua com APAGADO (é a chave do exercício vinda do Data4U)
+    assert conn.execute("SELECT nome FROM exercicio WHERE id = 7").fetchone()[0] == "CADEIRA EXTENSORA APAGADO"
+
+
 def test_cardio_sem_series_nem_repeticoes_nao_quebra(conn):
     _salvar(conn, fichas=[("CARDIO", [{"exercicio_id": 6, "observacao": "20 minutos"}])])
 

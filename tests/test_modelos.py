@@ -453,3 +453,15 @@ def test_treino_copiado_de_um_padrao_e_aceito_pelo_servidor_ao_salvar(conn, exer
         ("CADEIRA ABDUTORA", "4", 1, 90), ("REMADA CURVADA", "3", 1, None), ("ELÍPTICO", None, None, None),
     ]
     assert copiado["sessoes_por_ficha"] == 15
+
+
+def test_tela_de_montar_mantem_o_apagado_no_nome_do_exercicio_indisponivel(conn, exercicios, alunos):
+    """O aluno e o cupom não mostram "APAGADO"; para o professor ele explica por que o exercício está indisponível."""
+    conn.execute("INSERT INTO treino (id, aluno_id, nome, montado_por, ativo, origem, data4u_id) VALUES (7, 1, 'DO DATA4U', 'X', 0, 'data4u', 70)")
+    conn.execute("INSERT INTO ficha (id, treino_id, nome, ordem) VALUES (7, 7, 'A', 1)")
+    conn.execute("INSERT INTO ficha_item (ficha_id, ordem, exercicio_id, series) VALUES (7, 1, ?, '3')", (exercicios["off"],))
+    conn.execute("UPDATE exercicio SET nome = 'CADEIRA EXTENSORA APAGADO' WHERE id = ?", (exercicios["off"],))
+
+    item = modelos.treino_para_editar(conn, 7)["fichas"][0]["itens"][0]
+
+    assert item["nome"] == "CADEIRA EXTENSORA APAGADO" and item["indisponivel"] is True

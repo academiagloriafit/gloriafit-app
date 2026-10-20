@@ -334,3 +334,15 @@ def test_com_todas_as_fichas_o_cabecalho_continua_com_o_nome_do_treino(conn):
     todas = montar_cupom(conn, treino)
     assert ("TREINO", "T") in todas["cabecalho"]
     assert todas["mostrar_nome_da_ficha"] is True  # cada ficha leva o seu título
+
+
+def test_exercicio_apagado_no_data4u_sai_no_cupom_sem_a_palavra_apagado(conn):
+    """Treino importado do Data4U: "TRICEPS TESTA APAGADO" imprime "TRICEPS TESTA"."""
+    conn.execute("UPDATE exercicio SET nome = 'TRICEPS TESTA APAGADO' WHERE id = 5")
+    conn.commit()
+    treino = _salvar(conn, [("TREINO A", [_item(1), _item(5)])])
+
+    linhas = _resumo(montar_cupom(conn, treino))
+
+    assert [esquerda for tipo, _, esquerda, _ in linhas if tipo == "exercicio"] == ["SUPINO RETO COM BARRA", "TRICEPS TESTA"]
+    assert "APAGADO" not in str(montar_cupom(conn, treino))

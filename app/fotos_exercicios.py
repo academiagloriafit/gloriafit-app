@@ -13,7 +13,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from app.texto import nome_para_exibir
+from app.texto import nome_para_exibir, tirar_apagado
 
 PASTA_DAS_FOTOS = Path(__file__).resolve().parent / "static" / "exercicios"
 ARQUIVO_DO_MAPA = Path(__file__).resolve().parent / "fotos_exercicios.json"
@@ -21,8 +21,8 @@ _NOME_VALIDO = re.compile(r"[A-Za-z0-9_-]{1,80}")
 
 
 def _chave(nome: str) -> str:
-    """O nome como o aluno o vê (sem o número da máquina do começo, "(15) "), sem diferença de maiúscula."""
-    return nome_para_exibir(nome.strip()).strip().casefold()
+    """O nome como o aluno o vê (sem o número da máquina do começo, "(15) " e sem o APAGADO do fim), sem diferença de maiúscula."""
+    return tirar_apagado(nome_para_exibir(nome.strip())).strip().casefold()
 
 
 @lru_cache(maxsize=1)

@@ -10,7 +10,7 @@ import unicodedata
 from datetime import datetime
 
 from app.datas import agora_utc, hoje, ler_dia, momento_para_texto
-from app.texto import nome_para_exibir, normalizar
+from app.texto import nome_para_exibir, normalizar, tirar_apagado
 
 # Quando o Claude ou um robô montar treinos sozinhos (no futuro), este é o autor.
 AUTOR_AUTOMATICO = "Academia Glória Fit"
@@ -432,7 +432,9 @@ def editar_treino(conn: sqlite3.Connection, treino_id: int, dados, agora: dateti
 
 def _item_para_exibir(linha: sqlite3.Row) -> dict:
     item = dict(linha)
-    item["exercicio"] = nome_para_exibir(item["exercicio"])  # sem o número da máquina (ver app/texto.py)
+    # Sem o número da máquina e sem o "APAGADO" do Data4U (ver app/texto.py). Esta é a tela do aluno, o cupom e a ficha.
+    # A tela de montar (modelos.para_montar) NÃO tira o APAGADO: lá ele explica por que o exercício está indisponível.
+    item["exercicio"] = tirar_apagado(nome_para_exibir(item["exercicio"]))
     return item
 
 

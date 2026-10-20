@@ -80,3 +80,13 @@ def test_todo_exercicio_do_mapa_existe_na_base_do_app():
     nomes = {str(r[0]).casefold() for r in linhas if r[0]}
     faltando = [n for n in json.loads(mapa_arquivo.read_text(encoding="utf-8")) if n.casefold() not in nomes]
     assert not faltando, faltando
+
+
+def test_exercicio_apagado_no_data4u_acha_a_foto_do_exercicio_de_mesmo_nome():
+    # o Data4U deixa "CADEIRA EXTENSORA APAGADO" nos treinos antigos; a foto é a da "CADEIRA EXTENSORA"
+    assert foto_do_exercicio("CADEIRA EXTENSORA APAGADO") == foto_do_exercicio("CADEIRA EXTENSORA") is not None
+    assert foto_do_exercicio("(15) cadeira abdutora Apagado") == "Thigh_Abductor"
+
+
+def test_apagado_sem_exercicio_de_mesmo_nome_no_mapa_continua_sem_foto():
+    assert foto_do_exercicio("EXERCICIO QUE NAO EXISTE APAGADO") is None
