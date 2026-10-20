@@ -284,3 +284,37 @@ def test_exercicio_de_cardio_sem_dose_sai_so_com_o_nome(conn):
     linhas = _resumo(cupom)
     assert linhas[0] == ("exercicio", "1", "SUPINO RETO COM BARRA", "")
     assert linhas[1][0] == "exercicio"  # sem linha de dose vazia no meio: o próximo exercício vem logo depois
+
+
+# ------------------------------------------------------------ escolher a ficha a imprimir (20/10/2026)
+
+
+def _treino_com_duas_fichas(conn):
+    conn.execute("INSERT OR IGNORE INTO aluno (id, nome, cpf) VALUES (1, 'ANA', '52998224725')")
+    conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('SUPINO', 'app'), ('AGACHAMENTO', 'app')")
+    conn.commit()
+    def item(i):
+        return {"exercicio_id": i, "series": "3", "repeticoes": "10"}
+
+    return treinos.salvar_treino(
+        conn, 1, {"nome_treino": "T", "montado_por": "P", "fichas": [
+            {"nome": "A PEITO", "itens": [item(1)]}, {"nome": "B PERNAS", "itens": [item(2)]}]}
+    )
+
+
+def test_cupom_de_uma_ficha_so_leva_essa_ficha(conn):
+    treino = _treino_com_duas_fichas(conn)
+    so_b = montar_cupom(conn, treino, ficha=2)
+    assert [f["nome"] for f in so_b["fichas"]] == ["B PERNAS"]
+    assert so_b["ficha_escolhida"] == 2
+    todas = montar_cupom(conn, treino)
+    assert [f["nome"] for f in todas["fichas"]] == ["A PEITO", "B PERNAS"] and todas["ficha_escolhida"] is None
+    assert [o["nome"] for o in so_b["opcoes_de_ficha"]] == ["A PEITO", "B PERNAS"]  # os botões sempre mostram todas
+
+
+def test_ficha_que_o_treino_nao_tem_e_erro(conn):
+    from app.cupom import FichaInexistente
+
+    treino = _treino_com_duas_fichas(conn)
+    with pytest.raises(FichaInexistente):
+        montar_cupom(conn, treino, ficha=9)

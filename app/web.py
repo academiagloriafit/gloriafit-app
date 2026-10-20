@@ -793,7 +793,23 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     @app.get("/treinos/<int:treino_id>/imprimir")
     def pagina_imprimir_treino(treino_id: int):
         """O cupom do treino para a impressora térmica (80 mm), com o botão Imprimir."""
-        conteudo = cupom.montar_cupom(conexao(), treino_id, app.config["ENDERECO_DO_APP"])
+        # ?ficha=2 imprime só a ficha de ordem 2 (B); ?ficha=todas imprime o treino inteiro; sem nada, a primeira.
+        pedida = request.args.get("ficha", "")
+        if pedida == "todas":
+            ficha = None
+        elif pedida == "":
+            primeira = conexao().execute(
+                "SELECT MIN(ordem) FROM ficha WHERE treino_id = ?", (treino_id,)
+            ).fetchone()[0]
+            ficha = primeira  # treino sem ficha: None, e a tela mostra um cupom só com o cabeçalho
+        elif pedida.isascii() and pedida.isdigit() and len(pedida) <= 4:
+            ficha = int(pedida)
+        else:
+            abort(404)
+        try:
+            conteudo = cupom.montar_cupom(conexao(), treino_id, app.config["ENDERECO_DO_APP"], ficha)
+        except cupom.FichaInexistente:
+            abort(404)
         if conteudo is None:
             abort(404)
         return render_template("imprimir.html", cupom=conteudo)

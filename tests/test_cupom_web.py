@@ -201,3 +201,57 @@ def test_css_do_cupom_pede_letra_forte_e_grande_para_a_termica():
     assert re.search(r"\.cupom\s*\{[^}]*font-weight: 400", css)  # o resto normal: tudo em negrito ficava preto demais
     tamanho = float(re.search(r"font-size:\s*([\d.]+)mm", css).group(1))
     assert tamanho >= 3.0  # era 2,5 mm: letra pequena e fina saía fraca
+
+
+# ------------------------------------------------------------ escolher a ficha a imprimir (20/10/2026)
+
+
+@pytest.fixture
+def cliente_com_duas_fichas(tmp_path):
+    caminho = tmp_path / "fichas.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (nome, cpf) VALUES ('ANA', '52998224725')")
+    conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('SUPINO RETO', 'app'), ('AGACHAMENTO LIVRE', 'app')")
+    conn.commit()
+    itens = lambda i: [{"exercicio_id": i, "series": "3", "repeticoes": "10"}]
+    treinos.salvar_treino(conn, 1, {"nome_treino": "T", "montado_por": "P", "fichas": [
+        {"nome": "A PEITO", "itens": itens(1)}, {"nome": "B PERNAS", "itens": itens(2)}]})
+    conn.close()
+    navegador = criar_app(caminho).test_client()
+    _autorizar(navegador, caminho)
+    return navegador
+
+
+def _cupom_html(html):
+    return html[html.index('class="cupom"'):]
+
+
+def test_sem_escolha_imprime_so_a_primeira_ficha_e_mostra_os_botoes(cliente_com_duas_fichas):
+    html = cliente_com_duas_fichas.get("/treinos/1/imprimir").get_data(as_text=True)
+    cupom = _cupom_html(html)
+    assert "A PEITO" in cupom and "SUPINO RETO" in cupom
+    assert "B PERNAS" not in cupom and "AGACHAMENTO" not in cupom  # não imprime o treino inteiro por padrão
+    assert 'class="escolha-ficha"' in html
+    assert "ficha=2" in html and "ficha=todas" in html
+
+
+def test_escolher_a_ficha_b_imprime_so_a_b(cliente_com_duas_fichas):
+    cupom = _cupom_html(cliente_com_duas_fichas.get("/treinos/1/imprimir?ficha=2").get_data(as_text=True))
+    assert "B PERNAS" in cupom and "AGACHAMENTO LIVRE" in cupom
+    assert "A PEITO" not in cupom and "SUPINO" not in cupom
+
+
+def test_todas_as_fichas_continua_possivel(cliente_com_duas_fichas):
+    cupom = _cupom_html(cliente_com_duas_fichas.get("/treinos/1/imprimir?ficha=todas").get_data(as_text=True))
+    assert "A PEITO" in cupom and "B PERNAS" in cupom
+
+
+@pytest.mark.parametrize("pedido", ["9", "0", "abc", "-1", "1.5", "99999", "%3Cscript%3E", "２"])
+def test_ficha_invalida_na_tela_de_imprimir_da_404(cliente_com_duas_fichas, pedido):
+    assert cliente_com_duas_fichas.get(f"/treinos/1/imprimir?ficha={pedido}").status_code == 404
+
+
+def test_treino_de_uma_ficha_so_nao_mostra_os_botoes(cliente):
+    # o treino 1 da fixture `caminho` tem uma ficha só: não há o que escolher
+    assert 'class="escolha-ficha"' not in cliente.get("/treinos/1/imprimir").get_data(as_text=True)

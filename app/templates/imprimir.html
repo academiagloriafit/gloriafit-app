@@ -19,6 +19,15 @@
       <a class="botao-link botao-link-grande" href="{{ url_for('pagina_ficha', aluno_id=cupom.aluno_id) }}">Voltar</a>
       <button type="button" id="botao-imprimir" class="botao-principal">Imprimir</button>
     </div>
+    {% if cupom.opcoes_de_ficha|length > 1 %}
+    <nav class="escolha-ficha" aria-label="Escolha o que imprimir">
+      <span class="escolha-ficha-titulo">Imprimir:</span>
+      {% for opcao in cupom.opcoes_de_ficha %}
+      <a class="botao-link{% if cupom.ficha_escolhida == opcao.ordem %} botao-link-forte{% endif %}" href="{{ url_for('pagina_imprimir_treino', treino_id=cupom.treino_id, ficha=opcao.ordem) }}"{% if cupom.ficha_escolhida == opcao.ordem %} aria-current="true"{% endif %}>{{ opcao.nome }}</a>
+      {% endfor %}
+      <a class="botao-link{% if cupom.ficha_escolhida is none %} botao-link-forte{% endif %}" href="{{ url_for('pagina_imprimir_treino', treino_id=cupom.treino_id, ficha='todas') }}"{% if cupom.ficha_escolhida is none %} aria-current="true"{% endif %}>Todas as fichas</a>
+    </nav>
+    {% endif %}
   </header>
 
   <main>

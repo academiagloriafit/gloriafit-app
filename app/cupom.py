@@ -83,8 +83,19 @@ def _linhas_da_ficha(itens: list[dict]) -> list[dict]:
     return linhas
 
 
-def montar_cupom(conn: sqlite3.Connection, treino_id: int, endereco_do_app: str | None = None) -> dict | None:
+class FichaInexistente(Exception):
+    """Pediram para imprimir uma ficha que o treino não tem."""
+
+
+def montar_cupom(
+    conn: sqlite3.Connection, treino_id: int, endereco_do_app: str | None = None, ficha: int | None = None
+) -> dict | None:
     """O conteúdo do cupom do treino, ou None se o treino não existe.
+
+    `ficha`: a `ordem` da ficha a imprimir (1 = A, 2 = B...). Sem ela, o cupom leva todas as fichas (pedido do
+    Thiago em 20/10/2026: escolher qual ficha imprimir, em vez de imprimir o treino inteiro). Se o treino não tem
+    essa ficha, levanta FichaInexistente. "opcoes_de_ficha" lista as fichas com o que há para imprimir, para a tela
+    mostrar os botões de escolha.
 
     `endereco_do_app`: se vier, o cupom termina com "ENTRE NO APP COM O SEU CPF:" e o endereço.
     Só deve ser passado quando o app do aluno já existir (hoje não existe).
@@ -94,6 +105,10 @@ def montar_cupom(conn: sqlite3.Connection, treino_id: int, endereco_do_app: str 
         return None
     aluno = conn.execute("SELECT id, nome FROM aluno WHERE id = ?", (treino["aluno_id"],)).fetchone()
     endereco = (endereco_do_app or "").strip()[:TAMANHO_MAXIMO_DO_ENDERECO] or None
+    com_exercicios = [f for f in treino["fichas"] if f["itens"]]
+    if ficha is not None and ficha not in {f["ordem"] for f in treino["fichas"]}:
+        raise FichaInexistente(ficha)
+    a_imprimir = treino["fichas"] if ficha is None else [f for f in treino["fichas"] if f["ordem"] == ficha]
     return {
         "academia": NOME_DA_ACADEMIA,
         "aluno_id": aluno["id"],
@@ -103,6 +118,9 @@ def montar_cupom(conn: sqlite3.Connection, treino_id: int, endereco_do_app: str 
             ("DATA", data_local(treino["criado_em"])),
             ("PROF.", treino["montado_por"]),
         ],
-        "fichas": [{"nome": ficha["nome"], "linhas": _linhas_da_ficha(ficha["itens"])} for ficha in treino["fichas"]],
+        "fichas": [{"nome": f["nome"], "linhas": _linhas_da_ficha(f["itens"])} for f in a_imprimir],
+        "treino_id": treino_id,
+        "ficha_escolhida": ficha,  # None = todas
+        "opcoes_de_ficha": [{"ordem": f["ordem"], "nome": f["nome"]} for f in com_exercicios],
         "endereco_do_app": endereco,
     }
