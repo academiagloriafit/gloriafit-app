@@ -56,7 +56,7 @@ def test_mostra_as_cinco_partes_do_teste(cliente):
         "1 REGUA (MM)",
         "2 BARRA PRETA CHEIA",
         "3 PONTOS",
-        "4 SIMBOLO: A ATUAL / B 384 PONTOS",
+        "4 SIMBOLO: A ANTIGO / B 384 PONTOS",
         "4 SIMBOLO: C GROSSO / D VETOR",
         "4 SIMBOLO INVERTIDO: REDONDO / TOTAL",
         "5 LETRAS",

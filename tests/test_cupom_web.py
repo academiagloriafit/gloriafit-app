@@ -184,18 +184,26 @@ def test_intervalo_e_observacao_aparecem_na_tela_de_impressao_e_texto_perigoso_n
 
 
 def test_cupom_tem_o_simbolo_da_academia_no_topo_em_preto_e_branco(cliente):
-    """Pedido do Thiago (20/10/2026): o símbolo no topo. A térmica só imprime preto: o arquivo é de 1 bit, 192 pontos."""
+    """Pedido do Thiago (20/10/2026): o símbolo no topo, e depois invertido (opção B: disco preto com o F branco, fora do círculo papel).
+    A térmica só imprime preto: o arquivo é de 1 bit, 192 pontos."""
     import struct
 
     html = cliente.get("/treinos/1/imprimir").get_data(as_text=True)
     assert html.index("cupom-logo") < html.index("cupom-titulo")  # o símbolo vem antes do nome da academia
-    assert "marca/logo-cupom.png" in html
+    assert "marca/logo-cupom-invertido.png" in html
     # lê cabeçalho do PNG à mão (a CI não tem Pillow): largura, altura, bits por ponto, tipo de cor
-    cabecalho = (PASTA_ESTATICA / "marca" / "logo-cupom.png").read_bytes()[16:26]
-    largura, altura, bits, tipo_de_cor = struct.unpack(">IIBB", cabecalho)
+    cabecalho = (PASTA_ESTATICA / "marca" / "logo-cupom-invertido.png").read_bytes()[16:26]
+    largura, altura, bits, _tipo_de_cor = struct.unpack(">IIBB", cabecalho)
     assert (largura, altura) == (192, 192)
     assert bits == 1  # 1 bit por ponto: só preto e branco, sem cinza que a térmica borraria
-    assert cliente.get("/static/marca/logo-cupom.png").status_code == 200
+    assert cliente.get("/static/marca/logo-cupom-invertido.png").status_code == 200
+
+
+def test_o_simbolo_do_cupom_e_o_mesmo_que_o_thiago_aprovou_na_folha_de_teste():
+    """Opção B (invertido, redondo) da folha de teste = o símbolo que vai no cupom, ponto por ponto."""
+    cupom = (PASTA_ESTATICA / "marca" / "logo-cupom-invertido.png").read_bytes()
+    folha = (PASTA_ESTATICA / "teste_impressao" / "logo-invertido-redondo.png").read_bytes()
+    assert cupom == folha
 
 
 def test_css_do_cupom_pede_letra_forte_e_grande_para_a_termica():
