@@ -1,0 +1,112 @@
+/* Folha de teste da impressora térmica (página /teste-de-impressao). Só serve para diagnosticar; não tem treino nem aluno.
+   Papel de 80 mm. A régua começa na borda esquerda da página (sem centralizar) para mostrar o que o papel corta; o resto
+   fica numa faixa de 72 mm centralizada, como o cupom de verdade. Tudo preto e branco. */
+
+.folha-teste {
+  width: 80mm;
+  box-sizing: border-box;
+  background: #fff;
+  color: #000;
+  font-family: "Courier New", Courier, ui-monospace, monospace;
+  font-size: 3.5mm;
+  line-height: 1.5;
+  text-transform: uppercase;
+  padding: 3mm 0 8mm;
+  zoom: 1.75; /* na tela aparece ampliado; no papel volta ao tamanho real (abaixo) */
+  box-shadow: 0 2px 0 #c9c8c2, 0 12px 24px rgba(20, 20, 20, 0.12);
+}
+
+.teste-titulo {
+  margin: 0 0 2mm;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.15em;
+}
+
+.teste-rotulo {
+  margin: 2.5mm 0 1mm;
+  font-size: 2.6mm;
+  line-height: 1.2;
+  font-weight: 400;
+}
+
+.teste-fim {
+  text-align: center;
+}
+
+.regua {
+  position: relative;
+  width: 80mm;
+  height: 11mm;
+}
+
+.regua .traco {
+  position: absolute;
+  top: 0;
+  width: 0.25mm; /* 2 pontos */
+  background: #000;
+}
+
+.regua .traco-1 { height: 2mm; }
+.regua .traco-5 { height: 4mm; }
+.regua .traco-10 { height: 6mm; }
+
+.regua .numero {
+  position: absolute;
+  top: 6.4mm;
+  transform: translateX(-50%);
+  font-size: 2.6mm;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.bloco-72 {
+  width: 72mm;
+  margin: 0 auto;
+}
+
+.barra-preta {
+  width: 72mm;
+  height: 6mm;
+  background: #000;
+}
+
+.pontos {
+  display: block;
+  width: 72mm; /* 576 pontos a 8 pontos por mm: um ponto da imagem para um ponto da impressora */
+  height: 4.5mm;
+  image-rendering: pixelated;
+}
+
+.par-simbolos {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.par-simbolos img {
+  display: block;
+  width: 24mm;
+  height: 24mm;
+  image-rendering: pixelated;
+}
+
+.amostra {
+  margin: 0 0 1.2mm;
+  overflow-wrap: anywhere;
+  font-weight: 400;
+  -webkit-text-stroke: 0;
+}
+
+.amostra-b { -webkit-text-stroke: 0.07mm #000; }
+.amostra-c { -webkit-text-stroke: 0.12mm #000; }
+.amostra-d { font-weight: 700; }
+.amostra-e { font-weight: 700; -webkit-text-stroke: 0.06mm #000; }
+
+@media print {
+  .folha-teste {
+    zoom: 1;
+    box-shadow: none;
+    margin: 0;
+  }
+}

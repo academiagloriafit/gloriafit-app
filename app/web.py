@@ -814,6 +814,13 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             abort(404)
         return render_template("imprimir.html", cupom=conteudo)
 
+    @app.get("/teste-de-impressao")
+    def pagina_teste_de_impressao():
+        """Folha de teste da impressora térmica: régua em milímetros, barra preta, pontos, o símbolo em 4 versões e as letras
+        em 5 estilos. Sem aluno, sem treino, não grava nada. Serve para separar "a impressora falha" de "o desenho
+        chega mal na impressora" (pedido do Thiago em 20/10/2026, cupom saindo com riscos brancos e a letra da esquerda cortada)."""
+        return render_template("teste_impressao.html")
+
     @app.post("/api/alunos/<int:aluno_id>/treinos")
     def api_salvar_treino(aluno_id: int):
         """Grava um treino novo para o aluno. Corpo: JSON (ver treinos.salvar_treino).
