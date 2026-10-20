@@ -62,10 +62,11 @@
   font-family: "Courier New", Courier, ui-monospace, monospace;
   font-size: 3.1mm; /* letra de ~1,9 mm de largura: cabem ~38 letras na largura útil (pedido do Thiago em 20/10/2026: letra maior) */
   line-height: 1.65;
-  /* Térmica imprime fraco com traço fino: tudo em negrito e com contorno de 0,14 mm, e linhas mais grossas
-     (a Bematech tem 8 pontos por mm: 0,14 mm engrossa o traço pouco mais de 1 ponto). */
-  font-weight: 700;
-  -webkit-text-stroke: 0.14mm #000;
+  /* Térmica imprime fraco com traço fino: o texto normal ganha um contorno de 0,07 mm (a Bematech tem 8 pontos
+     por mm) e o que é forte (aluno, treino, ficha, nome do exercício) vai em negrito, que já é grosso.
+     Escolha do Thiago em 20/10/2026 (opção A): só esses em negrito, o resto normal. */
+  font-weight: 400;
+  -webkit-text-stroke: 0.07mm #000;
   /* Na tela o cupom aparece ampliado para dar para ler; no papel (abaixo) volta ao tamanho real. */
   zoom: 1.75;
   box-shadow: 0 2px 0 #c9c8c2, 0 12px 24px rgba(20, 20, 20, 0.12);
@@ -84,6 +85,7 @@
   text-transform: uppercase;
   text-align: center;
   font-weight: 700;
+  -webkit-text-stroke: 0.06mm #000;
   font-size: 1.2em;
   letter-spacing: 0.04em;
 }
@@ -102,6 +104,7 @@
 
 .cupom-forte {
   font-weight: 700;
+  -webkit-text-stroke: 0.06mm #000;
 }
 
 .cupom-exercicio {

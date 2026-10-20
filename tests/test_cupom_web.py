@@ -195,6 +195,9 @@ def test_cupom_tem_o_simbolo_da_academia_no_topo_em_preto_e_branco(cliente):
 
 def test_css_do_cupom_pede_letra_forte_e_grande_para_a_termica():
     css = (PASTA_ESTATICA / "imprimir.css").read_text(encoding="utf-8")
-    assert "font-weight: 700;" in css and "-webkit-text-stroke:" in css
+    assert "-webkit-text-stroke: 0.07mm" in css  # o texto normal ganha contorno para não sair fraco
+    forte = re.search(r"\.cupom-forte\s*\{([^}]*)\}", css).group(1)
+    assert "font-weight: 700" in forte  # aluno, treino, ficha e nome do exercício em negrito (opção A)
+    assert re.search(r"\.cupom\s*\{[^}]*font-weight: 400", css)  # o resto normal: tudo em negrito ficava preto demais
     tamanho = float(re.search(r"font-size:\s*([\d.]+)mm", css).group(1))
     assert tamanho >= 3.0  # era 2,5 mm: letra pequena e fina saía fraca
