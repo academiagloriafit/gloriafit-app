@@ -179,3 +179,22 @@ def test_intervalo_e_observacao_aparecem_na_tela_de_impressao_e_texto_perigoso_n
     assert '<div class="cupom-linha cupom-detalhe">INTERVALO: 1 MIN 15 S</div>' in html
     assert '<div class="cupom-linha cupom-detalhe">OBS: &lt;b&gt;devagar&lt;/b&gt;</div>' in html
     assert "<b>devagar</b>" not in html
+
+
+def test_cupom_tem_o_simbolo_da_academia_no_topo_em_preto_e_branco(cliente):
+    """Pedido do Thiago (20/10/2026): o símbolo no topo. A térmica só imprime preto: o arquivo é de 1 bit, 192 pontos."""
+    from PIL import Image
+
+    html = cliente.get("/treinos/1/imprimir").get_data(as_text=True)
+    assert html.index("cupom-logo") < html.index("cupom-titulo")  # o símbolo vem antes do nome da academia
+    assert "marca/logo-cupom.png" in html
+    imagem = Image.open(PASTA_ESTATICA / "marca" / "logo-cupom.png")
+    assert imagem.mode == "1" and imagem.size == (192, 192)
+    assert cliente.get("/static/marca/logo-cupom.png").status_code == 200
+
+
+def test_css_do_cupom_pede_letra_forte_e_grande_para_a_termica():
+    css = (PASTA_ESTATICA / "imprimir.css").read_text(encoding="utf-8")
+    assert "font-weight: 700;" in css and "-webkit-text-stroke:" in css
+    tamanho = float(re.search(r"font-size:\s*([\d.]+)mm", css).group(1))
+    assert tamanho >= 3.0  # era 2,5 mm: letra pequena e fina saía fraca

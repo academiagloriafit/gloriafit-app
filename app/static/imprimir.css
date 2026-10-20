@@ -60,25 +60,38 @@
   background: #fff;
   color: #000;
   font-family: "Courier New", Courier, ui-monospace, monospace;
-  font-size: 2.5mm; /* letra de ~1,5 mm de largura: cabem ~48 letras na largura útil (como no desenho) */
-  line-height: 1.5;
+  font-size: 3.1mm; /* letra de ~1,9 mm de largura: cabem ~38 letras na largura útil (pedido do Thiago em 20/10/2026: letra maior) */
+  line-height: 1.65;
+  /* Térmica imprime fraco com traço fino: tudo em negrito e com contorno de 0,14 mm, e linhas mais grossas
+     (a Bematech tem 8 pontos por mm: 0,14 mm engrossa o traço pouco mais de 1 ponto). */
+  font-weight: 700;
+  -webkit-text-stroke: 0.14mm #000;
   /* Na tela o cupom aparece ampliado para dar para ler; no papel (abaixo) volta ao tamanho real. */
   zoom: 1.75;
   box-shadow: 0 2px 0 #c9c8c2, 0 12px 24px rgba(20, 20, 20, 0.12);
+}
+
+/* Símbolo da academia, só preto e branco (192 pontos = 24 mm a 8 pontos por mm: sem borrar na impressora). */
+.cupom-logo {
+  display: block;
+  width: 24mm;
+  height: 24mm;
+  margin: 0 auto 2mm;
+  image-rendering: pixelated;
 }
 
 .cupom-titulo {
   text-transform: uppercase;
   text-align: center;
   font-weight: 700;
-  font-size: 1.15em;
+  font-size: 1.2em;
   letter-spacing: 0.04em;
 }
 
 .cupom-separador {
   border: 0;
-  border-top: 1px dashed #000;
-  margin: 0.6em 1mm;
+  border-top: 0.4mm dashed #000;
+  margin: 0.9em 1mm;
 }
 
 .cupom-linha {
@@ -94,6 +107,7 @@
 .cupom-exercicio {
   display: flex;
   gap: 1ch;
+  margin-top: 1.6mm; /* respiro entre um exercício e o seguinte */
 }
 
 .cupom-etiqueta {
