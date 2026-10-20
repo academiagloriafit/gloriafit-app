@@ -183,13 +183,16 @@ def test_intervalo_e_observacao_aparecem_na_tela_de_impressao_e_texto_perigoso_n
 
 def test_cupom_tem_o_simbolo_da_academia_no_topo_em_preto_e_branco(cliente):
     """Pedido do Thiago (20/10/2026): o símbolo no topo. A térmica só imprime preto: o arquivo é de 1 bit, 192 pontos."""
-    from PIL import Image
+    import struct
 
     html = cliente.get("/treinos/1/imprimir").get_data(as_text=True)
     assert html.index("cupom-logo") < html.index("cupom-titulo")  # o símbolo vem antes do nome da academia
     assert "marca/logo-cupom.png" in html
-    imagem = Image.open(PASTA_ESTATICA / "marca" / "logo-cupom.png")
-    assert imagem.mode == "1" and imagem.size == (192, 192)
+    # lê cabeçalho do PNG à mão (a CI não tem Pillow): largura, altura, bits por ponto, tipo de cor
+    cabecalho = (PASTA_ESTATICA / "marca" / "logo-cupom.png").read_bytes()[16:26]
+    largura, altura, bits, tipo_de_cor = struct.unpack(">IIBB", cabecalho)
+    assert (largura, altura) == (192, 192)
+    assert bits == 1  # 1 bit por ponto: só preto e branco, sem cinza que a térmica borraria
     assert cliente.get("/static/marca/logo-cupom.png").status_code == 200
 
 
