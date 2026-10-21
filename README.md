@@ -233,6 +233,13 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
   "doente" e o Traefik o ignorava: o site ficava com certificado de erro. Há testes travando isso.
 - No ar desde 07/10/2026 em https://app.gloriafit.com.br (conferido: certificado válido, HSTS, CSP,
   API sem autorização responde 401, `/` redireciona para `/autorizar`).
+- **HSTS** (`Strict-Transport-Security`): começou em 1 semana (07/10/2026) e o código agora manda
+  **1 ano** (`max-age=31536000`), sem `includeSubDomains` e sem `preload`. Significa que o navegador
+  que já abriu o app em HTTPS se recusa a abri-lo em HTTP por 1 ano e **não deixa clicar para
+  continuar se o certificado der erro**. O certificado é renovado sozinho (Let's Encrypt pelo
+  Traefik); se um dia o site ficar com "certificado inválido", o conserto é no servidor
+  (Traefik/DNS), não no navegador do aluno. Para voltar atrás, baixe `HSTS_SEGUNDOS` em `app/web.py`
+  (o navegador só esquece depois que recebe o prazo novo).
 
 ## Rotas
 

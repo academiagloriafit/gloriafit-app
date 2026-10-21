@@ -79,9 +79,11 @@ ENDPOINTS_PUBLICOS = frozenset(
 METODOS_QUE_SO_LEEM = frozenset({"GET", "HEAD", "OPTIONS"})
 
 # HSTS: depois de ver o site em HTTPS, o navegador se recusa a abri-lo em http pelo prazo
-# abaixo. Começa em 1 semana de propósito: se algo der errado com o HTTPS, o estrago dura
-# pouco. Quando tudo estiver estável, dá para subir para 1 ano (31536000).
-HSTS_SEGUNDOS = 7 * 24 * 3600
+# abaixo. Começou em 1 semana (07/10/2026) de propósito, para o estrago ser pequeno se o
+# HTTPS desse problema. Com o app estável e o certificado renovando sozinho (Let's Encrypt
+# pelo Traefik), subiu para 1 ano. Sem "includeSubDomains" e sem "preload" de propósito:
+# o prazo só vale para este endereço e dá para voltar atrás.
+HSTS_SEGUNDOS = 365 * 24 * 3600
 
 # Nesses endereços (desenvolvimento) o navegador aceita cookie sem HTTPS; em qualquer
 # outro o cookie é marcado "Secure" e só trafega por HTTPS.

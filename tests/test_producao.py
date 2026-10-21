@@ -97,9 +97,16 @@ def test_http_puro_nao_recebe_hsts(caminho, monkeypatch):
     assert "Strict-Transport-Security" not in navegador.get("/saude").headers
 
 
-def test_o_prazo_do_hsts_comeca_curto(caminho):
-    # 1 semana: se o HTTPS der problema, o estrago dura pouco. Subir para 1 ano só com tudo estável.
-    assert HSTS_SEGUNDOS == 7 * 24 * 3600
+def test_o_prazo_do_hsts_e_de_um_ano_sem_subdominios_nem_preload(caminho, monkeypatch):
+    # 1 ano (31536000 s), depois de 1 semana de teste em produção.
+    assert HSTS_SEGUNDOS == 31536000
+    navegador, _ = _autorizado_atras_do_proxy(caminho, monkeypatch)
+
+    cabecalho = navegador.get("/api/alunos", headers=DO_PROXY).headers["Strict-Transport-Security"]
+
+    # Valor exato: sem includeSubDomains (o site da academia noutro endereço não é afetado)
+    # e sem preload (que é praticamente irreversível).
+    assert cabecalho == "max-age=31536000"
 
 
 # ------------------------------------------------------------------ domínio fixo
