@@ -4,7 +4,7 @@
 import { textoDoErro } from "./api.js";
 import { limparEspacos, tamanho } from "./treino_modelo.js";
 
-export const LIMITE_DAS_OBSERVACOES = 300; // o mesmo de app/ia_treino.py (tests/test_contrato_js_python.py confere)
+export const LIMITE_DAS_OBSERVACOES = 1000; // o mesmo de app/ia_treino.py (tests/test_contrato_js_python.py confere)
 export const LIMITE_DAS_RESPOSTAS = 300; // letras por resposta do professor às perguntas da IA (também conferido contra o Python)
 export const MAXIMO_DE_RODADAS = 2; // quantas vezes a IA pode perguntar antes de entregar o treino (o servidor é quem manda; isto é o padrão)
 export const INTERVALO_DA_CONSULTA_MS = 2000;
@@ -12,8 +12,10 @@ export const TEMPO_MAXIMO_DA_ESPERA_MS = 5 * 60 * 1000; // o servidor cancela o 
 export const FALHAS_SEGUIDAS_PARA_DESISTIR = 4; // consultas seguidas sem resposta do servidor
 
 // 8 ou mais algarismos seguidos (só com espaço, ponto, traço, parêntese ou barra no meio): CPF, telefone, documento.
+// Uma data completa (15/03/2024) também tem 8: o professor escreve só mês e ano, ou a idade.
 // Igual ao do servidor: a IA nunca recebe número que identifique o aluno.
 const NUMERO_LONGO = /\d(?:[\s.\-()/]*\d){7,}/;
+const COMPLEMENTO_DO_NUMERO_LONGO = "números de CPF, telefone ou documento, e datas completas como 15/03/2024 (escreva só o mês e o ano, ou a idade): a IA não precisa deles.";
 
 // Confere o que o professor escolheu. Devolve [{ campo (id do campo na tela), mensagem }], vazio se está tudo certo.
 export function validarPedido({ objetivo = "", nivel = "", dias = "", minutos = "", observacoes = "" } = {}) {
@@ -31,7 +33,7 @@ export function validarPedido({ objetivo = "", nivel = "", dias = "", minutos = 
   } else if (NUMERO_LONGO.test(texto)) {
     problemas.push({
       campo: "ia-observacoes",
-      mensagem: "Tire das observações números de CPF, telefone ou documento: a IA não precisa deles.",
+      mensagem: `Tire das observações ${COMPLEMENTO_DO_NUMERO_LONGO}`,
     });
   } else if (texto.includes("@")) {
     problemas.push({ campo: "ia-observacoes", mensagem: "Tire das observações o e-mail: a IA não precisa dele." });
@@ -49,7 +51,7 @@ export function validarRespostas(respostas = []) {
     if (tamanho(texto) > LIMITE_DAS_RESPOSTAS) {
       problemas.push({ indice, mensagem: `A resposta ${n} tem ${tamanho(texto)} letras; o máximo é ${LIMITE_DAS_RESPOSTAS}.` });
     } else if (NUMERO_LONGO.test(texto)) {
-      problemas.push({ indice, mensagem: `Tire da resposta ${n} números de CPF, telefone ou documento: a IA não precisa deles.` });
+      problemas.push({ indice, mensagem: `Tire da resposta ${n} ${COMPLEMENTO_DO_NUMERO_LONGO}` });
     } else if (texto.includes("@")) {
       problemas.push({ indice, mensagem: `Tire da resposta ${n} o e-mail: a IA não precisa dele.` });
     }

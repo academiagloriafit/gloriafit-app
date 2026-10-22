@@ -116,12 +116,12 @@
             </div>
             <div class="campo campo-largo">
               <label for="ia-observacoes">Observações sobre o aluno <span class="opcional">(opcional)</span></label>
-              <textarea id="ia-observacoes" rows="3" maxlength="{{ ia_limite_das_observacoes }}" aria-describedby="dica-ia-observacoes" placeholder="Ex.: dor no joelho direito; não gosta de esteira; prefere máquinas"></textarea>
-              <p id="dica-ia-observacoes" class="dica">Lesões, o que evitar, preferências. <strong>Não escreva o nome, CPF nem telefone do aluno:</strong> a IA recebe só o que está neste cartão, as suas respostas e o treino anterior do aluno (só os exercícios), nunca quem é o aluno. O que você escrever vai para o serviço da IA (Anthropic, nos EUA).</p>
+              <textarea id="ia-observacoes" rows="8" maxlength="{{ ia_limite_das_observacoes }}" aria-describedby="dica-ia-observacoes" placeholder="Ex.: 35 anos, 1,75 m, 82 kg. Trabalha sentado o dia todo. Dor no joelho direito ao agachar. Treinou por 2 anos e parou há 1 ano. Não gosta de esteira; prefere máquinas."></textarea>
+              <p id="dica-ia-observacoes" class="dica">Escreva à vontade, até {{ ia_limite_das_observacoes }} letras: idade, altura, peso, rotina, lesões ou dores, cirurgias, há quanto tempo treina, o que o aluno gosta ou evita. Quanto mais você descrever, menos a IA precisa perguntar. <strong>Não escreva o nome, CPF, telefone, endereço nem datas completas (como 15/03/2024) do aluno:</strong> a IA recebe só o que está neste cartão, as suas respostas e o treino anterior do aluno (só os exercícios), nunca quem é o aluno. O que você escrever vai para o serviço da IA (Anthropic, nos EUA).</p>
             </div>
           </div>
           <p class="dica">O rascunho pode ter erro. Quem confere e responde pelo treino é você. Para gestante e grupos de risco, monte à mão.</p>
-          <p id="dica-botoes-ia" class="dica"><strong>Gerar rascunho:</strong> a IA lê o treino anterior do aluno e pode te fazer até 2 rodadas de perguntas (o que mudar, objetivo, lesões, comorbidades) antes de montar. <strong>Montar direto:</strong> sem perguntas.</p>
+          <p id="dica-botoes-ia" class="dica"><strong>Gerar rascunho:</strong> a IA lê o treino anterior do aluno e pode te fazer até 2 rodadas de perguntas antes de montar (o que mudar, idade, altura e peso se você não escreveu, lesões, comorbidades). Se as observações já bastam, ela monta sem perguntar. <strong>Montar direto:</strong> sem perguntas.</p>
 
           {# A conversa: as perguntas da IA aparecem aqui, o professor responde e a IA monta (ou pergunta mais uma vez). Os textos das
              perguntas vêm da IA e entram na tela só como texto (nunca como HTML). Nada disto é gravado no banco. #}

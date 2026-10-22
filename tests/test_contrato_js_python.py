@@ -358,11 +358,16 @@ _OBSERVACOES = [
     "123-4567",
     "ano 2026 e 2027",
     "manda para ana@exemplo.com",
-    "a" * 300,
-    "a" * 301,
-    "💪" * 300,
-    "💪" * 301,
-    "dor   no\n\njoelho" + " " * 400,
+    "35 anos, 1,75 m, 82 kg, pressão 130/85. Operou o joelho em 03/2024 e faz 3x12.",
+    "nascido em 12/03/85",
+    "operou em 15/03/2024",
+    "nasceu 12/03/1985",
+    "1/2/3 4 5 6 7 8",
+    "a" * 1000,  # o limite (1000) é o mesmo nos dois lados: 1000 passa, 1001 não
+    "a" * 1001,
+    "💪" * 1000,
+    "💪" * 1001,
+    "dor   no\n\njoelho" + " " * 1400,
 ]
 
 

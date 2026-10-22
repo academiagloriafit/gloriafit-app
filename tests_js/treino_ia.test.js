@@ -71,6 +71,33 @@ describe("validarPedido", () => {
     const [problema] = validarPedido({ ...COMPLETO, observacoes: "manda para ana@exemplo.com" });
     expect(problema.mensagem).toContain("e-mail");
   });
+
+  it("o limite das observações é 1000 letras (cabe a descrição completa do aluno)", () => {
+    expect(LIMITE_DAS_OBSERVACOES).toBe(1000);
+    const descricao =
+      "35 anos, 1,75 m, 82 kg, pressão 130/85. Trabalha sentado o dia todo. Dor no joelho direito ao agachar, " +
+      "operou o menisco em 03/2024. Treinou 2 anos e parou há 1 ano. Não gosta de esteira; prefere máquinas. ";
+    const texto = descricao.repeat(4).trim();
+    expect(texto.length).toBeGreaterThan(300);
+    expect(validarPedido({ ...COMPLETO, observacoes: texto })).toEqual([]);
+  });
+
+  it.each(["operou em 15/03/2024", "nasceu 12/03/1985", "nasceu em 12 03 1985"])(
+    "recusa data completa e a mensagem explica o que escrever no lugar: %s",
+    (texto) => {
+      const [problema] = validarPedido({ ...COMPLETO, observacoes: texto });
+      expect(problema.campo).toBe("ia-observacoes");
+      expect(problema.mensagem).toContain("datas completas");
+      expect(problema.mensagem).toContain("mês e o ano");
+    },
+  );
+
+  it.each(["operou em 03/2024", "operou em março de 2024", "nasceu em 85", "operou 15/03/24"])(
+    "deixa passar mês e ano ou idade: %s",
+    (texto) => {
+      expect(validarPedido({ ...COMPLETO, observacoes: texto })).toEqual([]);
+    },
+  );
 });
 
 describe("montarPedido", () => {
@@ -321,6 +348,13 @@ describe("validarRespostas", () => {
 
     expect(problema).toMatchObject({ indice: 0 });
     expect(problema.mensagem).toContain("CPF");
+  });
+
+  it("recusa data completa na resposta, com a mesma explicação das observações", () => {
+    const [problema] = validarRespostas(["operou em 15/03/2024"]);
+
+    expect(problema.mensagem).toContain("resposta 1");
+    expect(problema.mensagem).toContain("datas completas");
   });
 
   it("recusa e-mail", () => {

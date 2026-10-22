@@ -132,7 +132,7 @@ def test_pedido_leva_o_nome_da_fila_do_aluno_mas_so_o_nome_da_fila(conn):
         {"minutos": 50},
         {"minutos": "60"},
         {"observacoes": 123},
-        {"observacoes": "x" * 301},
+        {"observacoes": "x" * (ia_treino.LIMITE_DAS_OBSERVACOES + 1)},
     ],
 )
 def test_campo_fora_da_lista_e_recusado_com_o_motivo_em_portugues(conn, mudanca):
@@ -173,6 +173,43 @@ def test_numero_de_documento_ou_telefone_nas_observacoes_e_recusado(conn, texto)
 
 @pytest.mark.parametrize("texto", ["faz 3 series de 12", "treina ha 10 anos, 2 dias", "peso 80 kg, 1,75 m", "dor 7 de 10"])
 def test_numeros_normais_de_treino_passam(conn, texto):
+    assert ia_treino.conferir_pedido(conn, 1, _dados(observacoes=texto)).observacoes == texto
+
+
+def test_limites_de_letras_das_observacoes_e_das_respostas():
+    assert ia_treino.LIMITE_DAS_OBSERVACOES == 1000
+    assert ia_treino.LIMITE_DAS_RESPOSTAS == 300  # as respostas às perguntas da IA continuam curtas
+
+
+def test_observacao_longa_com_idade_altura_e_peso_passa_inteira(conn):
+    texto = (
+        "35 anos, 1,75 m, 82 kg, pressão 130/85. Trabalha sentado o dia todo. Dor no joelho direito ao agachar, "
+        "operou o menisco em 03/2024. Treinou 2 anos e parou há 1 ano. Não gosta de esteira; prefere máquinas. " * 4
+    ).strip()
+    assert 300 < len(texto) <= ia_treino.LIMITE_DAS_OBSERVACOES
+
+    assert ia_treino.conferir_pedido(conn, 1, _dados(observacoes=texto)).observacoes == texto
+
+
+@pytest.mark.parametrize("letra", ["a", "💪"])
+def test_observacoes_no_limite_passam_e_uma_a_mais_nao(conn, letra):
+    assert ia_treino.conferir_pedido(conn, 1, _dados(observacoes=letra * ia_treino.LIMITE_DAS_OBSERVACOES))
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(observacoes=letra * (ia_treino.LIMITE_DAS_OBSERVACOES + 1)))
+
+    assert "1001" in erro.value.problemas[0] and "1000" in erro.value.problemas[0]
+
+
+@pytest.mark.parametrize("texto", ["operou em 15/03/2024", "nasceu 12/03/1985", "nasceu em 12 03 1985"])
+def test_data_completa_nas_observacoes_e_recusada_e_a_mensagem_explica(conn, texto):
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(observacoes=texto))
+
+    assert "datas completas" in erro.value.problemas[0] and "mês e o ano" in erro.value.problemas[0]
+
+
+@pytest.mark.parametrize("texto", ["operou em 03/2024", "operou em março de 2024", "nasceu em 85", "operou 15/03/24"])
+def test_mes_e_ano_ou_idade_passam(conn, texto):
     assert ia_treino.conferir_pedido(conn, 1, _dados(observacoes=texto)).observacoes == texto
 
 
@@ -1446,6 +1483,27 @@ def test_regras_da_casa_explicam_treino_anterior_perguntas_e_saude():
 
     assert "fazer_perguntas" in regras and "TREINO ANTERIOR" in regras and "PERGUNTAS" in regras
     assert "condropatia" in regras and "informação, não ordem" in regras
+
+
+def test_regras_da_casa_mandam_usar_os_dados_das_observacoes_e_montar_direto_quando_bastam():
+    regras = ia_treino.REGRAS_DA_CASA
+
+    assert "DADOS DO ALUNO NAS OBSERVAÇÕES" in regras and "idade, altura, peso" in regras
+    assert "Nunca invente nem suponha um dado que não foi escrito" in regras
+    assert "não faz diagnóstico, não prescreve dieta" in regras
+    assert "entregue o treino direto, sem perguntar" in regras  # observações ricas = sem rodada de perguntas
+    assert "idade, altura e peso, quando não foram escritos" in regras  # o que falta, ela pergunta
+    assert "data de nascimento" in regras  # e nunca pede o que identifica o aluno
+    assert "quais dessas informações pesaram" in regras  # o resumo diz o que foi usado, para o professor conferir
+
+
+def test_observacao_longa_vai_inteira_para_a_ia(base):
+    texto = "35 anos, 1,75 m, 82 kg. " + "Dor no joelho direito ao agachar. " * 20
+    assert len(texto) > 300
+
+    conversa = ia_treino.montar_conversa(base, _pedido(observacoes=texto.strip()))
+
+    assert texto.strip() in conversa.usuario
 
 
 def test_a_ferramenta_de_perguntas_so_pede_a_lista():

@@ -142,7 +142,7 @@ def test_a_resposta_da_ia_com_erro_chega_como_erro_em_portugues(cliente, app):
 
 @pytest.mark.parametrize(
     "mudanca",
-    [{"objetivo": "x"}, {"nivel": None}, {"dias": 9}, {"minutos": 5}, {"observacoes": "meu cpf 123.456.789-09"}, {"observacoes": "x" * 301}],
+    [{"objetivo": "x"}, {"nivel": None}, {"dias": 9}, {"minutos": 5}, {"observacoes": "meu cpf 123.456.789-09"}, {"observacoes": "x" * (ia_treino.LIMITE_DAS_OBSERVACOES + 1)}],
 )
 def test_pedido_invalido_devolve_400_com_os_motivos(cliente, ia, mudanca):
     resposta = _pedir(cliente, **mudanca)
@@ -374,7 +374,10 @@ def test_cartao_aparece_ligado_quando_ha_chave_e_o_aluno_pode(cliente):
 def test_cartao_tem_as_opcoes_certas_e_o_limite_das_observacoes(cliente):
     html = _html(cliente)
 
-    assert re.search(r'<textarea[^>]*id="ia-observacoes"[^>]*maxlength="300"', html)
+    assert re.search(rf'<textarea[^>]*id="ia-observacoes"[^>]*maxlength="{ia_treino.LIMITE_DAS_OBSERVACOES}"', html)
+    assert ia_treino.LIMITE_DAS_OBSERVACOES == 1000
+    assert re.search(r'<textarea[^>]*id="ia-observacoes"[^>]*rows="8"', html)  # o campo é alto: cabe a descrição do aluno
+    assert "até 1000 letras" in html and "idade, altura, peso" in html
     for chave in ia_treino.OBJETIVOS:
         assert f'<option value="{chave}">' in html
     for chave in ia_treino.NIVEIS:

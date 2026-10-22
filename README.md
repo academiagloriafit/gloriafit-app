@@ -429,8 +429,8 @@ conferido pelo professor) está na seção "Treino sob medida pelo Claude: como 
 ## Treino sob medida pelo Claude: como funciona
 
 Fase 3 do "Importar treino" (pedido do Thiago de 09/10/2026; no ar desde 14/10/2026, banco versão 10). Na tela **Lançar treino** há o cartão
-**"Treino sob medida"**: o professor responde objetivo, nível, dias por semana e tempo por treino, pode escrever observações (lesão,
-preferência) e clica em **Gerar rascunho**. O app pede ao Claude (API da Anthropic) um **rascunho** feito só com exercícios da academia e o
+**"Treino sob medida"**: o professor responde objetivo, nível, dias por semana e tempo por treino, pode escrever observações (idade, altura,
+peso, rotina, lesão, preferência...) e clica em **Gerar rascunho**. O app pede ao Claude (API da Anthropic) um **rascunho** feito só com exercícios da academia e o
 coloca na tela de montar, como um treino importado. **Nada é salvo para o aluno:** o professor confere, ajusta e clica em **Salvar treino**,
 como sempre.
 
@@ -447,6 +447,15 @@ obrigada a entregar o treino.
   `auto` quem decide é o texto do pedido ("se ainda faltar informação, chame fazer_perguntas; se basta, chame montar_treino"). O resultado de
   `GET .../treino-ia/<pedido>` é o rascunho (`treino`, `resumo`, `alertas`, `removidos`) **ou** `{"perguntas", "rodada", "maximo_de_rodadas"}`; a
   tela distingue pela presença de `perguntas`. Recarregar a página apaga a conversa (de propósito: resposta sobre saúde não fica em lugar nenhum).
+- **Observações grandes (22/10/2026, pedido do Thiago):** o campo "Observações sobre o aluno" tem 8 linhas e aceita **até 1.000 letras**
+  (`LIMITE_DAS_OBSERVACOES`, igual no Python e no JavaScript; `tests/test_contrato_js_python.py` confere; antes eram 300; as **respostas** às
+  perguntas da IA continuam em 300). O texto é limpo (espaços e quebras de linha viram um espaço) e vai inteiro para a IA. As regras da casa
+  (`REGRAS_DA_CASA`, regras 13 e 15) mandam a IA **usar** idade, altura, peso, rotina, histórico e lesões para ajustar o treino, **não
+  inventar** dado que não foi escrito, tratar altura e peso só como contexto (sem diagnóstico, dieta nem peso ideal), seguir o cuidado do
+  Adolescente se a idade for menor que 18, **montar direto, sem perguntar,** quando as observações já bastam, e perguntar só o que falta e
+  mudaria o treino (inclusive idade, altura e peso, se não foram escritos). O **resumo** do rascunho (até 3 frases, 600 letras) diz quais
+  informações pesaram, para o professor conferir. O custo quase não muda: 1.000 letras são cerca de 300 tokens de entrada. A qualidade das
+  respostas da IA com as regras novas só se vê com a chave de verdade (testes usam IA falsa).
 - **Treino anterior** (`treino_anterior`, em `app/ia_treino.py`): o treino **ativo** do aluno; sem ativo, o mais recente que tenha exercício.
   Vai só: ativo ou concluído, há quantos dias começou, nome das fichas e, por exercício, o número na lista da academia (ou "fora da lista"),
   o nome, séries e repetições. **Não vão:** nome do treino, professor, observações, cargas, datas exatas. Nome de ficha que traga parte do
@@ -460,6 +469,8 @@ obrigada a entregar o treino.
   **treino anterior** (só exercícios, séries e repetições), as **perguntas da IA e as respostas do professor** e as listas de exercícios e
   treinos padrão da academia. **Não vão:** nome, CPF, WhatsApp, e-mail, matrícula, nome do treino, professor nem cargas. O app **recusa**
   observação ou resposta com sequência de 8 ou mais algarismos, com e-mail ou com o nome do aluno (e a tela avisa o mesmo no navegador).
+  **Data completa** (15/03/2024) tem 8 algarismos e também é recusada: a mensagem manda escrever só o mês e o ano, ou a idade (altura, peso e
+  idade passam).
   **Observações e respostas não são guardadas no banco** (só o resultado: as perguntas novas da IA ou o rascunho, por 3 dias).
   **Atenção, dado de saúde:** as respostas costumam falar de comorbidade, condropatia, lesão: é dado pessoal **sensível** (LGPD). Os
   servidores da Anthropic ficam fora do Brasil (espaço "App Academia", geografia Estados Unidos): é transferência internacional de dado.
