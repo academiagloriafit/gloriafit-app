@@ -318,6 +318,33 @@ def test_aluno_logado_que_abre_a_tela_de_entrar_vai_para_a_inicial(cliente, reme
     assert resposta.status_code == 302 and resposta.headers["Location"].endswith("/aluno")
 
 
+def test_endereco_principal_no_celular_sem_login_abre_a_entrada_do_aluno_e_nao_a_do_computador(cliente):
+    # É o endereço que se divulga aos alunos: não pode cair na tela de autorizar computador.
+    resposta = cliente.get("/")
+
+    assert resposta.status_code == 302
+    assert resposta.headers["Location"].endswith("/aluno/entrar")
+    assert "/autorizar" not in resposta.headers["Location"]
+
+
+def test_endereco_principal_com_aluno_logado_abre_o_treino(cliente, remetente, caminho):
+    _criar_acesso(cliente, remetente, caminho)
+
+    resposta = cliente.get("/")
+
+    assert resposta.status_code == 302
+    assert resposta.headers["Location"].endswith("/aluno")
+    assert not resposta.headers["Location"].endswith("/aluno/entrar")
+
+
+def test_endereco_principal_com_cookie_de_aluno_falso_abre_a_entrada(cliente):
+    cliente.set_cookie(aluno_acesso.NOME_DO_COOKIE, "x" * 43)
+
+    resposta = cliente.get("/")
+
+    assert resposta.status_code == 302 and resposta.headers["Location"].endswith("/aluno/entrar")
+
+
 def test_o_nome_na_tela_nao_vira_html(cliente, remetente, caminho):
     _sql(caminho, "UPDATE aluno SET nome = ? WHERE id = 1", ("<script>alert(1)</script> SOUZA",))
     _criar_acesso(cliente, remetente, caminho)

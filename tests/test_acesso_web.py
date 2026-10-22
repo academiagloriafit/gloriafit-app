@@ -84,7 +84,7 @@ def _contar(caminho, tabela):
 # ------------------------------------------------------------------ sem autorização
 
 
-PAGINAS = ["/", "/alunos", "/alunos/1", "/alunos/1/montar", "/exercicios"]
+PAGINAS = ["/alunos", "/alunos/1", "/alunos/1/montar", "/exercicios"]
 APIS_GET = ["/api/alunos", "/api/alunos?q=sigiloso", "/api/exercicios", "/api/grupos"]
 
 
@@ -162,6 +162,35 @@ def test_a_lista_de_rotas_publicas_so_tem_rotas_que_existem(app):
     existentes = {regra.endpoint for regra in app.url_map.iter_rules()}
 
     assert ENDPOINTS_PUBLICOS <= existentes
+
+
+def test_endereco_principal_sem_autorizacao_leva_para_a_entrada_do_aluno_sem_mostrar_dado(anonimo):
+    resposta = anonimo.get("/")
+
+    assert resposta.status_code == 302
+    assert resposta.headers["Location"].endswith("/aluno/entrar")
+    corpo = resposta.get_data(as_text=True)
+    assert NOME_SECRETO not in corpo and "11144477735" not in corpo
+
+
+def test_endereco_principal_com_computador_autorizado_leva_para_os_alunos(app, caminho):
+    cliente = _autorizado(app, caminho)
+
+    resposta = cliente.get("/")
+
+    assert resposta.status_code == 302
+    assert resposta.headers["Location"].endswith("/alunos")
+
+
+def test_computador_com_autorizacao_revogada_cai_na_entrada_do_aluno_pelo_endereco_principal(app, caminho):
+    cliente = _autorizado(app, caminho)
+    conn = _banco(caminho)
+    acesso.revogar(conn, _linha_do_dispositivo(caminho)["id"])
+    conn.close()
+
+    resposta = cliente.get("/")
+
+    assert resposta.status_code == 302 and resposta.headers["Location"].endswith("/aluno/entrar")
 
 
 def test_rotas_publicas_abrem_sem_autorizacao(anonimo):

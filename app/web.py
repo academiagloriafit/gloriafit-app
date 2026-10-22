@@ -52,12 +52,15 @@ TAMANHO_MAXIMO_DA_IMPORTACAO = 25 * 1024 * 1024
 #   static: CSS e JavaScript, que não têm dado nenhum.
 #   saude: só diz "ok" (o servidor usa para saber se o app está de pé).
 #   pagina_autorizar / api_autorizar: a tela e a rota onde o código é digitado.
+#   raiz: o endereço principal, o que se divulga. Só redireciona (não mostra dado nenhum): quem tem computador
+#     autorizado vai para os alunos, o aluno logado vai para o treino e qualquer outro vai para a entrada do aluno.
 #   pagina_aluno_* / api_aluno_*: o login do aluno, pelo celular dele (app/aluno_acesso.py). Não usam computador
 #     autorizado: cada uma confere o cookie do aluno (outro cookie, outra tabela) e só mostra dados do próprio aluno.
 ENDPOINTS_PUBLICOS = frozenset(
     {
         "static",
         "saude",
+        "raiz",
         "pagina_autorizar",
         "api_autorizar",
         "pagina_aluno_entrar",
@@ -350,7 +353,17 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.get("/")
     def raiz():
-        return redirect(url_for("pagina_alunos"))
+        """O endereço que se divulga (app.gloriafit.com.br). Cada um cai na sua tela, sem mostrar dado nenhum.
+
+        Computador autorizado (professores, recepção) -> busca de alunos. Aluno logado -> o treino dele.
+        Qualquer outro aparelho -> entrada do aluno. A tela de autorizar computador continua em /autorizar,
+        que é digitado à mão no computador novo.
+        """
+        if dispositivo_atual() is not None:
+            return redirect(url_for("pagina_alunos"))
+        if aluno_atual() is not None:
+            return redirect(url_for("pagina_aluno_inicio"))
+        return redirect(url_for("pagina_aluno_entrar"))
 
     @app.get("/saude")
     def saude():

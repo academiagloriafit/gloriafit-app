@@ -232,7 +232,8 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
   `Host`. Com o Host padrão (`127.0.0.1`) o app a recusava (400), o Docker marcava o contêiner como
   "doente" e o Traefik o ignorava: o site ficava com certificado de erro. Há testes travando isso.
 - No ar desde 07/10/2026 em https://app.gloriafit.com.br (conferido: certificado válido, HSTS, CSP,
-  API sem autorização responde 401, `/` redireciona para `/autorizar`).
+  API sem autorização responde 401, `/` redirecionava para `/autorizar`; desde 22/10/2026 `/` leva cada
+  um para a sua tela, veja a tabela de rotas).
 - **HSTS** (`Strict-Transport-Security`): começou em 1 semana (07/10/2026) e o código agora manda
   **1 ano** (`max-age=31536000`), sem `includeSubDomains` e sem `preload`. Significa que o navegador
   que já abriu o app em HTTPS se recusa a abri-lo em HTTP por 1 ano e **não deixa clicar para
@@ -247,7 +248,7 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 |---|---|
 | `GET /autorizar` | Tela onde se digita o código. **Pública.** Quem já está autorizado é levado para `/alunos` |
 | `POST /api/autorizar` | **Pública.** Corpo JSON: `{"codigo": "ABCDE-23456"}` (aceita minúsculas, espaço, sem hífen). `200 {"ok": true, "nome": "..."}` e o cookie do computador; `400` código inválido ou vencido (a mensagem é a mesma para errado, já usado e vencido); `429` depois de 5 códigos errados seguidos (trava as tentativas por até 15 min, para qualquer aparelho; computadores já autorizados não são afetados); `415` não é JSON |
-| `GET /` | Leva para `/alunos` |
+| `GET /` | **Pública** (só redireciona, não mostra dado). É o endereço que se divulga. Computador autorizado vai para `/alunos`; aluno logado vai para `/aluno`; qualquer outro aparelho vai para `/aluno/entrar`. Desde 22/10/2026: antes, quem não tinha computador autorizado caía em `/autorizar`, e o aluno que abria o endereço principal via a tela do professor. `/autorizar` continua existindo e é digitado à mão no computador novo |
 | `GET /aluno/entrar` | **Pública.** A tela do celular do aluno: entrar (CPF + senha), primeiro acesso / esqueci a senha, digitar o código. Aluno já logado vai para `/aluno` |
 | `GET /aluno` | **Pública** (confere o cookie do aluno). A primeira tela do aluno logado; sem login, `302` para `/aluno/entrar` |
 | `POST /api/aluno/codigo` | **Pública.** Corpo `{"cpf": "..."}`. Manda o código de 6 números ao WhatsApp do aluno, em segundo plano. `200 {"ok": true, "espera": 60, "validade_minutos": 10}` **igual** para CPF de aluno e CPF que não existe; `400` CPF mal digitado; `429` (espera, com `Retry-After`) pediu demais; `503` WhatsApp ainda não configurado ou teto de códigos do dia atingido; `415` |
@@ -616,7 +617,7 @@ Sem a configuração o pedido de código responde `503` ("o envio ainda não est
 - Número de WhatsApp de 10 dígitos (DDD + 8) é enviado como está, com o `55` na frente; se a Meta o aceita ou não só o teste real mostra.
 - Quem tem a cópia do banco dentro dos 10 minutos de vida de um código pode achá-lo testando os 1.000.000 de possibilidades; mas quem tem a cópia do banco já tem tudo o que o app guarda.
 - Quem quiser atrapalhar o "esqueci a senha" de um aluno consegue travá-lo por 15 minutos (5 códigos errados no CPF dele); não consegue entrar.
-- O endereço do app ainda não é divulgado: só aparece o link "É aluno da academia?" na tela de autorizar; o endereço do app no cupom (`GLORIAFIT_ENDERECO_DO_APP`) continua em aberto.
+- O endereço do app ainda não é divulgado. Desde 22/10/2026 o endereço principal (`https://app.gloriafit.com.br`) já abre a entrada do aluno no celular (antes abria a tela de autorizar computador). O endereço do app no cupom (`GLORIAFIT_ENDERECO_DO_APP`) continua em aberto.
 
 ## Comentários do aluno: como funciona
 
