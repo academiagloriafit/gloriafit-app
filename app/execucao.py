@@ -9,8 +9,10 @@ Pedido do Thiago (22/10/2026):
 Aqui ficam só as contas e a gravação. Quem confere que o exercício é mesmo do treino ativo do aluno é `app.aluno_treino`
 (`marcar_exercicio`), porque é lá que se sabe o que o aluno está vendo.
 
-Ligação com o treino: pelo NÚMERO da ficha, o NÚMERO do exercício e o NOME do exercício, nunca por id (editar um treino apaga e
-recria fichas e itens). O nome também é a chave da "última vez": a carga que o aluno anotou no mesmo exercício em outro dia vale
+Ligação com o treino: pelo NÚMERO da ficha, o NOME do exercício e a OCORRÊNCIA do nome na ficha (1 = a primeira vez que o nome
+aparece nela, 2 = a segunda...), nunca por id (editar um treino apaga e recria fichas e itens) e nunca só pela posição: se o professor
+incluir, tirar ou trocar um exercício no meio do dia as posições andam, e o que o aluno já anotou não pode ir parar no exercício
+vizinho nem ser apagado. O nome também é a chave da "última vez": a carga que o aluno anotou no mesmo exercício em outro dia vale
 mesmo que o treino tenha mudado.
 """
 
@@ -57,12 +59,12 @@ def carga_limpa(valor: object) -> str | None:
 # ------------------------------------------------------------------ ler
 
 
-def marcas_do_dia(conn: sqlite3.Connection, aluno_id: int, dia: str) -> dict[tuple[int, int], sqlite3.Row]:
-    """{(número da ficha, número do exercício): linha} do que o aluno marcou ou anotou NESTE dia."""
+def marcas_do_dia(conn: sqlite3.Connection, aluno_id: int, dia: str) -> dict[tuple[int, str, int], sqlite3.Row]:
+    """{(número da ficha, nome do exercício, ocorrência do nome na ficha): linha} do que o aluno marcou ou anotou NESTE dia."""
     return {
-        (linha["ficha_ordem"], linha["exercicio_ordem"]): linha
+        (linha["ficha_ordem"], linha["exercicio_nome"], linha["ocorrencia"]): linha
         for linha in conn.execute(
-            "SELECT ficha_ordem, exercicio_ordem, exercicio_nome, feito, carga FROM execucao WHERE aluno_id = ? AND dia = ?",
+            "SELECT ficha_ordem, exercicio_nome, ocorrencia, feito, carga FROM execucao WHERE aluno_id = ? AND dia = ?",
             (aluno_id, dia),
         )
     }
@@ -71,26 +73,23 @@ def marcas_do_dia(conn: sqlite3.Connection, aluno_id: int, dia: str) -> dict[tup
 def ultimas_cargas(conn: sqlite3.Connection, aluno_id: int, nomes: set[str], antes_de: str) -> dict[str, tuple[str, str]]:
     """{nome do exercício: (carga, dia)} da carga mais recente anotada em um dia ANTES de `antes_de` ('AAAA-MM-DD').
 
-    Só dos exercícios em `nomes`. Quem não anotou nada ainda não aparece no resultado.
+    Só dos exercícios em `nomes`. Quem não anotou nada ainda não aparece no resultado. Se no mesmo dia o aluno anotou duas cargas
+    para o mesmo nome (o exercício aparece em duas fichas, ou duas vezes na mesma), vale a última que ele anotou naquele dia.
     """
-    if not nomes:
-        return {}
-    ordenados = sorted(nomes)
     resultado: dict[str, tuple[str, str]] = {}
-    # Em lotes: o SQLite aceita poucas "?" por consulta em versões antigas, e uma ficha grande tem dezenas de exercícios.
-    for comeco in range(0, len(ordenados), 200):
-        lote = ordenados[comeco : comeco + 200]
-        marcadores = ", ".join("?" * len(lote))
-        # No SQLite, a coluna "solta" ao lado de MAX() vem da mesma linha do máximo: aqui, a carga do dia mais recente.
-        for nome, carga, dia in conn.execute(
-            f"""
-            SELECT exercicio_nome, carga, MAX(dia) FROM execucao
-            WHERE aluno_id = ? AND carga IS NOT NULL AND dia < ? AND exercicio_nome IN ({marcadores})
-            GROUP BY exercicio_nome
+    # Uma consulta por nome, todas pelo índice (aluno, nome, dia): uma ficha tem dezenas de exercícios, não milhares.
+    for nome in sorted(nomes):
+        linha = conn.execute(
+            """
+            SELECT carga, dia FROM execucao
+            WHERE aluno_id = ? AND exercicio_nome = ? AND carga IS NOT NULL AND dia < ?
+            ORDER BY dia DESC, atualizado_em DESC, id DESC
+            LIMIT 1
             """,
-            (aluno_id, antes_de, *lote),
-        ):
-            resultado[nome] = (carga, dia)
+            (aluno_id, nome, antes_de),
+        ).fetchone()
+        if linha is not None:
+            resultado[nome] = (linha["carga"], linha["dia"])
     return resultado
 
 
@@ -104,40 +103,40 @@ def gravar(
     item: int,
     nome: str,
     *,
+    ocorrencia: int = 1,
     feito: object = NADA,
     carga: object = NADA,
     agora: datetime | None = None,
 ) -> dict:
     """Grava o que o aluno marcou/anotou hoje neste exercício e devolve {"feito": bool, "carga_hoje": str} (carga "" = nenhuma).
 
-    `feito` (bool) e `carga` (já limpa por `carga_limpa`; None apaga) só mexem se vierem; o que não veio fica como estava.
-    Se não sobrar nada (não está feito e sem carga), a linha é apagada. A transação é de quem chama.
-    Uma linha antiga do mesmo lugar com OUTRO nome de exercício (o professor trocou o treino no meio do dia) não vale: é refeita.
+    O exercício é achado por ficha + `nome` + `ocorrencia` (a n-ésima vez que o nome aparece na ficha); `item` (a posição dele na
+    ficha agora) só fica anotado. `feito` (bool) e `carga` (já limpa por `carga_limpa`; None apaga) só mexem se vierem; o que não veio
+    fica como estava. Se não sobrar nada (não está feito e sem carga), a linha é apagada. A transação é de quem chama.
     """
     dia = hoje(agora)
+    onde = (aluno_id, dia, ficha, nome, ocorrencia)
     atual = conn.execute(
-        "SELECT exercicio_nome, feito, carga FROM execucao WHERE aluno_id = ? AND dia = ? AND ficha_ordem = ? AND exercicio_ordem = ?",
-        (aluno_id, dia, ficha, item),
+        "SELECT feito, carga FROM execucao WHERE aluno_id = ? AND dia = ? AND ficha_ordem = ? AND exercicio_nome = ? AND ocorrencia = ?",
+        onde,
     ).fetchone()
-    if atual is not None and atual["exercicio_nome"] != nome:
-        atual = None
     novo_feito = (feito if feito is not NADA else bool(atual["feito"]) if atual else False)
     nova_carga = (carga if carga is not NADA else atual["carga"] if atual else None)
 
     if not novo_feito and nova_carga is None:
         conn.execute(
-            "DELETE FROM execucao WHERE aluno_id = ? AND dia = ? AND ficha_ordem = ? AND exercicio_ordem = ?",
-            (aluno_id, dia, ficha, item),
+            "DELETE FROM execucao WHERE aluno_id = ? AND dia = ? AND ficha_ordem = ? AND exercicio_nome = ? AND ocorrencia = ?",
+            onde,
         )
     else:
         conn.execute(
             """
-            INSERT INTO execucao (aluno_id, dia, ficha_ordem, exercicio_ordem, exercicio_nome, feito, carga, atualizado_em)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (aluno_id, dia, ficha_ordem, exercicio_ordem) DO UPDATE SET
-                exercicio_nome = excluded.exercicio_nome, feito = excluded.feito, carga = excluded.carga,
+            INSERT INTO execucao (aluno_id, dia, ficha_ordem, exercicio_ordem, exercicio_nome, ocorrencia, feito, carga, atualizado_em)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (aluno_id, dia, ficha_ordem, exercicio_nome, ocorrencia) DO UPDATE SET
+                exercicio_ordem = excluded.exercicio_ordem, feito = excluded.feito, carga = excluded.carga,
                 atualizado_em = excluded.atualizado_em
             """,
-            (aluno_id, dia, ficha, item, nome, 1 if novo_feito else 0, nova_carga, momento_para_texto(agora or agora_utc())),
+            (aluno_id, dia, ficha, item, nome, ocorrencia, 1 if novo_feito else 0, nova_carga, momento_para_texto(agora or agora_utc())),
         )
     return {"feito": bool(novo_feito), "carga_hoje": nova_carga or ""}

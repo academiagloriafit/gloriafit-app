@@ -1533,6 +1533,16 @@ def test_execucao_regras_do_banco(conn_nova):
     # outro dia, ou outro aluno, pode repetir o mesmo exercício
     conn_nova.execute(base, (1, "2026-10-16", 1, 1, "SUPINO RETO", 1, None))
 
+    # o mesmo nome pode aparecer de novo na mesma ficha (2ª ocorrência), em outra posição; ocorrência 0 não existe
+    com_ocorrencia = (
+        "INSERT INTO execucao (aluno_id, dia, ficha_ordem, exercicio_ordem, exercicio_nome, ocorrencia, feito, carga, atualizado_em)"
+        " VALUES (1, '2026-10-15', 1, ?, 'SUPINO RETO', ?, 1, NULL, '2026-10-15 20:00:00')"
+    )
+    conn_nova.execute(com_ocorrencia, (5, 2))
+    for posicao, ocorrencia in ((6, 2), (6, 0)):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn_nova.execute(com_ocorrencia, (posicao, ocorrencia))
+
     # apagar um aluno que tem anotação é recusado (não se perde o que ele registrou sem querer)
     with pytest.raises(sqlite3.IntegrityError):
         conn_nova.execute("DELETE FROM aluno WHERE id = 1")

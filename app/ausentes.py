@@ -5,8 +5,12 @@ mesma linha; ver app/ciclo.py). Quem treina na academia mas nem marca no celular
 a tela avisa isso, e é só uma lista para o professor olhar, não uma mensagem automática.
 
 Quem entra na lista: aluno Ativo (ou provisório, que o app trata como em uso) com treino ativo. Trancado, pendente, desistente, inativo e
-cancelado ficam de fora (não precisam ser chamados de volta). O aluno sem NENHUMA marcação conta a partir do início do treino
-(ou do dia em que o treino foi lançado): vem marcado como "ainda não registrou nenhum treino".
+cancelado ficam de fora (não precisam ser chamados de volta).
+
+Duas listas, porque são situações diferentes: (1) quem JÁ registrou treino no app (ou teve a ficha impressa) e parou, e (2) quem
+nunca registrou nenhum: conta a partir do início do treino (ou do dia em que o treino foi lançado). Na prática a lista 2 é grande
+logo que o app começa a ser usado (quase todo aluno tem treino vindo do Data4U e ainda zero registros), e misturada com a 1 ela
+empurraria para fora da tela quem de fato parou de treinar.
 """
 
 import sqlite3
@@ -35,12 +39,13 @@ def _link_do_whatsapp(digitos: str | None) -> str | None:
 
 
 def listar(conn: sqlite3.Connection, dias: int = PRAZO_PADRAO, agora: datetime | None = None) -> dict:
-    """{"dias", "total_com_treino", "total", "alunos": [...]}: os que estão há `dias` dias ou mais sem treinar, os mais sumidos primeiro.
+    """Os que estão há `dias` dias ou mais sem treinar, os mais sumidos primeiro, em duas listas.
 
-    Cada aluno: {"id", "nome", "provisorio", "treino", "ultima" ('22/10/2026' ou None), "dias" (inteiro), "nunca" (bool: nenhuma marcação
-    ainda; "dias" conta desde "desde"), "desde" (início do treino, só se nunca), "whatsapp", "whatsapp_link"}.
-    `total_com_treino` é quantos alunos têm treino ativo (a base da conta); `total` quantos estão na lista (mesmo que a tela mostre só os
-    primeiros `LIMITE_DA_LISTA`).
+    {"dias", "total_com_treino" (alunos com treino ativo: a base da conta),
+     "total" e "alunos": quem já registrou treino e parou, "total_sem_registro" e "sem_registro": quem nunca registrou nenhum}.
+    Cada aluno: {"id", "nome", "provisorio", "treino", "ultima" ('22/10/2026' ou None), "dias" (inteiro), "nunca" (bool: nenhuma
+    marcação ainda; "dias" conta desde "desde"), "desde" (início do treino, só se nunca), "whatsapp", "whatsapp_link"}.
+    As duas listas mostram no máximo `LIMITE_DA_LISTA` cada; os totais são os reais.
     """
     dia_de_hoje = ler_dia(hoje(agora))
     linhas = conn.execute(
@@ -53,7 +58,8 @@ def listar(conn: sqlite3.Connection, dias: int = PRAZO_PADRAO, agora: datetime |
         """
     ).fetchall()
 
-    ausentes = []
+    com_registro = []
+    sem_registro = []
     for linha in linhas:
         ultima = dia_local(linha["ultima"])
         referencia = ler_dia(ultima) if ultima else (ler_dia(linha["inicio"]) or ler_dia(dia_local(linha["criado_em"])))
@@ -62,7 +68,7 @@ def listar(conn: sqlite3.Connection, dias: int = PRAZO_PADRAO, agora: datetime |
         parados = (dia_de_hoje - referencia).days
         if parados < dias:
             continue
-        ausentes.append(
+        (sem_registro if ultima is None else com_registro).append(
             {
                 "id": linha["id"],
                 "nome": linha["nome"],
@@ -76,10 +82,13 @@ def listar(conn: sqlite3.Connection, dias: int = PRAZO_PADRAO, agora: datetime |
                 "whatsapp_link": _link_do_whatsapp(linha["whatsapp"]),
             }
         )
-    ausentes.sort(key=lambda a: (-a["dias"], a["nome"], a["id"]))
+    for lista in (com_registro, sem_registro):
+        lista.sort(key=lambda a: (-a["dias"], a["nome"], a["id"]))
     return {
         "dias": dias,
         "total_com_treino": len(linhas),
-        "total": len(ausentes),
-        "alunos": ausentes[:LIMITE_DA_LISTA],
+        "total": len(com_registro),
+        "alunos": com_registro[:LIMITE_DA_LISTA],
+        "total_sem_registro": len(sem_registro),
+        "sem_registro": sem_registro[:LIMITE_DA_LISTA],
     }

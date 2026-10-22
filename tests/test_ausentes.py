@@ -127,7 +127,9 @@ def test_so_alunos_ativos_ou_provisorios_com_treino_ativo_entram(conn):
 
 
 def test_aluno_sem_nenhum_treino_nao_aparece(conn):
-    assert ausentes.listar(conn, 7, AGORA) == {"dias": 7, "total_com_treino": 0, "total": 0, "alunos": []}
+    assert ausentes.listar(conn, 7, AGORA) == {
+        "dias": 7, "total_com_treino": 0, "total": 0, "alunos": [], "total_sem_registro": 0, "sem_registro": [],
+    }
 
 
 # ------------------------------------------------------------------ quem nunca registrou nada
@@ -136,22 +138,28 @@ def test_aluno_sem_nenhum_treino_nao_aparece(conn):
 def test_sem_nenhuma_marcacao_conta_a_partir_do_inicio_do_treino(conn):
     _treino(conn, 1, inicio="2026-10-10")
 
-    aluno = ausentes.listar(conn, 7, AGORA)["alunos"][0]
+    resultado = ausentes.listar(conn, 7, AGORA)
+    aluno = resultado["sem_registro"][0]
 
     assert aluno["nunca"] is True and aluno["ultima"] is None
     assert aluno["dias"] == 12 and aluno["desde"] == "10/10/2026"
+    assert resultado["alunos"] == [] and resultado["total"] == 0 and resultado["total_sem_registro"] == 1
 
 
 def test_treino_novo_sem_marcacao_ainda_nao_e_sumico(conn):
     _treino(conn, 1, inicio="2026-10-19")
 
-    assert ausentes.listar(conn, 7, AGORA)["alunos"] == []
+    resultado = ausentes.listar(conn, 7, AGORA)
+
+    assert resultado["alunos"] == [] and resultado["sem_registro"] == []
 
 
 def test_treino_que_so_comeca_no_futuro_nao_aparece(conn):
     _treino(conn, 1, inicio="2026-11-15")
 
-    assert ausentes.listar(conn, 7, AGORA)["alunos"] == []
+    resultado = ausentes.listar(conn, 7, AGORA)
+
+    assert resultado["alunos"] == [] and resultado["sem_registro"] == []
 
 
 def test_sem_inicio_gravado_vale_o_dia_em_que_o_treino_foi_lancado(conn):
@@ -159,7 +167,7 @@ def test_sem_inicio_gravado_vale_o_dia_em_que_o_treino_foi_lancado(conn):
     conn.execute("UPDATE treino SET inicio = NULL, criado_em = '2026-10-01 12:00:00' WHERE id = ?", (treino_id,))
     conn.commit()
 
-    aluno = ausentes.listar(conn, 7, AGORA)["alunos"][0]
+    aluno = ausentes.listar(conn, 7, AGORA)["sem_registro"][0]
 
     assert aluno["nunca"] is True and aluno["dias"] == 21 and aluno["desde"] == "01/10/2026"
 
@@ -213,6 +221,22 @@ def test_a_lista_tem_limite_mas_o_total_e_real(conn, monkeypatch):
     assert _nomes(resultado) == ["CARLA DIAS", "BRUNO LIMA"]
 
 
+def test_quem_nunca_registrou_nao_empurra_para_fora_quem_parou_de_treinar(conn, monkeypatch):
+    """Duas listas separadas: com o corte de tamanho, os "nunca registrou" (muitos, e com dias contados desde o início do treino)
+    não podem tirar da tela quem treinou pelo app e parou."""
+    monkeypatch.setattr(ausentes, "LIMITE_DA_LISTA", 1)
+    _treino(conn, 1, inicio="2026-01-05")  # nunca registrou, 290 dias desde o início do treino
+    _treino(conn, 2, inicio="2026-01-06")  # idem
+    _sessao(conn, _treino(conn, 3), AGORA - timedelta(days=9))  # treinou pelo app e parou há 9 dias
+
+    resultado = ausentes.listar(conn, 7, AGORA)
+
+    assert _nomes(resultado) == ["CARLA DIAS"] and resultado["total"] == 1
+    assert [a["nome"] for a in resultado["sem_registro"]] == ["ANA SOUZA"]  # corte por lista (o mais antigo)
+    assert resultado["total_sem_registro"] == 2
+    assert resultado["total_com_treino"] == 3
+
+
 @pytest.mark.parametrize(
     ("pedido", "esperado"),
     [("7", 7), ("14", 14), ("30", 30), (None, 7), ("", 7), ("0", 7), ("8", 7), ("-14", 7), ("14.5", 7), ("1e1", 7), ("١٤", 7), ("14 ", 7), (14, 7), (["14"], 7)],
@@ -247,7 +271,7 @@ def test_so_computador_autorizado_abre_a_tela(caminho):
     sem_autorizacao = criar_app(caminho).test_client()
     conn = conectar(caminho)
     with conn:
-        token = aluno_acesso._criar_sessao(conn, 1, AGORA)
+        token = aluno_acesso._criar_sessao(conn, 1, datetime.now(timezone.utc))
     conn.close()
     celular = criar_app(caminho).test_client()
     celular.set_cookie(aluno_acesso.NOME_DO_COOKIE, token)
@@ -305,7 +329,7 @@ def test_todos_em_dia_diz_isso(caminho, professor):
 
     html = professor.get("/ausentes").get_data(as_text=True)
 
-    assert "Ninguém está há 7 dias ou mais sem treinar." in html
+    assert "Nenhum aluno que já registrou treino está há 7 dias ou mais sem treinar." in html
 
 
 def test_o_menu_do_professor_tem_quem_sumiu_e_a_tela_nao_aceita_escrita(caminho, professor):
@@ -313,3 +337,22 @@ def test_o_menu_do_professor_tem_quem_sumiu_e_a_tela_nao_aceita_escrita(caminho,
 
     assert 'href="/ausentes"' in html and 'aria-current="page">Quem sumiu' in html
     assert professor.post("/ausentes", json={}).status_code == 405
+
+
+def test_a_tela_separa_quem_nunca_registrou_treino(caminho, professor):
+    conn = conectar(caminho)
+    _treino(conn, 1, inicio="2026-01-05")  # nunca registrou
+    _sessao(conn, _treino(conn, 2), datetime.now(timezone.utc) - timedelta(days=10))
+    conn.close()
+
+    html = professor.get("/ausentes").get_data(as_text=True)
+
+    assert 'id="lista-ausentes"' in html and 'id="lista-sem-registro"' in html
+    assert "Ainda sem nenhum treino registrado no app" in html
+    assert html.index("BRUNO LIMA") < html.index("lista-sem-registro") < html.index("ANA SOUZA")  # cada um na sua seção
+
+
+def test_sem_ninguem_sem_registro_a_secao_nem_aparece(caminho, professor):
+    _com_sumidos(caminho)
+
+    assert "lista-sem-registro" not in professor.get("/ausentes").get_data(as_text=True)

@@ -1410,6 +1410,7 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 }
 .linha-ausente { min-height: 62px; padding: 8px 20px; border-top: 1px solid var(--linha); font-size: 15px; }
 .titulos-ausentes + .linhas > .linha-ausente:first-child { border-top: 0; }
+.cartao-lista > .texto-apoio { margin: 0; padding: 12px 20px; border-bottom: 1px solid var(--linha); font-size: 14px; }
 .ausente-nome { color: var(--texto); font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; text-decoration: none; overflow-wrap: anywhere; }
 .ausente-nome:hover { text-decoration: underline; }
 .ausente-nome:focus-visible, .ausente-whatsapp a:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
@@ -1484,7 +1485,7 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 .meu-esforco-botoes { display: flex; gap: 8px; }
 .meu-esforco-botoes .botao-link { flex: 1 1 0; justify-content: center; min-height: 52px; padding: 0 8px; font-size: 16px; font-weight: 700; }
 .meu-esforco-botoes .meu-esforco-escolhido, .meu-esforco-botoes .meu-esforco-escolhido:hover:not(:disabled) { border-color: var(--laranja); background: var(--laranja); color: var(--sobre-laranja); }
-.meu-esforco-botoes .botao-link:disabled { cursor: wait; opacity: 0.6; }
+.meu-esforco-botoes .botao-link[aria-disabled="true"] { cursor: wait; opacity: 0.6; }
 .meu-esforco-dica { font-size: 13.5px; color: var(--texto-suave); }
 
 /* o cronômetro de descanso: uma barra no pé da tela */

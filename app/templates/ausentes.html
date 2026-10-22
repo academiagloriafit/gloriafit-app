@@ -22,17 +22,7 @@
       {% endfor %}
     </nav>
 
-    <section class="cartao-lista" aria-labelledby="titulo-lista-ausentes">
-      <div class="cabecalho-lista">
-        <h2 id="titulo-lista-ausentes">Sem treinar há {{ lista.dias }} dias ou mais</h2>
-        <p class="resumo" aria-live="polite">{{ lista.total }} de {{ lista.total_com_treino }} {{ "aluno com treino ativo" if lista.total_com_treino == 1 else "alunos com treino ativo" }}{% if lista.total > lista.alunos|length %} (mostrando os {{ limite }} mais sumidos){% endif %}</p>
-      </div>
-      {% if lista.alunos %}
-      <div class="titulos-ausentes" aria-hidden="true">
-        <span>Aluno</span><span>Último treino</span><span>Sem treinar</span><span>Treino atual</span><span>WhatsApp</span>
-      </div>
-      <ul class="linhas" id="lista-ausentes">
-        {% for a in lista.alunos %}
+    {% macro linha(a) %}
         <li class="linha-ausente">
           <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
           <span class="ausente-ultimo">{% if a.nunca %}Nenhum registrado<span class="ausente-desde"> · treino desde {{ a.desde }}</span>{% else %}{{ a.ultima }}{% endif %}</span>
@@ -40,12 +30,42 @@
           <span class="ausente-treino">{{ a.treino }}</span>
           <span class="ausente-whatsapp">{% if a.whatsapp_link %}<a href="{{ a.whatsapp_link }}" target="_blank" rel="noopener noreferrer">{{ a.whatsapp }}</a>{% elif a.whatsapp %}{{ a.whatsapp }}{% else %}<span class="sem-valor">sem WhatsApp</span>{% endif %}</span>
         </li>
-        {% endfor %}
+    {% endmacro %}
+
+    <section class="cartao-lista" aria-labelledby="titulo-lista-ausentes">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-lista-ausentes">Pararam de treinar há {{ lista.dias }} dias ou mais</h2>
+        <p class="resumo" aria-live="polite">{{ lista.total }} de {{ lista.total_com_treino }} {{ "aluno com treino ativo" if lista.total_com_treino == 1 else "alunos com treino ativo" }}{% if lista.total > lista.alunos|length %} (mostrando os {{ limite }} mais sumidos){% endif %}</p>
+      </div>
+      {% if lista.alunos %}
+      <div class="titulos-ausentes" aria-hidden="true">
+        <span>Aluno</span><span>Último treino</span><span>Sem treinar</span><span>Treino atual</span><span>WhatsApp</span>
+      </div>
+      <ul class="linhas" id="lista-ausentes">
+        {% for a in lista.alunos %}{{ linha(a) }}{% endfor %}
       </ul>
+      {% elif lista.total_com_treino %}
+      <p class="lista-vazia">Nenhum aluno que já registrou treino está há {{ lista.dias }} dias ou mais sem treinar.</p>
       {% else %}
-      <p class="lista-vazia">{% if lista.total_com_treino %}Ninguém está há {{ lista.dias }} dias ou mais sem treinar.{% else %}Nenhum aluno tem treino ativo ainda.{% endif %}</p>
+      <p class="lista-vazia">Nenhum aluno tem treino ativo ainda.</p>
       {% endif %}
     </section>
+
+    {% if lista.sem_registro %}
+    <section class="cartao-lista" aria-labelledby="titulo-lista-sem-registro">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-lista-sem-registro">Ainda sem nenhum treino registrado no app</h2>
+        <p class="resumo" aria-live="polite">{{ lista.total_sem_registro }} {{ "aluno" if lista.total_sem_registro == 1 else "alunos" }}, contando os dias desde o início do treino atual{% if lista.total_sem_registro > lista.sem_registro|length %} (mostrando os {{ limite }} mais antigos){% endif %}</p>
+      </div>
+      <p class="texto-apoio">Estes alunos nunca tocaram em "Treino concluído" e nunca tiveram a ficha impressa na recepção. Podem estar treinando normalmente: o app só enxerga o treino de quem o usa.</p>
+      <div class="titulos-ausentes" aria-hidden="true">
+        <span>Aluno</span><span>Último treino</span><span>Sem treinar</span><span>Treino atual</span><span>WhatsApp</span>
+      </div>
+      <ul class="linhas" id="lista-sem-registro">
+        {% for a in lista.sem_registro %}{{ linha(a) }}{% endfor %}
+      </ul>
+    </section>
+    {% endif %}
   </main>
 </body>
 </html>

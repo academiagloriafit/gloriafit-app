@@ -74,6 +74,16 @@ const paginaDoAluno = document.querySelector(".pagina-aluno");
 const rascunhos = new Map();
 // Quantos pedidos de "feito", carga ou nota estão no ar agora: a tela não se redesenha no meio deles (ver `alunoEstaEscrevendo`).
 let pedidosNoAr = 0;
+// Salvamentos de carga em andamento. "Treino concluído" e "voltar" esperam por eles (ver `terminarSalvamentos`): sem isso a tela era
+// redesenhada antes da resposta e o campo voltava vazio, ou o valor digitado se perdia.
+const salvamentosDeCarga = new Set();
+
+// Tira o cursor do campo que estiver aberto (isso salva o que foi digitado: no iPhone, tocar num botão NÃO tira o cursor do campo)
+// e espera os salvamentos de carga acabarem.
+async function terminarSalvamentos() {
+  document.activeElement?.blur?.();
+  await Promise.allSettled([...salvamentosDeCarga]);
+}
 
 // O que está na tela agora, para saber se o treino mudou quando o aluno voltar para o app (ver `atualizarTreinoAoVoltar`).
 let treinoNaTela = null; // null: a tela mostra um aviso (carregando, sem treino, erro), não um treino
@@ -227,6 +237,7 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
   let marcando = false;
   let gravandoCarga = false;
   let cargaPendente = false;
+  let cargaNaoSalvou = false; // o último envio falhou: sair do campo de novo tenta outra vez, mesmo sem o aluno mudar o número
 
   const aviso = el("p", { classe: "aviso-campo", role: "status" });
   const botaoAtualizar = el("button", { type: "button", classe: "botao-link", texto: "Atualizar a página", aoClicar: () => window.location.reload() });
@@ -240,7 +251,11 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
     maxlength: "6",
     placeholder: "kg",
     "aria-describedby": `${idDaCarga}-nota`,
-    aoMudar: () => salvarCarga(),
+    aoMudar: () => salvarEAcompanhar(),
+  });
+  campo.addEventListener("blur", () => {
+    // O "change" só dispara quando o número mudou. Se o envio anterior falhou, o número já está no campo: sair dele de novo reenvia.
+    if (cargaNaoSalvou) salvarEAcompanhar();
   });
   campo.addEventListener("keydown", (evento) => {
     if (evento.key === "Enter") {
@@ -295,6 +310,14 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
     pintar();
   }
 
+  function salvarEAcompanhar() {
+    const andamento = salvarCarga();
+    salvamentosDeCarga.add(andamento);
+    const terminou = () => salvamentosDeCarga.delete(andamento);
+    andamento.then(terminou, terminou);
+    return andamento;
+  }
+
   async function salvarCarga() {
     if (gravandoCarga) {
       cargaPendente = true; // o aluno mexeu de novo durante o envio: depois que terminar, confere de novo
@@ -311,6 +334,7 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
     if (novo === exercicio.carga_hoje) {
       nota.textContent = "";
       nota.classList.remove("meu-carga-erro");
+      cargaNaoSalvou = false;
       return;
     }
     gravandoCarga = true;
@@ -322,11 +346,13 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
       const resultado = descreverExercicio(resposta.status, resposta.corpo);
       if (resultado.tipo === "ok") {
         exercicio.carga_hoje = resultado.cargaHoje;
+        cargaNaoSalvou = false;
         if (!cargaPendente) campo.value = resultado.cargaHoje; // não atropela o que o aluno digitou enquanto salvava
         nota.textContent = resultado.cargaHoje ? "✓ Anotado" : "Carga apagada";
       } else if (resultado.tipo === "entrar") {
         window.location.assign("/aluno/entrar");
       } else {
+        cargaNaoSalvou = true;
         nota.textContent = resultado.mensagem;
         nota.classList.add("meu-carga-erro");
         if (resultado.tipo === "atualizar") {
@@ -337,6 +363,7 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
         }
       }
     } catch {
+      cargaNaoSalvou = true;
       nota.textContent = `Não salvou. ${MENSAGEM_SEM_REDE}`;
       nota.classList.add("meu-carga-erro");
     }
@@ -344,7 +371,7 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
     gravandoCarga = false;
     if (cargaPendente) {
       cargaPendente = false;
-      salvarCarga();
+      await salvarCarga();
     }
   }
 
@@ -418,6 +445,7 @@ async function marcarFicha(treino, indice, rota, botao) {
   let mensagem = "";
   let deuErro = false;
   try {
+    await terminarSalvamentos(); // a carga que o aluno acabou de digitar é salva ANTES de a ficha ser desenhada de novo
     const resposta = await enviarJson(`/api/aluno/treino/${rota}`, { ficha: ficha.ordem });
     const resultado = descreverMarcacao(resposta.status, resposta.corpo);
     if (resultado.tipo === "entrar") {
@@ -454,7 +482,7 @@ function desenharEsforco(ficha) {
     pedidosNoAr += 1;
     mensagem = "";
     deuErro = false;
-    redesenhar();
+    redesenhar(valor);
     try {
       const resposta = await enviarJson("/api/aluno/treino/esforco", pedidoDoEsforco(ficha, proximoEsforco(ficha.esforco_hoje, valor)));
       const resultado = descreverEsforco(resposta.status, resposta.corpo);
@@ -462,8 +490,10 @@ function desenharEsforco(ficha) {
         window.location.assign("/aluno/entrar");
         return; // a página está sendo trocada
       }
-      if (resultado.tipo === "ok") ficha.esforco_hoje = resultado.esforco;
-      else {
+      if (resultado.tipo === "ok") {
+        // Se enquanto isso o aluno desfez a ficha, o servidor já apagou a nota: a resposta velha não pode pôr uma nota de volta na tela.
+        if (ficha.feita_hoje) ficha.esforco_hoje = resultado.esforco;
+      } else {
         mensagem = resultado.mensagem;
         deuErro = true;
       }
@@ -473,10 +503,13 @@ function desenharEsforco(ficha) {
     }
     pedidosNoAr -= 1;
     enviando = false;
-    redesenhar();
+    redesenhar(valor);
   }
 
-  function redesenhar() {
+  // Redesenha os botões. `foco`: o valor do botão que o aluno acabou de tocar: o teclado/leitor de tela continua nele
+  // (desenhar de novo destrói o botão que tinha o foco).
+  function redesenhar(foco = null) {
+    const tinhaFoco = foco !== null && raiz.contains(document.activeElement);
     raiz.replaceChildren(
       el("p", { id: `esforco-titulo-${ficha.ordem}`, classe: "meu-esforco-titulo", texto: TEXTO_PERGUNTA_DO_ESFORCO }),
       el(
@@ -488,13 +521,16 @@ function desenharEsforco(ficha) {
             classe: ficha.esforco_hoje === opcao.valor ? "botao-link meu-esforco-escolhido" : "botao-link",
             texto: opcao.texto,
             "aria-pressed": ficha.esforco_hoje === opcao.valor ? "true" : "false",
-            disabled: enviando,
+            "data-esforco": String(opcao.valor),
+            // aria-disabled (e não disabled): um botão desabilitado perde o foco do teclado/leitor de tela; o clique é ignorado em `escolher`
+            "aria-disabled": enviando ? "true" : false,
             aoClicar: () => escolher(opcao.valor),
           }),
         ),
       ),
       el("p", { classe: deuErro ? "aviso-campo aviso-erro" : "meu-esforco-dica", role: "status", texto: mensagem || TEXTO_ESFORCO_OPCIONAL }),
     );
+    if (tinhaFoco) raiz.querySelector(`[data-esforco="${foco}"]`)?.focus({ preventScroll: true });
   }
 
   redesenhar();
@@ -610,12 +646,14 @@ function irParaALista() {
 
 // "Voltar": se a ficha foi aberta por toque, volta no histórico (e o `popstate` abaixo mostra a lista); senão mostra a lista direto.
 function voltarParaALista() {
+  document.activeElement?.blur?.(); // salva a carga que estava sendo digitada (o campo vai sair da tela)
   if (history.state && history.state.tela === "ficha") history.back();
   else irParaALista();
 }
 
 botaoVoltar.addEventListener("click", voltarParaALista);
 window.addEventListener("popstate", () => {
+  document.activeElement?.blur?.(); // o gesto de voltar do celular também salva a carga que estava sendo digitada
   if (!treinoNaTela) return;
   if (history.state && history.state.tela === "ficha") {
     mostrarFicha(treinoNaTela, fichaNaTela);

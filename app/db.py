@@ -384,11 +384,12 @@ def _de_13_para_14(conn: sqlite3.Connection) -> None:
             ficha_ordem     INTEGER NOT NULL CHECK (ficha_ordem >= 1),
             exercicio_ordem INTEGER NOT NULL CHECK (exercicio_ordem >= 1),
             exercicio_nome  TEXT    NOT NULL CHECK (length(exercicio_nome) >= 1),
+            ocorrencia      INTEGER NOT NULL DEFAULT 1 CHECK (ocorrencia >= 1),
             feito           INTEGER NOT NULL DEFAULT 0 CHECK (feito IN (0, 1)),
             carga           TEXT    CHECK (carga IS NULL OR length(carga) BETWEEN 1 AND 9),
             atualizado_em   TEXT    NOT NULL,
             CHECK (feito = 1 OR carga IS NOT NULL),
-            UNIQUE (aluno_id, dia, ficha_ordem, exercicio_ordem)
+            UNIQUE (aluno_id, dia, ficha_ordem, exercicio_nome, ocorrencia)
         )
         """
     )

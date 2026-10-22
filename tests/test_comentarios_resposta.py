@@ -317,7 +317,7 @@ def cliente_da_ana(caminho):
     app = criar_app(caminho)
     conn = conectar(caminho)
     with conn:
-        token = aluno_acesso._criar_sessao(conn, 1, AGORA)
+        token = aluno_acesso._criar_sessao(conn, 1, datetime.now(timezone.utc))
     conn.close()
     cliente = app.test_client()
     cliente.set_cookie(aluno_acesso.NOME_DO_COOKIE, token)

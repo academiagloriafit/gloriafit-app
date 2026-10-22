@@ -30,6 +30,7 @@ _NOME_DO_BLOCO = {2: "Bi-set", 3: "Tri-set"}
 
 # A nota que o aluno dá ao concluir a ficha (decisão do Thiago, 22/10/2026): opcional, três opções, sem número na tela.
 ESFORCOS = ciclo.ESFORCOS
+MAIOR_NUMERO = 9999  # maior número de ficha ou de exercício aceito do celular (um inteiro enorme faria o SQLite dar erro 500)
 
 
 def _lista_com_e(etiquetas: list[str]) -> str:
@@ -175,11 +176,22 @@ def _esforcos_de_hoje(conn: sqlite3.Connection, treino_id: int, agora: datetime)
     }
 
 
+def _exercicios_com_ocorrencia(ficha: dict):
+    """Cada exercício da ficha, na ordem, com a OCORRÊNCIA do nome dele na ficha: (exercício, 1) na primeira vez que o nome aparece,
+    (exercício, 2) na segunda... É com o nome + essa ocorrência que se acha o que o aluno marcou (ver app/execucao.py)."""
+    vistos: dict[str, int] = {}
+    for grupo in ficha["grupos"]:
+        for e in grupo["exercicios"]:
+            vistos[e["exercicio"]] = vistos.get(e["exercicio"], 0) + 1
+            yield e, vistos[e["exercicio"]]
+
+
 def _juntar_execucao(conn: sqlite3.Connection, aluno_id: int, treino: dict, agora: datetime) -> None:
     """Põe em cada exercício o que o aluno marcou/anotou HOJE e a "última vez" (carga de um dia anterior); e a nota de cada ficha.
 
-    Só vale a marca cujo NOME de exercício ainda é o do lugar (ficha + número): se o professor trocou o exercício no meio do dia,
-    a marca do antigo não passa para o novo. Todas as chaves saem SEMPRE (o celular compara o treino inteiro para saber se mudou).
+    A marca é achada pelo NOME do exercício (e a ocorrência do nome na ficha), não pela posição: se o professor incluir, tirar ou
+    trocar um exercício no meio do dia, o que o aluno marcou nos outros continua valendo, e a marca de um exercício que saiu não
+    passa para outro. Todas as chaves saem SEMPRE (o celular compara o treino inteiro para saber se mudou).
     """
     dia = hoje(agora)
     marcas = execucao.marcas_do_dia(conn, aluno_id, dia)
@@ -188,16 +200,13 @@ def _juntar_execucao(conn: sqlite3.Connection, aluno_id: int, treino: dict, agor
     esforcos = _esforcos_de_hoje(conn, treino["_treino_id"], agora)
     for ficha in treino["fichas"]:
         ficha["esforco_hoje"] = esforcos.get(ficha["ordem"])
-        for grupo in ficha["grupos"]:
-            for e in grupo["exercicios"]:
-                marca = marcas.get((ficha["ordem"], e["ordem"]))
-                if marca is not None and marca["exercicio_nome"] != e["exercicio"]:
-                    marca = None
-                ultima = ultimas.get(e["exercicio"])
-                e["feito"] = bool(marca["feito"]) if marca else False
-                e["carga_hoje"] = (marca["carga"] or "") if marca else ""
-                e["ultima_carga"] = ultima[0] if ultima else ""
-                e["ultima_data"] = (formatar_dia(ultima[1]) or "") if ultima else ""
+        for e, ocorrencia in _exercicios_com_ocorrencia(ficha):
+            marca = marcas.get((ficha["ordem"], e["exercicio"], ocorrencia))
+            ultima = ultimas.get(e["exercicio"])
+            e["feito"] = bool(marca["feito"]) if marca else False
+            e["carga_hoje"] = (marca["carga"] or "") if marca else ""
+            e["ultima_carga"] = ultima[0] if ultima else ""
+            e["ultima_data"] = (formatar_dia(ultima[1]) or "") if ultima else ""
 
 
 def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None) -> dict | None:
@@ -233,8 +242,8 @@ class MarcacaoInvalida(Exception):
 
 def _ficha_do_treino_ativo(conn: sqlite3.Connection, aluno_id: int, ficha_ordem: object) -> int:
     """O id do treino ativo do aluno, se ele tem esse treino e essa ficha; senão MarcacaoInvalida."""
-    if isinstance(ficha_ordem, bool) or not isinstance(ficha_ordem, int) or ficha_ordem < 1:
-        raise MarcacaoInvalida("Escolha a ficha de novo.", 400)
+    if isinstance(ficha_ordem, bool) or not isinstance(ficha_ordem, int) or not 1 <= ficha_ordem <= MAIOR_NUMERO:
+        raise MarcacaoInvalida("Escolha a ficha de novo.", 400)  # o teto evita um inteiro grande demais para o SQLite (erro 500)
     ativo = ciclo.treino_ativo(conn, aluno_id)
     if ativo is None:
         raise MarcacaoInvalida("Você não tem um treino ativo. Atualize a página.", 409)
@@ -294,7 +303,7 @@ def desfazer_marcacao_de_hoje(
 
 
 def _inteiro_positivo(valor: object) -> bool:
-    return isinstance(valor, int) and not isinstance(valor, bool) and valor >= 1
+    return isinstance(valor, int) and not isinstance(valor, bool) and 1 <= valor <= MAIOR_NUMERO
 
 
 def marcar_exercicio(
@@ -332,16 +341,15 @@ def marcar_exercicio(
         treino = _treino_sem_execucao(conn, aluno_id, agora)
         if treino is None:
             raise MarcacaoInvalida("Você não tem um treino ativo. Atualize a página.", 409)
-        nome_visto = None
+        ocorrencia = None
         for f in treino["fichas"]:
             if f["ordem"] == ficha:
-                for grupo in f["grupos"]:
-                    for e in grupo["exercicios"]:
-                        if e["ordem"] == item:
-                            nome_visto = e["exercicio"]
-        if nome_visto is None or nome_visto != exercicio:
+                for e, n_esima in _exercicios_com_ocorrencia(f):
+                    if e["ordem"] == item and e["exercicio"] == exercicio:
+                        ocorrencia = n_esima
+        if ocorrencia is None:
             raise MarcacaoInvalida("O seu treino mudou. Atualize a página.", 409)
-        resultado = execucao.gravar(conn, aluno_id, ficha, item, nome_visto, feito=feito, carga=carga, agora=agora)
+        resultado = execucao.gravar(conn, aluno_id, ficha, item, exercicio, ocorrencia=ocorrencia, feito=feito, carga=carga, agora=agora)
         conn.commit()
     except BaseException:
         conn.rollback()

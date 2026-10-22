@@ -167,14 +167,26 @@ def test_apagar_o_que_nunca_foi_anotado_nao_quebra(conn):
     assert _linhas(conn) == []
 
 
-def test_marca_antiga_de_outro_exercicio_no_mesmo_lugar_nao_vale(conn):
-    """O professor trocou o exercício no meio do dia: o "feito" do antigo não pode passar para o novo."""
+def test_trocar_o_exercicio_no_meio_do_dia_nao_apaga_o_que_o_aluno_anotou_do_antigo(conn):
+    """O professor trocou o exercício no meio do dia: a marca do antigo não passa para o novo, e também não se perde."""
     execucao.gravar(conn, 1, 1, 1, "SUPINO RETO", feito=True, carga="30", agora=AGORA)
 
     resposta = execucao.gravar(conn, 1, 1, 1, "ESTEIRA", carga="5", agora=AGORA)
 
     assert resposta == {"feito": False, "carga_hoje": "5"}
-    assert _linhas(conn) == [(1, "2026-10-22", 1, 1, "ESTEIRA", 0, "5")]
+    assert _linhas(conn) == [
+        (1, "2026-10-22", 1, 1, "SUPINO RETO", 1, "30"),
+        (1, "2026-10-22", 1, 1, "ESTEIRA", 0, "5"),
+    ]
+
+
+def test_o_mesmo_nome_em_duas_ocorrencias_na_ficha_tem_duas_linhas(conn):
+    execucao.gravar(conn, 1, 1, 1, "AGACHAMENTO", ocorrencia=1, carga="40", agora=AGORA)
+    execucao.gravar(conn, 1, 1, 4, "AGACHAMENTO", ocorrencia=2, carga="60", agora=AGORA)
+
+    assert [(l[3], l[6]) for l in _linhas(conn)] == [(1, "40"), (4, "60")]
+    marcas = execucao.marcas_do_dia(conn, 1, "2026-10-22")
+    assert marcas[(1, "AGACHAMENTO", 1)]["carga"] == "40" and marcas[(1, "AGACHAMENTO", 2)]["carga"] == "60"
 
 
 def test_cada_dia_tem_a_sua_linha(conn):
@@ -278,6 +290,79 @@ def test_exercicio_trocado_no_meio_do_dia_nao_herda_a_marca(conn):
     primeiro = _exercicios(conn)[0]
 
     assert primeiro["exercicio"] == "ESTEIRA" and primeiro["feito"] is False and primeiro["carga_hoje"] == ""
+
+
+def test_professor_inclui_exercicio_no_comeco_e_as_marcas_do_aluno_acompanham_os_nomes(conn):
+    """O caso do revisor: o aluno anotou SUPINO e CRUCIFIXO; o professor põe ESTEIRA na frente e as posições andam."""
+    _salvar(conn, nome="TREINO VELHO")
+    marcar_exercicio(conn, 1, 1, 1, "SUPINO RETO", feito=True, carga="30", agora=AGORA)
+    marcar_exercicio(conn, 1, 1, 2, "CRUCIFIXO", carga="12", agora=AGORA)
+    _salvar(conn, nome="TREINO NOVO", fichas=[("A", [_item(6), _item(1), _item(2)])])  # esteira, supino, crucifixo
+
+    esteira, supino, crucifixo = _exercicios(conn)
+
+    assert (esteira["feito"], esteira["carga_hoje"]) == (False, "")
+    assert (supino["feito"], supino["carga_hoje"]) == (True, "30")  # continua valendo, mesmo na posição 2
+    assert (crucifixo["feito"], crucifixo["carga_hoje"]) == (False, "12")
+    # e o que ele anota agora não apaga o que já estava lá:
+    marcar_exercicio(conn, 1, 1, 1, "ESTEIRA", feito=True, agora=AGORA)
+    marcar_exercicio(conn, 1, 1, 2, "SUPINO RETO", carga="32", agora=AGORA)
+    esteira, supino, crucifixo = _exercicios(conn)
+    assert (esteira["feito"], supino["carga_hoje"], crucifixo["carga_hoje"]) == (True, "32", "12")
+
+
+def test_o_que_o_aluno_anotou_do_exercicio_que_saiu_vira_a_ultima_vez_de_amanha(conn):
+    _salvar(conn, nome="TREINO VELHO")
+    marcar_exercicio(conn, 1, 1, 2, "CRUCIFIXO", carga="12", agora=AGORA)
+    _salvar(conn, nome="TREINO NOVO", fichas=[("A", [_item(6), _item(2)])])
+    marcar_exercicio(conn, 1, 1, 2, "CRUCIFIXO", carga="14", agora=AGORA)  # mesmo exercício, outro lugar: atualiza a mesma linha
+
+    amanha = _exercicios(conn, agora=AMANHA)
+
+    assert amanha[1]["exercicio"] == "CRUCIFIXO" and amanha[1]["ultima_carga"] == "14"
+    assert conn.execute("SELECT COUNT(*) FROM execucao WHERE exercicio_nome = 'CRUCIFIXO'").fetchone()[0] == 1
+
+
+def test_exercicio_repetido_na_mesma_ficha_guarda_cada_ocorrencia_separada(conn):
+    _salvar(conn, fichas=[("A", [_item(1), _item(2), _item(1)])])  # supino, crucifixo, supino de novo
+
+    marcar_exercicio(conn, 1, 1, 1, "SUPINO RETO", carga="30", agora=AGORA)
+    marcar_exercicio(conn, 1, 1, 3, "SUPINO RETO", carga="20", feito=True, agora=AGORA)
+
+    primeiro, meio, terceiro = _exercicios(conn)
+    assert (primeiro["carga_hoje"], primeiro["feito"]) == ("30", False)
+    assert (meio["carga_hoje"], meio["feito"]) == ("", False)
+    assert (terceiro["carga_hoje"], terceiro["feito"]) == ("20", True)
+
+
+def test_duas_cargas_do_mesmo_exercicio_no_mesmo_dia_valem_a_ultima_anotada(conn):
+    _salvar(conn, fichas=[("A", [_item(1)]), ("B", [_item(1)])])
+    marcar_exercicio(conn, 1, 1, 1, "SUPINO RETO", carga="40", agora=ONTEM)
+    marcar_exercicio(conn, 1, 2, 1, "SUPINO RETO", carga="60", agora=ONTEM + timedelta(minutes=30))
+    marcar_exercicio(conn, 1, 1, 1, "SUPINO RETO", carga="45", agora=ONTEM + timedelta(minutes=10))  # corrigiu antes da outra ficha
+
+    assert _exercicios(conn)[0]["ultima_carga"] == "60"
+    marcar_exercicio(conn, 1, 1, 1, "SUPINO RETO", carga="42", agora=ONTEM + timedelta(hours=2))  # corrigiu depois
+
+    assert _exercicios(conn)[0]["ultima_carga"] == "42"
+
+
+@pytest.mark.parametrize("numero", [2**63, 2**70, 10_000])
+def test_numero_de_ficha_ou_de_exercicio_enorme_da_400_e_nao_estoura(conn, numero):
+    treino_id = _salvar(conn)
+    marcar_ficha_feita(conn, 1, 1, AGORA)
+
+    for chamada in (
+        lambda: marcar_exercicio(conn, 1, numero, 1, "SUPINO RETO", feito=True, agora=AGORA),
+        lambda: marcar_exercicio(conn, 1, 1, numero, "SUPINO RETO", feito=True, agora=AGORA),
+        lambda: definir_esforco(conn, 1, numero, 2, AGORA),
+        lambda: marcar_ficha_feita(conn, 1, numero, AGORA),
+        lambda: desfazer_marcacao_de_hoje(conn, 1, numero, AGORA),
+    ):
+        with pytest.raises(MarcacaoInvalida) as erro:
+            chamada()
+        assert erro.value.status == 400
+    assert _nada_gravado(conn) and treino_id
 
 
 def test_cada_aluno_so_ve_as_proprias_marcas(conn):
@@ -511,7 +596,7 @@ def cliente_da_ana(caminho):
     app = criar_app(caminho)
     conn = conectar(caminho)
     with conn:
-        token = aluno_acesso._criar_sessao(conn, 1, AGORA)
+        token = aluno_acesso._criar_sessao(conn, 1, datetime.now(timezone.utc))
     conn.close()
     cliente = app.test_client()
     cliente.set_cookie(aluno_acesso.NOME_DO_COOKIE, token)
@@ -576,6 +661,15 @@ def test_corpo_estranho_na_rota_do_exercicio_da_400_e_nao_grava(caminho, cliente
     conn = conectar(caminho)
     assert _nada_gravado(conn)
     conn.close()
+
+
+@pytest.mark.parametrize("rota", ["/api/aluno/treino/esforco", "/api/aluno/treino/feito", "/api/aluno/treino/desfazer"])
+def test_numero_de_ficha_enorme_na_rota_da_400_em_json_e_nao_500(caminho, cliente_da_ana, rota):
+    _com_treino(caminho)
+
+    resposta = cliente_da_ana.post(rota, json={"ficha": 2**63, "esforco": 2})
+
+    assert resposta.status_code == 400 and resposta.is_json
 
 
 @pytest.mark.parametrize("corpo", [{}, [], "x", 7, {"ficha": 1}, {"ficha": 1, "esforco": 9}, {"ficha": "1", "esforco": 1}])

@@ -455,9 +455,13 @@ CREATE INDEX IF NOT EXISTS ix_comentario_nao_lidos ON comentario(criado_em) WHER
 -- ------------------------------------------------------------------ o que o aluno faz durante o treino (versão 14)
 -- Na tela /aluno o aluno marca cada exercício como feito e anota a carga que usou. Uma linha por aluno, por DIA (calendário
 -- de Brasília), por exercício. A linha só existe se algo foi marcado: desmarcar o "feito" e apagar a carga apaga a linha.
--- Âncora: o número da ficha (1 = A, 2 = B...), o número do exercício dentro dela e o NOME do exercício, nunca o id do item: editar
--- um treino apaga e recria fichas e itens. O nome também serve de chave para a "última vez" (a carga que o aluno anotou no
--- MESMO exercício em outro dia, mesmo que o treino tenha mudado). Por isso não há ligação com `treino`.
+-- Âncora: o número da ficha (1 = A, 2 = B...), o NOME do exercício e a ocorrência do nome na ficha (1 = a primeira vez que esse nome
+-- aparece nela, 2 = a segunda...), nunca o id do item: editar um treino apaga e recria fichas e itens. Por NOME e não por posição
+-- porque o professor pode incluir, tirar ou trocar um exercício no meio do dia e as posições andam: o que o aluno já anotou do
+-- exercício que ficou continua valendo e o que ele anotou do exercício que saiu não se perde. O nome também serve de chave para a
+-- "última vez" (a carga que o aluno anotou no MESMO exercício em outro dia, mesmo que o treino tenha mudado). Por isso não há ligação
+-- com `treino`.
+--   exercicio_ordem: a posição do exercício na ficha no momento da última gravação (só informativa, não é chave).
 --   dia: 'AAAA-MM-DD' em Brasília. Passou o dia, o "feito" deixa de valer (a carga vira a "última vez").
 --   carga: o que o aluno digitou, em kg (ex.: '12,5'); vazio = não anotou. Só números, vírgula e no máximo 2 casas (o app confere).
 --   atualizado_em: UTC.
@@ -469,11 +473,12 @@ CREATE TABLE IF NOT EXISTS execucao (
     ficha_ordem     INTEGER NOT NULL CHECK (ficha_ordem >= 1),
     exercicio_ordem INTEGER NOT NULL CHECK (exercicio_ordem >= 1),
     exercicio_nome  TEXT    NOT NULL CHECK (length(exercicio_nome) >= 1),
+    ocorrencia      INTEGER NOT NULL DEFAULT 1 CHECK (ocorrencia >= 1),
     feito           INTEGER NOT NULL DEFAULT 0 CHECK (feito IN (0, 1)),
     carga           TEXT    CHECK (carga IS NULL OR length(carga) BETWEEN 1 AND 9),
     atualizado_em   TEXT    NOT NULL,
     CHECK (feito = 1 OR carga IS NOT NULL),
-    UNIQUE (aluno_id, dia, ficha_ordem, exercicio_ordem)
+    UNIQUE (aluno_id, dia, ficha_ordem, exercicio_nome, ocorrencia)
 );
 -- A pergunta mais frequente: "qual foi a última carga deste aluno neste exercício?" (cada ficha aberta faz uma por exercício).
 CREATE INDEX IF NOT EXISTS ix_execucao_exercicio ON execucao(aluno_id, exercicio_nome, dia);

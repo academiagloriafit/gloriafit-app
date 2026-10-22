@@ -34,7 +34,7 @@ function prepararSom() {
     const Contexto = window.AudioContext || window.webkitAudioContext;
     if (!Contexto) return;
     audio ??= new Contexto();
-    if (audio.state === "suspended") audio.resume();
+    if (audio.state === "suspended") audio.resume()?.catch?.(() => {});
   } catch {
     /* sem som: a barra e a vibração avisam */
   }
@@ -43,6 +43,8 @@ function prepararSom() {
 function tocarAviso() {
   try {
     if (audio) {
+      // No iPhone o som pode ficar suspenso quando a tela bloqueia ou o app sai de cena: acorda antes de tocar.
+      if (audio.state !== "running") audio.resume()?.catch?.(() => {});
       const comeco = audio.currentTime;
       for (let i = 0; i < 3; i += 1) {
         const inicio = comeco + i * 0.35;
@@ -68,26 +70,37 @@ function tocarAviso() {
   }
 }
 
+let pedindoATrava = false;
+
 async function manterTelaAcesa() {
+  if (travaDeTela || pedindoATrava || !navigator.wakeLock || document.visibilityState !== "visible") return;
+  pedindoATrava = true;
   try {
-    if (!travaDeTela && navigator.wakeLock && document.visibilityState === "visible") {
-      travaDeTela = await navigator.wakeLock.request("screen");
-      travaDeTela.addEventListener("release", () => {
-        travaDeTela = null;
-      });
+    const trava = await navigator.wakeLock.request("screen");
+    if (!relogio) {
+      // O descanso acabou (ou foi parado) enquanto o celular decidia: solta já, ninguém mais vai soltar.
+      trava.release().catch(() => {});
+      return;
     }
+    travaDeTela = trava;
+    trava.addEventListener("release", () => {
+      if (travaDeTela === trava) travaDeTela = null; // só zera se ainda é esta trava (uma mais nova pode ter entrado no lugar)
+    });
   } catch {
     /* o celular não deixou: a tela pode apagar sozinha */
+  } finally {
+    pedindoATrava = false;
   }
 }
 
 function soltarTela() {
+  const trava = travaDeTela;
+  travaDeTela = null;
   try {
-    travaDeTela?.release();
+    trava?.release()?.catch?.(() => {});
   } catch {
     /* já tinha sido solta */
   }
-  travaDeTela = null;
 }
 
 function parouDeContar() {
@@ -137,7 +150,9 @@ export function pararDescanso() {
 
 // O celular solta a trava de tela quando o app sai de cena; ao voltar com o descanso ainda correndo, pede de novo e corrige o tempo.
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible" || !relogio) return;
+  if (document.visibilityState !== "visible") return;
+  if (audio && audio.state !== "running" && !barra?.hidden) audio.resume()?.catch?.(() => {}); // volta o som se o celular o tinha suspendido
+  if (!relogio) return;
   atualizar();
   if (relogio) manterTelaAcesa();
 });
