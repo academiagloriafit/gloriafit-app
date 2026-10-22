@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR" class="tema-largo">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quem sumiu · Glória Fit</title>
+  <link rel="preload" href="{{ url_for('static', filename='fontes/archivo-latin-wdth-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+  {% include "_icones.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% set menu_ativo = "ausentes" %}
+  {% include "_topo.html" %}
+
+  <main class="pagina pagina-larga" id="tela-ausentes">
+    <h1 class="titulo-grande">Quem sumiu</h1>
+    <p class="texto-apoio">Alunos com treino ativo que estão há dias sem treinar. Conta como treino quando o aluno toca em "Treino concluído" no celular ou quando a recepção imprime a ficha. Quem treina sem fazer nenhum dos dois também aparece aqui.</p>
+
+    <nav class="filtro-comentarios" aria-label="Há quantos dias sem treinar">
+      {% for prazo in prazos %}
+      <a class="botao-link{{ ' filtro-ativo' if prazo == lista.dias else '' }}" href="{{ url_for('pagina_ausentes', dias=prazo) }}"{% if prazo == lista.dias %} aria-current="page"{% endif %}>{{ prazo }} dias ou mais</a>
+      {% endfor %}
+    </nav>
+
+    <section class="cartao-lista" aria-labelledby="titulo-lista-ausentes">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-lista-ausentes">Sem treinar há {{ lista.dias }} dias ou mais</h2>
+        <p class="resumo" aria-live="polite">{{ lista.total }} de {{ lista.total_com_treino }} {{ "aluno com treino ativo" if lista.total_com_treino == 1 else "alunos com treino ativo" }}{% if lista.total > lista.alunos|length %} (mostrando os {{ limite }} mais sumidos){% endif %}</p>
+      </div>
+      {% if lista.alunos %}
+      <div class="titulos-ausentes" aria-hidden="true">
+        <span>Aluno</span><span>Último treino</span><span>Sem treinar</span><span>Treino atual</span><span>WhatsApp</span>
+      </div>
+      <ul class="linhas" id="lista-ausentes">
+        {% for a in lista.alunos %}
+        <li class="linha-ausente">
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
+          <span class="ausente-ultimo">{% if a.nunca %}Nenhum registrado<span class="ausente-desde"> · treino desde {{ a.desde }}</span>{% else %}{{ a.ultima }}{% endif %}</span>
+          <span class="ausente-dias">{{ a.dias }} {{ "dia" if a.dias == 1 else "dias" }}</span>
+          <span class="ausente-treino">{{ a.treino }}</span>
+          <span class="ausente-whatsapp">{% if a.whatsapp_link %}<a href="{{ a.whatsapp_link }}" target="_blank" rel="noopener noreferrer">{{ a.whatsapp }}</a>{% elif a.whatsapp %}{{ a.whatsapp }}{% else %}<span class="sem-valor">sem WhatsApp</span>{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="lista-vazia">{% if lista.total_com_treino %}Ninguém está há {{ lista.dias }} dias ou mais sem treinar.{% else %}Nenhum aluno tem treino ativo ainda.{% endif %}</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

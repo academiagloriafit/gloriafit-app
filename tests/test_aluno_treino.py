@@ -125,9 +125,15 @@ def test_o_exercicio_sai_em_texto_pronto(conn):
         "carga": "20 kg",
         "intervalo": "1 min 30 s",
         "observacao": "Descer devagar",
+        "pausa_segundos": 90,  # o cronômetro de descanso do celular (22/10/2026)
+        "feito": False,
+        "carga_hoje": "",
+        "ultima_carga": "",
+        "ultima_data": "",
     }
     assert "foto" not in primeiro  # a foto de "Como fazer" saiu da tela do aluno (22/10/2026)
     assert segundo["ordem"] == 2 and segundo["etiqueta"] == "2" and segundo["carga"] == "" and segundo["intervalo"] == "" and segundo["observacao"] == ""
+    assert segundo["pausa_segundos"] == 0  # sem intervalo informado, sem cronômetro
 
 
 def test_exercicio_apagado_no_data4u_aparece_sem_a_palavra_apagado(conn):

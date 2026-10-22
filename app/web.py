@@ -20,11 +20,13 @@ from app import (
     aluno_acesso,
     aluno_treino,
     alunos,
+    ausentes,
     ciclo,
     comentarios,
     cupom,
     datas,
     db,
+    execucao,
     exercicios,
     filas,
     ia_treino,
@@ -72,6 +74,8 @@ ENDPOINTS_PUBLICOS = frozenset(
         "api_aluno_treino",
         "api_aluno_treino_feito",
         "api_aluno_treino_desfazer",
+        "api_aluno_treino_esforco",
+        "api_aluno_exercicio",
         "api_aluno_comentario",
         "api_aluno_comentarios",
         "api_aluno_comentarios_vistos",
@@ -553,6 +557,55 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(erro=str(erro)), erro.status
         return jsonify(ok=True, **resultado)
 
+    @app.post("/api/aluno/treino/esforco")
+    def api_aluno_treino_esforco():
+        """A nota de esforço da ficha concluída HOJE. Corpo {"ficha": 1, "esforco": 1 | 2 | 3 | null} (1 Leve, 2 Ideal, 3 Pesado).
+
+        200 {"ok", "ficha", "esforco"}; 400 ficha ou nota inválida; 401 sem login; 404 a ficha não existe; 409 sem treino
+        ativo ou a ficha ainda não foi concluída hoje; 415 não é JSON.
+        """
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        dados = corpo_json()
+        if not isinstance(dados, dict):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        try:
+            if "esforco" not in dados:  # sem o campo não é "apagar a nota" (isso é "esforco": null)
+                raise aluno_treino.MarcacaoInvalida("Escolha Leve, Ideal ou Pesado.", 400)
+            resultado = aluno_treino.definir_esforco(conexao(), aluno.id, dados.get("ficha"), dados["esforco"])
+        except aluno_treino.MarcacaoInvalida as erro:
+            return jsonify(erro=str(erro)), erro.status
+        return jsonify(ok=True, **resultado)
+
+    @app.post("/api/aluno/exercicio")
+    def api_aluno_exercicio():
+        """Marca um exercício como feito e/ou anota a carga de HOJE.
+
+        Corpo: {"ficha": 1, "item": 2, "exercicio": "nome que o celular mostra"} e pelo menos um de "feito" (true/false) ou
+        "carga" ("12,5"; "" apaga). 200 {"ok", "feito", "carga_hoje"}; 400 pedido ou carga inválida; 401 sem login;
+        409 sem treino ativo ou o treino mudou (atualizar a página); 415 não é JSON. O aluno vem do cookie, nunca do corpo.
+        """
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        dados = corpo_json()
+        if not isinstance(dados, dict):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        try:
+            resultado = aluno_treino.marcar_exercicio(
+                conexao(),
+                aluno.id,
+                dados.get("ficha"),
+                dados.get("item"),
+                dados.get("exercicio"),
+                feito=dados["feito"] if "feito" in dados else execucao.NADA,
+                carga=dados["carga"] if "carga" in dados else execucao.NADA,
+            )
+        except aluno_treino.MarcacaoInvalida as erro:
+            return jsonify(erro=str(erro)), erro.status
+        return jsonify(ok=True, **resultado)
+
     @app.post("/api/aluno/comentario")
     def api_aluno_comentario():
         """O aluno comenta o treino inteiro ou um exercício. Corpo: {"treino": "nome que o celular mostra", "texto": "...",
@@ -744,6 +797,12 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             )
         return jsonify(id=aluno_id), 201
 
+    @app.get("/ausentes")
+    def pagina_ausentes():
+        """"Quem sumiu": alunos com treino ativo que não treinam há 7, 14 ou 30 dias (?dias=). Só leitura."""
+        lista = ausentes.listar(conexao(), ausentes.prazo_pedido(request.args.get("dias")))
+        return render_template("ausentes.html", lista=lista, prazos=ausentes.PRAZOS, limite=ausentes.LIMITE_DA_LISTA)
+
     @app.get("/comentarios")
     def pagina_comentarios():
         """O que os alunos escreveram sobre o treino: os novos primeiro; com ?todos=1 também os já lidos."""
@@ -803,6 +862,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             ficha=ficha,
             hoje=datas.hoje(),
             comentarios_do_aluno=comentarios.listar(conexao(), so_nao_lidos=False, aluno_id=aluno_id, limite=30),
+            ultimos_treinos=ciclo.ultimas_sessoes_do_aluno(conexao(), aluno_id),
         )
 
     @app.get("/treinos/<int:treino_id>/imprimir")

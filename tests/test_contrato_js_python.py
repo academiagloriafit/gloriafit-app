@@ -747,3 +747,103 @@ def test_a_lista_do_servidor_e_lida_pelo_celular_e_os_vistos_voltam_aceitos(tmp_
     """)
     assert depois == {"tipo": "ok", "respostasNovas": 0}
     conn.close()
+
+
+# ------------------------------------------------------------------ durante o treino: carga, exercício feito e nota (celular -> servidor)
+
+_CARGAS_PARA_CONFERIR = [
+    "12,5", "12.5", "30", "030", "  7  ", "12,50", "12,00", "0,5", "0,01", "100", "999,99", "007,10", "",
+    "abc", "20 kg", "20kg", "-5", "0", "0,0", "0,00", "1000", "1.000", "1.000,5", "12,555", "1e3", ",5", "5,", "NaN", "Infinity", "12;5", "١٢", "1 2",
+]
+
+
+def test_a_carga_e_conferida_do_mesmo_jeito_nos_dois_lados():
+    """O celular só poupa uma ida ao servidor: aceita, recusa e arruma a carga (12,50 -> 12,5) exatamente como app/execucao.py."""
+    from app import execucao
+
+    js = _node(f"""
+        import * as m from "{MODULO_DO_ALUNO}";
+        const casos = {json.dumps(_CARGAS_PARA_CONFERIR)};
+        console.log(JSON.stringify(casos.map((c) => m.conferirCarga(c))));
+    """)
+
+    for texto, do_celular in zip(_CARGAS_PARA_CONFERIR, js, strict=True):
+        try:
+            guardado = execucao.carga_limpa(texto)
+        except execucao.CargaInvalida as erro:
+            assert do_celular == {"ok": False, "mensagem": str(erro)}, repr(texto)
+        else:
+            assert do_celular == {"ok": True, "valor": guardado}, repr(texto)
+
+
+def test_o_pedido_de_exercicio_montado_pelo_javascript_e_aceito_pelo_servidor(tmp_path):
+    from app.aluno_treino import definir_esforco, marcar_ficha_feita, marcar_exercicio, treino_do_aluno
+
+    conn = conectar(tmp_path / "execucao_contrato.db")
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome, cpf, situacao) VALUES (1, 'ANA SOUZA', '11144477735', 'A')")
+    for nome in ("SUPINO RETO", "(15) CADEIRA ABDUTORA"):
+        conn.execute("INSERT INTO exercicio (nome, origem) VALUES (?, 'app')", (nome,))
+    conn.commit()
+    treinos.salvar_treino(
+        conn,
+        1,
+        {
+            "nome_treino": "TREINO ABC",
+            "montado_por": "ANA",
+            "fichas": [
+                {"nome": "A PEITO", "itens": [{"exercicio_id": 1, "series": "4", "repeticoes": "12"}]},
+                {"nome": "B PERNA", "itens": [{"exercicio_id": 2, "series": "3", "repeticoes": "15", "pausa": 90}]},
+            ],
+        },
+    )
+    treino = json.loads(json.dumps(treino_do_aluno(conn, 1)))  # o que o celular recebe
+    js = _node(f"""
+        import * as m from "{MODULO_DO_ALUNO}";
+        const treino = {json.dumps(treino)};
+        const ficha = treino.fichas[1];
+        const exercicio = ficha.grupos[0].exercicios[0];
+        console.log(JSON.stringify({{
+          feito: m.pedidoDoExercicio(ficha, exercicio, {{ feito: true }}),
+          carga: m.pedidoDoExercicio(ficha, exercicio, {{ carga: m.conferirCarga("32,50").valor }}),
+          esforco: m.pedidoDoEsforco(ficha, 3),
+          descanso: [m.temDescanso(exercicio), m.textoDoBotaoDeDescanso(exercicio)],
+        }}));
+    """)
+
+    feito, carga, esforco = js["feito"], js["carga"], js["esforco"]
+    assert marcar_exercicio(conn, 1, feito["ficha"], feito["item"], feito["exercicio"], feito=feito["feito"]) == {"feito": True, "carga_hoje": ""}
+    assert marcar_exercicio(conn, 1, carga["ficha"], carga["item"], carga["exercicio"], carga=carga["carga"]) == {"feito": True, "carga_hoje": "32,5"}
+    marcar_ficha_feita(conn, 1, esforco["ficha"])
+    assert definir_esforco(conn, 1, esforco["ficha"], esforco["esforco"]) == {"ficha": 2, "esforco": 3}
+    linha = dict(conn.execute("SELECT ficha_ordem, exercicio_ordem, exercicio_nome, feito, carga FROM execucao").fetchone())
+    assert linha == {"ficha_ordem": 2, "exercicio_ordem": 1, "exercicio_nome": "CADEIRA ABDUTORA", "feito": 1, "carga": "32,5"}
+    assert js["descanso"] == [True, "Descansar 1 min 30 s"]  # o texto do botão vem do intervalo que o servidor mandou
+    conn.close()
+
+
+def test_a_resposta_do_servidor_e_entendida_pelo_celular(tmp_path):
+    from app.aluno_treino import definir_esforco, marcar_ficha_feita, marcar_exercicio
+
+    conn = conectar(tmp_path / "execucao_resposta.db")
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome, cpf, situacao) VALUES (1, 'ANA SOUZA', '11144477735', 'A')")
+    conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('SUPINO RETO', 'app')")
+    conn.commit()
+    treinos.salvar_treino(
+        conn, 1, {"nome_treino": "T", "montado_por": "ANA", "fichas": [{"nome": "A", "itens": [{"exercicio_id": 1, "series": "4", "repeticoes": "12"}]}]}
+    )
+    exercicio = marcar_exercicio(conn, 1, 1, 1, "SUPINO RETO", feito=True, carga="30")
+    marcar_ficha_feita(conn, 1, 1)
+    esforco = {"ok": True, **definir_esforco(conn, 1, 1, 2)}
+    js = _node(f"""
+        import * as m from "{MODULO_DO_ALUNO}";
+        console.log(JSON.stringify({{
+          exercicio: m.descreverExercicio(200, {json.dumps({"ok": True, **exercicio})}),
+          esforco: m.descreverEsforco(200, {json.dumps(esforco)}),
+        }}));
+    """)
+
+    assert js["exercicio"] == {"tipo": "ok", "feito": True, "cargaHoje": "30"}
+    assert js["esforco"] == {"tipo": "ok", "esforco": 2}
+    conn.close()

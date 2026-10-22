@@ -10,6 +10,10 @@ funções que a impressão do cupom usa, para o celular e o papel nunca discorda
 Também é daqui que o aluno marca "fiz esta ficha hoje" (e desfaz): no máximo UMA vez por ficha por dia, dia de
 Brasília (decisão do Thiago, 15/10/2026). A contagem alimenta a meta "treinos por ficha" do professor (app/ciclo.py).
 
+E, desde 22/10/2026, o que o aluno faz DURANTE o treino (pedido do Thiago): marcar cada exercício como feito, anotar a carga
+usada (e ver "Última vez") e dar a nota de esforço ao concluir (Leve / Ideal / Pesado). As contas de feito e carga estão em
+app/execucao.py; aqui só se confere que o exercício é mesmo do treino que o aluno está vendo.
+
 O que NÃO sai daqui, de propósito: ids (do treino, da ficha, do exercício), quem montou, a origem (app ou Data4U),
 o aviso de "hora de trocar" (só o professor vê) e dados de outros treinos. O aluno recebe só o que precisa para treinar,
 mais o próprio andamento (quantas vezes fez cada ficha e a meta).
@@ -18,11 +22,14 @@ mais o próprio andamento (quantas vezes fez cada ficha e a meta).
 import sqlite3
 from datetime import datetime
 
-from app import ciclo, treinos
+from app import ciclo, execucao, treinos
 from app.alunos import dose_do_item, etiquetas_dos_itens, texto_da_pausa
-from app.datas import agora_utc, formatar_dia, limites_do_dia
+from app.datas import agora_utc, formatar_dia, hoje, limites_do_dia
 
 _NOME_DO_BLOCO = {2: "Bi-set", 3: "Tri-set"}
+
+# A nota que o aluno dá ao concluir a ficha (decisão do Thiago, 22/10/2026): opcional, três opções, sem número na tela.
+ESFORCOS = ciclo.ESFORCOS
 
 
 def _lista_com_e(etiquetas: list[str]) -> str:
@@ -40,6 +47,7 @@ def _exercicio(item: dict, etiqueta: str) -> dict:
         "dose": dose_do_item(item),
         "carga": (item["carga"] or "").strip(),
         "intervalo": texto_da_pausa(item["pausa"]),
+        "pausa_segundos": item["pausa"] or 0,  # é o que o cronômetro de descanso do celular usa (0 = o professor não informou)
         "observacao": (item["observacao"] or "").strip(),
     }
 
@@ -124,16 +132,8 @@ def _ordens_com_exercicio(conn: sqlite3.Connection, treino_id: int) -> list[int]
     ]
 
 
-def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None) -> dict | None:
-    """O treino ativo do aluno pronto para mostrar, ou None se ele não tem treino ativo.
-
-    {"nome", "inicio" ("06/10/2026" ou None), "fim" (idem), "meta_por_ficha" (quantas vezes cada ficha, ou None),
-    "ficha_do_dia" (a `ordem` da ficha circulada como "Treino de hoje"; ver `ficha_do_dia`),
-    "fichas": [{"nome", "ordem", "feitas", "feita_hoje", "grupos": [...]}]}.
-    `ordem` (1 = A, 2 = B...) é o que o celular manda de volta ao marcar a ficha como feita.
-    Ficha sem nenhum exercício não aparece (não há o que mostrar).
-    """
-    agora = agora or agora_utc()
+def _treino_sem_execucao(conn: sqlite3.Connection, aluno_id: int, agora: datetime) -> dict | None:
+    """O treino ativo do aluno pronto para mostrar, sem o que ele marcou/anotou hoje (isso é `treino_do_aluno` que junta)."""
     linha = conn.execute("SELECT id FROM treino WHERE aluno_id = ? AND ativo = 1", (aluno_id,)).fetchone()
     if linha is None:
         return None
@@ -154,11 +154,70 @@ def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | N
                 "ordem": ficha["ordem"],
                 "feitas": andamento.get(ficha["ordem"], {}).get("feitas", 0),
                 "feita_hoje": andamento.get(ficha["ordem"], {}).get("feita_hoje", False),
+                "esforco_hoje": None,
                 "grupos": _grupos_da_ficha(ficha["itens"]),
             }
             for ficha in fichas
         ],
+        "_treino_id": linha["id"],
     }
+
+
+def _esforcos_de_hoje(conn: sqlite3.Connection, treino_id: int, agora: datetime) -> dict[int, int]:
+    """{ordem da ficha: nota de esforço (1, 2 ou 3)} das fichas concluídas HOJE em que o aluno deu nota."""
+    comeco, fim = limites_do_dia(agora)
+    return {
+        ordem: esforco
+        for ordem, esforco in conn.execute(
+            "SELECT ficha_ordem, esforco FROM sessao WHERE treino_id = ? AND esforco IS NOT NULL AND feita_em >= ? AND feita_em < ?",
+            (treino_id, comeco, fim),
+        )
+    }
+
+
+def _juntar_execucao(conn: sqlite3.Connection, aluno_id: int, treino: dict, agora: datetime) -> None:
+    """Põe em cada exercício o que o aluno marcou/anotou HOJE e a "última vez" (carga de um dia anterior); e a nota de cada ficha.
+
+    Só vale a marca cujo NOME de exercício ainda é o do lugar (ficha + número): se o professor trocou o exercício no meio do dia,
+    a marca do antigo não passa para o novo. Todas as chaves saem SEMPRE (o celular compara o treino inteiro para saber se mudou).
+    """
+    dia = hoje(agora)
+    marcas = execucao.marcas_do_dia(conn, aluno_id, dia)
+    nomes = {e["exercicio"] for ficha in treino["fichas"] for grupo in ficha["grupos"] for e in grupo["exercicios"]}
+    ultimas = execucao.ultimas_cargas(conn, aluno_id, nomes, dia)
+    esforcos = _esforcos_de_hoje(conn, treino["_treino_id"], agora)
+    for ficha in treino["fichas"]:
+        ficha["esforco_hoje"] = esforcos.get(ficha["ordem"])
+        for grupo in ficha["grupos"]:
+            for e in grupo["exercicios"]:
+                marca = marcas.get((ficha["ordem"], e["ordem"]))
+                if marca is not None and marca["exercicio_nome"] != e["exercicio"]:
+                    marca = None
+                ultima = ultimas.get(e["exercicio"])
+                e["feito"] = bool(marca["feito"]) if marca else False
+                e["carga_hoje"] = (marca["carga"] or "") if marca else ""
+                e["ultima_carga"] = ultima[0] if ultima else ""
+                e["ultima_data"] = (formatar_dia(ultima[1]) or "") if ultima else ""
+
+
+def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None) -> dict | None:
+    """O treino ativo do aluno pronto para mostrar, ou None se ele não tem treino ativo.
+
+    {"nome", "inicio" ("06/10/2026" ou None), "fim" (idem), "meta_por_ficha" (quantas vezes cada ficha, ou None),
+    "ficha_do_dia" (a `ordem` da ficha circulada como "Treino de hoje"; ver `ficha_do_dia`),
+    "fichas": [{"nome", "ordem", "feitas", "feita_hoje", "esforco_hoje" (1 Leve, 2 Ideal, 3 Pesado ou None), "grupos": [...]}]}.
+    Cada exercício leva também o que o aluno fez HOJE e a última vez: "feito" (marcou como feito), "carga_hoje" ("" = nada
+    anotado), "ultima_carga" e "ultima_data" ("" = nunca anotou antes) e "pausa_segundos" (para o cronômetro de descanso).
+    `ordem` (1 = A, 2 = B...) é o que o celular manda de volta ao marcar a ficha como feita.
+    Ficha sem nenhum exercício não aparece (não há o que mostrar).
+    """
+    agora = agora or agora_utc()
+    treino = _treino_sem_execucao(conn, aluno_id, agora)
+    if treino is None:
+        return None
+    _juntar_execucao(conn, aluno_id, treino, agora)
+    del treino["_treino_id"]  # interno: o aluno não recebe ids
+    return treino
 
 
 # ------------------------------------------------------------------ "Treino concluído"
@@ -229,3 +288,90 @@ def desfazer_marcacao_de_hoje(
         conn.rollback()
         raise
     return {"ficha": ficha_ordem, "feitas": feitas, "ficha_do_dia": do_dia}
+
+
+# ------------------------------------------------------------------ durante o treino: exercício feito, carga e nota
+
+
+def _inteiro_positivo(valor: object) -> bool:
+    return isinstance(valor, int) and not isinstance(valor, bool) and valor >= 1
+
+
+def marcar_exercicio(
+    conn: sqlite3.Connection,
+    aluno_id: int,
+    ficha: object,
+    item: object,
+    exercicio: object,
+    *,
+    feito: object = execucao.NADA,
+    carga: object = execucao.NADA,
+    agora: datetime | None = None,
+) -> dict:
+    """O aluno marca um exercício como feito e/ou anota a carga que usou HOJE. Devolve {"feito", "carga_hoje"} (carga "" = nenhuma).
+
+    `ficha` e `item` são os números (1, 2, 3...) da ficha e do exercício dentro dela e `exercicio` o nome que o celular
+    mostrava: servem para achar o lugar certo e conferir que nada mudou (se o professor trocou o treino nesse meio tempo, 409
+    "atualize a página"; nada é gravado no exercício errado). Só o que veio é mudado: `feito` (true/false) e/ou `carga`
+    ("12,5"; "" ou null apaga). A conferência e a gravação ficam na mesma transação (`BEGIN IMMEDIATE`).
+    """
+    if not (_inteiro_positivo(ficha) and _inteiro_positivo(item) and isinstance(exercicio, str) and exercicio):
+        raise MarcacaoInvalida("Escolha o exercício de novo.", 400)
+    if feito is execucao.NADA and carga is execucao.NADA:
+        raise MarcacaoInvalida("Diga se fez o exercício ou qual carga usou.", 400)
+    if feito is not execucao.NADA and not isinstance(feito, bool):
+        raise MarcacaoInvalida("Marque o exercício de novo.", 400)
+    if carga is not execucao.NADA:
+        try:
+            carga = execucao.carga_limpa(carga)
+        except execucao.CargaInvalida as erro:
+            raise MarcacaoInvalida(str(erro), 400) from None
+    agora = agora or agora_utc()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        treino = _treino_sem_execucao(conn, aluno_id, agora)
+        if treino is None:
+            raise MarcacaoInvalida("Você não tem um treino ativo. Atualize a página.", 409)
+        nome_visto = None
+        for f in treino["fichas"]:
+            if f["ordem"] == ficha:
+                for grupo in f["grupos"]:
+                    for e in grupo["exercicios"]:
+                        if e["ordem"] == item:
+                            nome_visto = e["exercicio"]
+        if nome_visto is None or nome_visto != exercicio:
+            raise MarcacaoInvalida("O seu treino mudou. Atualize a página.", 409)
+        resultado = execucao.gravar(conn, aluno_id, ficha, item, nome_visto, feito=feito, carga=carga, agora=agora)
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    return resultado
+
+
+def definir_esforco(
+    conn: sqlite3.Connection, aluno_id: int, ficha_ordem: object, esforco: object, agora: datetime | None = None
+) -> dict:
+    """O aluno dá a nota de esforço (1 Leve, 2 Ideal, 3 Pesado; null apaga) à ficha que concluiu HOJE. Devolve {"ficha", "esforco"}.
+
+    A nota fica na marcação "treino concluído" de hoje (a mesma que conta na meta do professor): sem ela (o aluno ainda não
+    concluiu a ficha, ou desfez) não há onde guardar e a resposta é 409. Pedido do Thiago, 22/10/2026: a nota é opcional.
+    """
+    if esforco is not None and not (isinstance(esforco, int) and not isinstance(esforco, bool) and esforco in ESFORCOS):
+        raise MarcacaoInvalida("Escolha Leve, Ideal ou Pesado.", 400)
+    agora = agora or agora_utc()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        treino_id = _ficha_do_treino_ativo(conn, aluno_id, ficha_ordem)
+        comeco, fim = limites_do_dia(agora)
+        alteradas = conn.execute(
+            "UPDATE sessao SET esforco = ? WHERE treino_id = ? AND ficha_ordem = ? AND feita_em >= ? AND feita_em < ?",
+            (esforco, treino_id, ficha_ordem, comeco, fim),
+        ).rowcount
+        if alteradas == 0:
+            raise MarcacaoInvalida("Conclua o treino primeiro, depois escolha como foi.", 409)
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    return {"ficha": ficha_ordem, "esforco": esforco}

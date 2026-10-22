@@ -1,5 +1,8 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 13 (15/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões) e os comentários do aluno sobre o treino.
+-- Versão 14 (22/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada).
+-- Mudança da versão 13 para a 14 (treino com mais detalhe): a `sessao` ganhou `esforco` (1 leve, 2 ideal, 3 pesado: como o aluno achou o treino
+-- ao concluí-lo) e nasceu a tabela `execucao` (por dia, o exercício que o aluno marcou como feito e a carga que usou). Bancos da versão 13 são
+-- atualizados sozinhos na subida.
 -- Mudança da versão 12 para a 13 (comentários do aluno): nasceu a tabela `comentario` (o que o aluno escreve sobre o treino inteiro ou
 -- sobre um exercício; o professor lê, marca como lido e, na segunda entrega, responde). Bancos da versão 12 são atualizados sozinhos na subida.
 -- Mudança da versão 11 para a 12 (login do aluno): nasceram as tabelas `aluno_senha` (o hash da senha de cada aluno), `aluno_codigo`
@@ -38,7 +41,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 13;
+PRAGMA user_version = 14;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -197,7 +200,10 @@ CREATE TABLE IF NOT EXISTS sessao (
     id          INTEGER PRIMARY KEY,
     treino_id   INTEGER NOT NULL REFERENCES treino(id) ON DELETE CASCADE,
     ficha_ordem INTEGER NOT NULL CHECK (ficha_ordem >= 1),
-    feita_em    TEXT    NOT NULL DEFAULT (datetime('now'))
+    feita_em    TEXT    NOT NULL DEFAULT (datetime('now')),
+    -- Como o aluno achou o treino, escolhido por ele depois de "Treino concluído" (opcional): 1 leve, 2 ideal, 3 pesado.
+    -- Vazio nas sessões de antes e nas que vieram do papel impresso na recepção.
+    esforco     INTEGER CHECK (esforco IS NULL OR esforco BETWEEN 1 AND 3)
 );
 CREATE INDEX IF NOT EXISTS ix_sessao_treino ON sessao(treino_id);
 
@@ -445,3 +451,29 @@ CREATE INDEX IF NOT EXISTS ix_comentario_aluno ON comentario(aluno_id, criado_em
 CREATE INDEX IF NOT EXISTS ix_comentario_treino ON comentario(treino_id);
 -- Os não lidos são poucos: a lista e o contador do menu leem só este índice.
 CREATE INDEX IF NOT EXISTS ix_comentario_nao_lidos ON comentario(criado_em) WHERE lido_em IS NULL;
+
+-- ------------------------------------------------------------------ o que o aluno faz durante o treino (versão 14)
+-- Na tela /aluno o aluno marca cada exercício como feito e anota a carga que usou. Uma linha por aluno, por DIA (calendário
+-- de Brasília), por exercício. A linha só existe se algo foi marcado: desmarcar o "feito" e apagar a carga apaga a linha.
+-- Âncora: o número da ficha (1 = A, 2 = B...), o número do exercício dentro dela e o NOME do exercício, nunca o id do item: editar
+-- um treino apaga e recria fichas e itens. O nome também serve de chave para a "última vez" (a carga que o aluno anotou no
+-- MESMO exercício em outro dia, mesmo que o treino tenha mudado). Por isso não há ligação com `treino`.
+--   dia: 'AAAA-MM-DD' em Brasília. Passou o dia, o "feito" deixa de valer (a carga vira a "última vez").
+--   carga: o que o aluno digitou, em kg (ex.: '12,5'); vazio = não anotou. Só números, vírgula e no máximo 2 casas (o app confere).
+--   atualizado_em: UTC.
+-- Apagar o aluno é recusado (não se perde o que ele anotou sem querer).
+CREATE TABLE IF NOT EXISTS execucao (
+    id              INTEGER PRIMARY KEY,
+    aluno_id        INTEGER NOT NULL REFERENCES aluno(id),
+    dia             TEXT    NOT NULL CHECK (dia GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    ficha_ordem     INTEGER NOT NULL CHECK (ficha_ordem >= 1),
+    exercicio_ordem INTEGER NOT NULL CHECK (exercicio_ordem >= 1),
+    exercicio_nome  TEXT    NOT NULL CHECK (length(exercicio_nome) >= 1),
+    feito           INTEGER NOT NULL DEFAULT 0 CHECK (feito IN (0, 1)),
+    carga           TEXT    CHECK (carga IS NULL OR length(carga) BETWEEN 1 AND 9),
+    atualizado_em   TEXT    NOT NULL,
+    CHECK (feito = 1 OR carga IS NOT NULL),
+    UNIQUE (aluno_id, dia, ficha_ordem, exercicio_ordem)
+);
+-- A pergunta mais frequente: "qual foi a última carga deste aluno neste exercício?" (cada ficha aberta faz uma por exercício).
+CREATE INDEX IF NOT EXISTS ix_execucao_exercicio ON execucao(aluno_id, exercicio_nome, dia);

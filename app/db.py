@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 13
+VERSAO_DO_BANCO = 14
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -365,10 +365,40 @@ def _de_12_para_13(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS ix_comentario_nao_lidos ON comentario(criado_em) WHERE lido_em IS NULL")
 
 
+def _de_13_para_14(conn: sqlite3.Connection) -> None:
+    """Treino com mais detalhe: a `sessao` ganha `esforco` e nasce a tabela `execucao` (exercício feito e carga usada, por dia).
+
+    Só acrescenta uma coluna vazia e uma tabela vazia: nenhum dado que já existe é tocado. Os comandos conferem o que já existe
+    de propósito: se o número da versão for baixado à mão (para abrir o banco com o app antigo, que ignora o que é novo), subir
+    de novo com este app não falha e o que o aluno já anotou continua lá.
+    """
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(sessao)")}
+    if "esforco" not in colunas:
+        conn.execute("ALTER TABLE sessao ADD COLUMN esforco INTEGER CHECK (esforco IS NULL OR esforco BETWEEN 1 AND 3)")
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS execucao (
+            id              INTEGER PRIMARY KEY,
+            aluno_id        INTEGER NOT NULL REFERENCES aluno(id),
+            dia             TEXT    NOT NULL CHECK (dia GLOB {_PADRAO_DE_DIA}),
+            ficha_ordem     INTEGER NOT NULL CHECK (ficha_ordem >= 1),
+            exercicio_ordem INTEGER NOT NULL CHECK (exercicio_ordem >= 1),
+            exercicio_nome  TEXT    NOT NULL CHECK (length(exercicio_nome) >= 1),
+            feito           INTEGER NOT NULL DEFAULT 0 CHECK (feito IN (0, 1)),
+            carga           TEXT    CHECK (carga IS NULL OR length(carga) BETWEEN 1 AND 9),
+            atualizado_em   TEXT    NOT NULL,
+            CHECK (feito = 1 OR carga IS NOT NULL),
+            UNIQUE (aluno_id, dia, ficha_ordem, exercicio_ordem)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_execucao_exercicio ON execucao(aluno_id, exercicio_nome, dia)")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
-    10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13,
+    10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13, 13: _de_13_para_14,
 }
 
 

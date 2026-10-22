@@ -189,6 +189,135 @@ export function descreverMarcacao(status, corpo) {
 export const TEXTO_FICHA_FEITA_HOJE = "Anotado. Parabéns!";
 export const TEXTO_JA_MARCADA = "Você já tinha marcado esta ficha hoje.";
 
+// ------------------------------------------------------------------ durante o treino: exercício feito, carga e descanso
+// Pedido do Thiago (22/10/2026). Tudo vale por DIA (amanhã o treino volta limpo): quem guarda é o servidor (app/execucao.py).
+
+// Os exercícios da ficha numa lista só (um bi-set de dois conta 2).
+export function exerciciosDaFicha(ficha) {
+  const grupos = Array.isArray(ficha?.grupos) ? ficha.grupos : [];
+  return grupos.flatMap((grupo) => (Array.isArray(grupo?.exercicios) ? grupo.exercicios : []));
+}
+
+// "3 de 8 feitos" no botão da ficha, enquanto o aluno está no meio do treino. Vazio se ele não marcou nenhum ou se
+// a ficha já está concluída hoje (aí aparece "Concluído hoje").
+export function textoDoProgresso(ficha) {
+  if (ficha?.feita_hoje) return "";
+  const todos = exerciciosDaFicha(ficha);
+  const feitos = todos.filter((e) => e.feito === true).length;
+  return feitos > 0 ? `${feitos} de ${todos.length} feitos` : "";
+}
+
+export const TEXTO_MARCAR_FEITO = "Marcar como feito";
+export const TEXTO_FEITO = "✓ Feito";
+export const MENSAGEM_FEITO_NAO_SALVOU = "Não consegui marcar. Tente de novo.";
+
+// O que o botão de feito diz e anuncia, para o estado atual.
+export function textoDoFeito(feito) {
+  return feito === true ? TEXTO_FEITO : TEXTO_MARCAR_FEITO;
+}
+
+const NUMERO_DA_CARGA = /^[0-9]{1,3}(?:[.,][0-9]{1,2})?$/;
+export const MENSAGEM_CARGA_NAO_E_NUMERO = "Digite só o número, em kg. Exemplo: 12,5";
+export const MENSAGEM_CARGA_ZERO = "A carga precisa ser maior que zero. Se não usou peso, deixe em branco.";
+
+// A carga digitada pelo aluno -> { ok: true, valor } (valor "12,5" como o servidor guarda; null = campo vazio, apaga)
+// ou { ok: false, mensagem }. As mesmas regras de app/execucao.py (carga_limpa): até 3 algarismos, até 2 casas, ponto ou vírgula.
+export function conferirCarga(texto) {
+  const limpo = typeof texto === "string" ? texto.trim() : "";
+  if (!limpo) return { ok: true, valor: null };
+  if (!NUMERO_DA_CARGA.test(limpo)) return { ok: false, mensagem: MENSAGEM_CARGA_NAO_E_NUMERO };
+  const [inteiro, decimais = ""] = limpo.replace(",", ".").split(".");
+  const parteInteira = String(parseInt(inteiro, 10));
+  const parteDecimal = decimais.replace(/0+$/, "");
+  if (parteInteira === "0" && !parteDecimal) return { ok: false, mensagem: MENSAGEM_CARGA_ZERO };
+  return { ok: true, valor: parteDecimal ? `${parteInteira},${parteDecimal}` : parteInteira };
+}
+
+// "Última vez: 30 kg · 20/10" (vazio se o aluno nunca anotou carga neste exercício).
+export function textoDaUltimaCarga(exercicio) {
+  if (!exercicio?.ultima_carga) return "";
+  const dia = typeof exercicio.ultima_data === "string" ? exercicio.ultima_data.slice(0, 5) : "";
+  return dia ? `Última vez: ${exercicio.ultima_carga} kg · ${dia}` : `Última vez: ${exercicio.ultima_carga} kg`;
+}
+
+// O corpo do pedido de POST /api/aluno/exercicio. O nome do exercício vai junto de propósito (como no comentário): se o professor
+// mudou o treino enquanto o aluno treinava, o servidor percebe e não grava no exercício errado (responde 409).
+// `campos`: { feito: true | false } e/ou { carga: "12,5" | null }.
+export function pedidoDoExercicio(ficha, exercicio, campos) {
+  return { ficha: ficha.ordem, item: exercicio.ordem, exercicio: exercicio.exercicio, ...campos };
+}
+
+// Resposta do servidor ({ status, corpo }) -> o que a tela faz:
+//   { tipo: "entrar" }                      sessão perdida
+//   { tipo: "ok", feito, cargaHoje }        gravou (`cargaHoje`: "" = nenhuma)
+//   { tipo: "atualizar", mensagem }         o treino mudou (409): o aluno precisa atualizar a página
+//   { tipo: "erro", mensagem }              qualquer outra coisa, com a explicação do servidor se ela veio
+export function descreverExercicio(status, corpo) {
+  if (status === 401) return { tipo: "entrar" };
+  if (status === 200 && corpo && corpo.ok === true && typeof corpo.feito === "boolean" && typeof corpo.carga_hoje === "string") {
+    return { tipo: "ok", feito: corpo.feito, cargaHoje: corpo.carga_hoje };
+  }
+  const mensagem =
+    corpo && typeof corpo.erro === "string" && corpo.erro ? corpo.erro : `Não consegui salvar (código ${status}). Tente de novo em instantes.`;
+  return { tipo: status === 409 ? "atualizar" : "erro", mensagem };
+}
+
+// ---- descanso (cronômetro). O professor escreve o intervalo de cada exercício; o aluno toca para começar a contar.
+
+// Só há botão de descanso se o professor informou o intervalo ("1 min 30 s" já vem pronto do servidor).
+export function temDescanso(exercicio) {
+  return Number.isInteger(exercicio?.pausa_segundos) && exercicio.pausa_segundos > 0;
+}
+
+export function textoDoBotaoDeDescanso(exercicio) {
+  return temDescanso(exercicio) ? `Descansar ${exercicio.intervalo}` : "";
+}
+
+// 90 -> "1:30"; 5 -> "0:05"; 3600 -> "1:00:00".
+export function textoDoTempo(segundos) {
+  const total = Math.max(0, Math.floor(Number(segundos) || 0));
+  const horas = Math.floor(total / 3600);
+  const minutos = Math.floor((total % 3600) / 60);
+  const resto = String(total % 60).padStart(2, "0");
+  return horas > 0 ? `${horas}:${String(minutos).padStart(2, "0")}:${resto}` : `${minutos}:${resto}`;
+}
+
+// Quantos segundos faltam (arredonda para cima: "0:01" até o último instante). Conta pelo relógio, não por tique:
+// com o celular em segundo plano os tiques param, mas a hora que o descanso acaba continua valendo.
+export function segundosRestantes(fimEmMs, agoraEmMs) {
+  return Math.max(0, Math.ceil((fimEmMs - agoraEmMs) / 1000));
+}
+
+export const TEXTO_DESCANSO_ACABOU = "Acabou o descanso. Próxima série!";
+
+// ---- nota de esforço, depois de "Treino concluído" (opcional)
+export const ESFORCOS = [
+  { valor: 1, texto: "Leve" },
+  { valor: 2, texto: "Ideal" },
+  { valor: 3, texto: "Pesado" },
+];
+export const TEXTO_PERGUNTA_DO_ESFORCO = "Como foi o treino?";
+export const TEXTO_ESFORCO_OPCIONAL = "Opcional. Toque de novo para tirar.";
+
+// Tocar na nota que já está escolhida tira a escolha (null); tocar em outra troca.
+export function proximoEsforco(atual, escolhido) {
+  return atual === escolhido ? null : escolhido;
+}
+
+export function pedidoDoEsforco(ficha, esforco) {
+  return { ficha: ficha.ordem, esforco };
+}
+
+// Resposta do servidor ({ status, corpo }) -> { tipo: "entrar" } | { tipo: "ok", esforco (1, 2, 3 ou null) } | { tipo: "erro", mensagem }.
+export function descreverEsforco(status, corpo) {
+  if (status === 401) return { tipo: "entrar" };
+  if (status === 200 && corpo && corpo.ok === true && (corpo.esforco === null || [1, 2, 3].includes(corpo.esforco))) {
+    return { tipo: "ok", esforco: corpo.esforco };
+  }
+  if (corpo && typeof corpo.erro === "string" && corpo.erro) return { tipo: "erro", mensagem: corpo.erro };
+  return { tipo: "erro", mensagem: `Não consegui salvar (código ${status}). Tente de novo em instantes.` };
+}
+
 // ------------------------------------------------------------------ comentários do aluno
 
 export const LIMITE_DO_COMENTARIO = 500; // o servidor aceita até isto (LIMITE_DO_TEXTO em app/comentarios.py)

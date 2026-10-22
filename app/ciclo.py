@@ -19,7 +19,10 @@ Regras (decisões do Thiago, 08/10/2026):
 import sqlite3
 from datetime import datetime
 
-from app.datas import agora_utc, formatar_dia, limites_do_dia, momento_para_texto
+from app.datas import agora_utc, dia_local, formatar_dia, limites_do_dia, momento_para_texto
+
+# A nota que o aluno dá ao concluir a ficha pelo celular (decisão do Thiago, 22/10/2026): opcional, três opções.
+ESFORCOS = {1: "Leve", 2: "Ideal", 3: "Pesado"}
 
 
 class TreinoNaoEncontrado(Exception):
@@ -191,6 +194,36 @@ def desfazer_impressao(
         conn.rollback()
         raise
     return {"ficha": ficha_ordem, "feitas": feitas}
+
+
+def ultimas_sessoes_do_aluno(conn: sqlite3.Connection, aluno_id: int, limite: int = 10) -> list[dict]:
+    """Os últimos treinos que o aluno fez (os mais novos primeiro), de qualquer treino dele, para o professor ver na ficha.
+
+    Cada um: {"data" ('22/10/2026'), "treino", "ficha" (o nome da ficha; a letra/número se ela já não existe), "esforco" (1, 2, 3 ou None),
+    "esforco_nome" ('Leve', 'Ideal', 'Pesado' ou '')}. Sem nota = o aluno não escolheu, ou o treino veio do papel impresso na recepção.
+    """
+    linhas = conn.execute(
+        """
+        SELECT s.feita_em, s.ficha_ordem, s.esforco, t.nome AS treino, f.nome AS ficha
+        FROM sessao s
+        JOIN treino t ON t.id = s.treino_id
+        LEFT JOIN ficha f ON f.treino_id = s.treino_id AND f.ordem = s.ficha_ordem
+        WHERE t.aluno_id = ?
+        ORDER BY s.feita_em DESC, s.id DESC
+        LIMIT ?
+        """,
+        (aluno_id, limite),
+    )
+    return [
+        {
+            "data": formatar_dia(dia_local(linha["feita_em"])),
+            "treino": linha["treino"],
+            "ficha": linha["ficha"] or f"Ficha {linha['ficha_ordem']}",
+            "esforco": linha["esforco"],
+            "esforco_nome": ESFORCOS.get(linha["esforco"], ""),
+        }
+        for linha in linhas
+    ]
 
 
 def sessoes_feitas_do_aluno(conn: sqlite3.Connection, aluno_id: int) -> dict[int, dict[int, int]]:

@@ -1393,3 +1393,129 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 .tema-largo .coluna-lateral .painel + .painel { border-top: 1px solid var(--linha); }
 .tema-largo .botao-principal, .tema-largo .botao-link-forte { font-weight: 800; }
 .tema-largo .aba-ativa, .tema-largo .aba-ativa:hover { border-bottom-color: #0d0d0d; }
+
+/* ---- quem sumiu (tela do professor) ---- */
+.titulos-ausentes, .linha-ausente {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) 110px minmax(0, 1.5fr) 150px;
+  align-items: center;
+  gap: 12px;
+}
+.titulos-ausentes {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--linha);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+.linha-ausente { min-height: 62px; padding: 8px 20px; border-top: 1px solid var(--linha); font-size: 15px; }
+.titulos-ausentes + .linhas > .linha-ausente:first-child { border-top: 0; }
+.ausente-nome { color: var(--texto); font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; text-decoration: none; overflow-wrap: anywhere; }
+.ausente-nome:hover { text-decoration: underline; }
+.ausente-nome:focus-visible, .ausente-whatsapp a:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.ausente-ultimo, .ausente-dias, .ausente-whatsapp { font-variant-numeric: tabular-nums; }
+.ausente-dias { font-weight: 700; }
+.ausente-desde, .ausente-treino { color: var(--texto-suave); }
+.ausente-treino { overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .titulos-ausentes { display: none; }
+  .linha-ausente { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+
+/* ---- últimos treinos (ficha do aluno, tela do professor) ---- */
+.ultimos-treinos { list-style: none; margin: 0 0 12px; padding: 0; }
+.ultimos-treinos li { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; align-items: baseline; gap: 4px 10px; padding: 9px 0; border-top: 1px solid var(--linha); font-size: 15px; }
+.ultimos-treinos li:first-child { border-top: 0; }
+.ultimo-data { font-variant-numeric: tabular-nums; color: var(--texto-suave); }
+.ultimo-ficha { font-weight: 650; overflow-wrap: anywhere; }
+.ultimo-treino { font-weight: 400; color: var(--texto-suave); }
+.ultimo-esforco { font-weight: 650; white-space: nowrap; color: var(--texto-suave); }
+.ultimo-esforco.esforco-1, .ultimo-esforco.esforco-2, .ultimo-esforco.esforco-3 { color: var(--texto); }
+
+/* ---- durante o treino (celular do aluno): feito, carga, descanso e nota de esforço ---- */
+.meu-acoes { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.meu-acoes p { margin: 0; }
+.meu-ultima-carga { font-size: 14.5px; font-weight: 650; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+.meu-carga { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.meu-carga-rotulo { font-size: 14.5px; font-weight: 600; color: var(--texto-suave); }
+.meu-carga-campo {
+  width: 6.5em;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--contorno);
+  border-radius: 8px;
+  background: var(--papel);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 18px; /* 16 ou mais: o iPhone não dá zoom na tela ao tocar no campo */
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.meu-carga-campo::placeholder { color: var(--placeholder); opacity: 1; }
+.meu-carga-nota { font-size: 13.5px; color: var(--verde); }
+.meu-carga-nota:empty { display: none; }
+.meu-carga-nota.meu-carga-erro { color: var(--erro-texto); font-weight: 600; }
+.meu-acoes .aviso-campo:empty { display: none; }
+.meu-acoes-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.meu-feito, .meu-acoes-botoes .meu-descansar {
+  flex: 1 1 118px; /* os dois lado a lado no celular; se o texto não couber, quebra em duas linhas */
+  justify-content: center;
+  min-height: 52px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+.meu-feito { display: inline-flex; align-items: center; border: 2px solid var(--contorno-suave); background: var(--papel); color: var(--texto); }
+.meu-feito:hover:not(:disabled) { border-color: var(--contorno-forte); }
+.meu-feito[aria-pressed="true"] { border-color: var(--verde); background: var(--verde-fundo); color: var(--verde); }
+.meu-feito:disabled { cursor: wait; opacity: 0.6; }
+.meu-exercicio-feito .meu-exercicio-etiqueta { color: var(--verde); }
+.meu-exercicio-feito .meu-exercicio-nome::after { content: " ✓"; color: var(--verde); }
+.meu-cartao-progresso { color: var(--laranja-texto); font-weight: 650; }
+
+.meu-esforco { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.meu-esforco p { margin: 0; }
+.meu-esforco-titulo { font-size: 17px; font-weight: 750; }
+.meu-esforco-botoes { display: flex; gap: 8px; }
+.meu-esforco-botoes .botao-link { flex: 1 1 0; justify-content: center; min-height: 52px; padding: 0 8px; font-size: 16px; font-weight: 700; }
+.meu-esforco-botoes .meu-esforco-escolhido, .meu-esforco-botoes .meu-esforco-escolhido:hover:not(:disabled) { border-color: var(--laranja); background: var(--laranja); color: var(--sobre-laranja); }
+.meu-esforco-botoes .botao-link:disabled { cursor: wait; opacity: 0.6; }
+.meu-esforco-dica { font-size: 13.5px; color: var(--texto-suave); }
+
+/* o cronômetro de descanso: uma barra no pé da tela */
+.meu-descanso {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: var(--papel);
+  border-top: 3px solid var(--laranja);
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.25);
+}
+.meu-descanso[hidden] { display: none; }
+.meu-descanso-texto { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.meu-descanso-rotulo { font-size: 13.5px; color: var(--texto-suave); overflow-wrap: anywhere; }
+.meu-descanso-tempo {
+  font-family: var(--fonte-titulo);
+  font-stretch: 78%;
+  font-weight: 800;
+  font-size: 40px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.meu-descanso-botao { flex: none; min-height: 48px; padding: 0 20px; font-size: 16px; font-weight: 700; }
+.meu-descanso-acabou { border-top-color: var(--verde); background: var(--verde-fundo); }
+.meu-descanso-acabou .meu-descanso-rotulo { color: var(--verde); font-size: 16px; font-weight: 700; }
+.meu-descanso-acabou .meu-descanso-tempo { color: var(--verde); }
+body.com-descanso .pagina-aluno { padding-bottom: 130px; }

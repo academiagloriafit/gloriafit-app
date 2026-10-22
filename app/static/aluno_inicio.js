@@ -2,22 +2,30 @@
 // Texto sempre via textContent (o helper `el`): nada que vem do banco é interpretado como HTML.
 import { buscarJson, enviarJson } from "./api.js";
 import { atualizarMeusComentarios } from "./aluno_comentarios.js";
+import { iniciarDescanso } from "./aluno_descanso.js";
 import { el } from "./dom.js";
 import {
+  ESFORCOS,
+  MENSAGEM_FEITO_NAO_SALVOU,
   MENSAGEM_SEM_REDE,
   TEXTO_COMENTARIO_ENVIADO,
   TEXTO_COMENTARIO_REPETIDO,
   TEXTO_CONCLUIDO_HOJE,
   TEXTO_ESCOLHA_O_TREINO,
+  TEXTO_ESFORCO_OPCIONAL,
   TEXTO_FICHA_FEITA_HOJE,
   TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
   TEXTO_SEM_TREINO,
+  TEXTO_PERGUNTA_DO_ESFORCO,
   TEXTO_TREINO_DE_HOJE,
   chaveDoRascunho,
   comentarioPronto,
+  conferirCarga,
   decidirAtualizacaoDoTreino,
   descreverComentario,
+  descreverEsforco,
+  descreverExercicio,
   descreverMarcacao,
   descreverTreino,
   dicaDoComentario,
@@ -26,10 +34,18 @@ import {
   fichaEscolhida,
   linhasDoExercicio,
   pedidoDoComentario,
+  pedidoDoEsforco,
+  pedidoDoExercicio,
+  proximoEsforco,
+  temDescanso,
   temDose,
+  textoDaUltimaCarga,
   textoDasDatas,
   textoDoAndamento,
+  textoDoBotaoDeDescanso,
   textoDoContador,
+  textoDoFeito,
+  textoDoProgresso,
   textoDosExercicios,
 } from "./aluno_modelo.js";
 
@@ -56,6 +72,8 @@ const paginaDoAluno = document.querySelector(".pagina-aluno");
 // Cada rascunho também guarda `enviando` (há um envio no ar) e `redesenhar` (a função da caixa que está NA TELA agora):
 // se a ficha for redesenhada no meio de um envio, a resposta atualiza a caixa nova, não uma que já saiu da tela.
 const rascunhos = new Map();
+// Quantos pedidos de "feito", carga ou nota estão no ar agora: a tela não se redesenha no meio deles (ver `alunoEstaEscrevendo`).
+let pedidosNoAr = 0;
 
 // O que está na tela agora, para saber se o treino mudou quando o aluno voltar para o app (ver `atualizarTreinoAoVoltar`).
 let treinoNaTela = null; // null: a tela mostra um aviso (carregando, sem treino, erro), não um treino
@@ -197,10 +215,174 @@ function desenharComentario(treino, ficha = null, exercicio = null) {
   return raiz;
 }
 
-function desenharExercicio(exercicio, treino, ficha) {
+// O que o aluno faz DURANTE o treino num exercício: marcar como feito, anotar a carga que usou e (se o professor informou o
+// intervalo) tocar para descansar. Tudo é gravado pelo servidor na hora (vale por dia: amanhã volta limpo). O modelo
+// (`exercicio.feito`, `exercicio.carga_hoje`) só muda DEPOIS que o servidor confirma, e mexe nas chaves que já existem, para a
+// comparação "o treino mudou?" ao voltar para o app continuar certa.
+function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
+  const idDaCarga = `carga-${ficha.ordem}-${exercicio.ordem}`;
+  let mensagem = "";
+  let deuErro = false;
+  let precisaAtualizar = false;
+  let marcando = false;
+  let gravandoCarga = false;
+  let cargaPendente = false;
+
+  const aviso = el("p", { classe: "aviso-campo", role: "status" });
+  const botaoAtualizar = el("button", { type: "button", classe: "botao-link", texto: "Atualizar a página", aoClicar: () => window.location.reload() });
+  const botaoFeito = el("button", { type: "button", classe: "meu-feito", aoClicar: () => alternarFeito() });
+  const campo = el("input", {
+    id: idDaCarga,
+    type: "text",
+    classe: "meu-carga-campo",
+    inputmode: "decimal",
+    autocomplete: "off",
+    maxlength: "6",
+    placeholder: "kg",
+    "aria-describedby": `${idDaCarga}-nota`,
+    aoMudar: () => salvarCarga(),
+  });
+  campo.addEventListener("keydown", (evento) => {
+    if (evento.key === "Enter") {
+      evento.preventDefault();
+      campo.blur(); // o "change" do campo faz o resto
+    }
+  });
+  const nota = el("p", { id: `${idDaCarga}-nota`, classe: "meu-carga-nota", role: "status" });
+
+  function pintar() {
+    cartao.classList.toggle("meu-exercicio-feito", exercicio.feito === true);
+    botaoFeito.textContent = textoDoFeito(exercicio.feito);
+    botaoFeito.setAttribute("aria-pressed", exercicio.feito === true ? "true" : "false");
+    botaoFeito.setAttribute("aria-label", `${textoDoFeito(exercicio.feito)}: ${exercicio.exercicio}`);
+    botaoFeito.disabled = marcando;
+    aviso.textContent = mensagem;
+    aviso.className = deuErro ? "aviso-campo aviso-erro" : "aviso-campo";
+    botaoAtualizar.hidden = !precisaAtualizar;
+  }
+
+  // Resposta que não é "ok": 401 troca de tela; o resto vira mensagem embaixo do exercício. Devolve true se tratou.
+  function trataFalha(resultado) {
+    if (resultado.tipo === "entrar") {
+      window.location.assign("/aluno/entrar");
+      return true;
+    }
+    if (resultado.tipo === "ok") return false;
+    mensagem = resultado.mensagem;
+    deuErro = true;
+    precisaAtualizar = resultado.tipo === "atualizar";
+    return true;
+  }
+
+  async function alternarFeito() {
+    if (marcando) return;
+    marcando = true;
+    pedidosNoAr += 1;
+    mensagem = "";
+    deuErro = false;
+    precisaAtualizar = false;
+    pintar();
+    try {
+      const resposta = await enviarJson("/api/aluno/exercicio", pedidoDoExercicio(ficha, exercicio, { feito: exercicio.feito !== true }));
+      const resultado = descreverExercicio(resposta.status, resposta.corpo);
+      if (!trataFalha(resultado)) exercicio.feito = resultado.feito;
+    } catch {
+      mensagem = `${MENSAGEM_FEITO_NAO_SALVOU} ${MENSAGEM_SEM_REDE}`;
+      deuErro = true;
+    }
+    pedidosNoAr -= 1;
+    marcando = false;
+    pintar();
+  }
+
+  async function salvarCarga() {
+    if (gravandoCarga) {
+      cargaPendente = true; // o aluno mexeu de novo durante o envio: depois que terminar, confere de novo
+      return;
+    }
+    const conferida = conferirCarga(campo.value);
+    if (!conferida.ok) {
+      nota.textContent = conferida.mensagem;
+      nota.classList.add("meu-carga-erro");
+      return;
+    }
+    const novo = conferida.valor ?? "";
+    campo.value = novo;
+    if (novo === exercicio.carga_hoje) {
+      nota.textContent = "";
+      nota.classList.remove("meu-carga-erro");
+      return;
+    }
+    gravandoCarga = true;
+    pedidosNoAr += 1;
+    nota.textContent = "Salvando…";
+    nota.classList.remove("meu-carga-erro");
+    try {
+      const resposta = await enviarJson("/api/aluno/exercicio", pedidoDoExercicio(ficha, exercicio, { carga: conferida.valor }));
+      const resultado = descreverExercicio(resposta.status, resposta.corpo);
+      if (resultado.tipo === "ok") {
+        exercicio.carga_hoje = resultado.cargaHoje;
+        if (!cargaPendente) campo.value = resultado.cargaHoje; // não atropela o que o aluno digitou enquanto salvava
+        nota.textContent = resultado.cargaHoje ? "✓ Anotado" : "Carga apagada";
+      } else if (resultado.tipo === "entrar") {
+        window.location.assign("/aluno/entrar");
+      } else {
+        nota.textContent = resultado.mensagem;
+        nota.classList.add("meu-carga-erro");
+        if (resultado.tipo === "atualizar") {
+          mensagem = resultado.mensagem;
+          deuErro = true;
+          precisaAtualizar = true;
+          pintar();
+        }
+      }
+    } catch {
+      nota.textContent = `Não salvou. ${MENSAGEM_SEM_REDE}`;
+      nota.classList.add("meu-carga-erro");
+    }
+    pedidosNoAr -= 1;
+    gravandoCarga = false;
+    if (cargaPendente) {
+      cargaPendente = false;
+      salvarCarga();
+    }
+  }
+
+  campo.value = exercicio.carga_hoje;
+  const ultima = textoDaUltimaCarga(exercicio);
+  pintar();
   return el(
-    "li",
-    { classe: "meu-exercicio" },
+    "div",
+    { classe: "meu-acoes" },
+    ultima && el("p", { classe: "meu-ultima-carga", texto: ultima }),
+    el(
+      "div",
+      { classe: "meu-carga" },
+      el("label", { for: idDaCarga, classe: "meu-carga-rotulo", texto: "Carga que usei (kg)" }),
+      campo,
+    ),
+    nota,
+    el(
+      "div",
+      { classe: "meu-acoes-botoes" },
+      botaoFeito,
+      temDescanso(exercicio) &&
+        el("button", {
+          type: "button",
+          classe: "botao-link meu-descansar",
+          texto: textoDoBotaoDeDescanso(exercicio),
+          "aria-label": `${textoDoBotaoDeDescanso(exercicio)} (começa a contar)`,
+          aoClicar: () => iniciarDescanso(exercicio.pausa_segundos, exercicio.exercicio),
+        }),
+    ),
+    aviso,
+    botaoAtualizar,
+  );
+}
+
+function desenharExercicio(exercicio, treino, ficha) {
+  const cartao = el("li", { classe: "meu-exercicio" });
+  cartao.append(
     el("span", { classe: "meu-exercicio-etiqueta", texto: exercicio.etiqueta, "aria-hidden": "true" }),
     el(
       "div",
@@ -209,9 +391,11 @@ function desenharExercicio(exercicio, treino, ficha) {
       linhasDoExercicio(exercicio).map((linha, posicao) =>
         el("p", { classe: posicao === 0 && temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: linha }),
       ),
+      desenharAcoesDoExercicio(exercicio, treino, ficha, cartao),
       desenharComentario(treino, ficha, exercicio),
     ),
   );
+  return cartao;
 }
 
 function desenharGrupo(grupo, treino, ficha) {
@@ -243,6 +427,7 @@ async function marcarFicha(treino, indice, rota, botao) {
     if (resultado.tipo === "ok") {
       ficha.feitas = resultado.feitas;
       ficha.feita_hoje = rota === "feito";
+      if (rota === "desfazer") ficha.esforco_hoje = null; // a nota ficava na marcação de hoje, que o servidor apagou
       if (Number.isInteger(resultado.fichaDoDia)) treino.ficha_do_dia = resultado.fichaDoDia; // o servidor decide quem fica circulada
       mensagem = rota === "feito" ? (resultado.jaMarcada ? TEXTO_JA_MARCADA : TEXTO_FICHA_FEITA_HOJE) : "";
     } else {
@@ -254,6 +439,66 @@ async function marcarFicha(treino, indice, rota, botao) {
     deuErro = true;
   }
   mostrarFicha(treino, indice, mensagem, deuErro);
+}
+
+// "Como foi o treino?": Leve / Ideal / Pesado, opcional, só depois de "Treino concluído". Tocar na nota escolhida tira a escolha.
+function desenharEsforco(ficha) {
+  const raiz = el("div", { classe: "meu-esforco", role: "group", "aria-labelledby": `esforco-titulo-${ficha.ordem}` });
+  let enviando = false;
+  let mensagem = "";
+  let deuErro = false;
+
+  async function escolher(valor) {
+    if (enviando) return;
+    enviando = true;
+    pedidosNoAr += 1;
+    mensagem = "";
+    deuErro = false;
+    redesenhar();
+    try {
+      const resposta = await enviarJson("/api/aluno/treino/esforco", pedidoDoEsforco(ficha, proximoEsforco(ficha.esforco_hoje, valor)));
+      const resultado = descreverEsforco(resposta.status, resposta.corpo);
+      if (resultado.tipo === "entrar") {
+        window.location.assign("/aluno/entrar");
+        return; // a página está sendo trocada
+      }
+      if (resultado.tipo === "ok") ficha.esforco_hoje = resultado.esforco;
+      else {
+        mensagem = resultado.mensagem;
+        deuErro = true;
+      }
+    } catch {
+      mensagem = MENSAGEM_SEM_REDE;
+      deuErro = true;
+    }
+    pedidosNoAr -= 1;
+    enviando = false;
+    redesenhar();
+  }
+
+  function redesenhar() {
+    raiz.replaceChildren(
+      el("p", { id: `esforco-titulo-${ficha.ordem}`, classe: "meu-esforco-titulo", texto: TEXTO_PERGUNTA_DO_ESFORCO }),
+      el(
+        "div",
+        { classe: "meu-esforco-botoes" },
+        ESFORCOS.map((opcao) =>
+          el("button", {
+            type: "button",
+            classe: ficha.esforco_hoje === opcao.valor ? "botao-link meu-esforco-escolhido" : "botao-link",
+            texto: opcao.texto,
+            "aria-pressed": ficha.esforco_hoje === opcao.valor ? "true" : "false",
+            disabled: enviando,
+            aoClicar: () => escolher(opcao.valor),
+          }),
+        ),
+      ),
+      el("p", { classe: deuErro ? "aviso-campo aviso-erro" : "meu-esforco-dica", role: "status", texto: mensagem || TEXTO_ESFORCO_OPCIONAL }),
+    );
+  }
+
+  redesenhar();
+  return raiz;
 }
 
 function desenharRodape(treino, indice, mensagem, deuErro) {
@@ -280,6 +525,7 @@ function desenharRodape(treino, indice, mensagem, deuErro) {
     { classe: "meu-ficha-rodape" },
     el("p", { classe: "meu-ficha-andamento", texto: textoDoAndamento(ficha, treino.meta_por_ficha) }),
     ficha.feita_hoje && el("p", { classe: "meu-ficha-feita", texto: "✓ Treino concluído hoje" }),
+    ficha.feita_hoje && desenharEsforco(ficha),
     botaoFeito,
     botaoDesfazer,
     aviso,
@@ -325,6 +571,7 @@ function desenharCartoes(treino) {
             { classe: "meu-cartao-detalhe" },
             el("span", { texto: textoDosExercicios(ficha) }),
             ficha.feita_hoje && el("span", { classe: "meu-cartao-feita", texto: TEXTO_CONCLUIDO_HOJE }),
+            textoDoProgresso(ficha) && el("span", { classe: "meu-cartao-progresso", texto: textoDoProgresso(ficha) }),
           ),
         ),
         el("span", { classe: "meu-cartao-seta", texto: "\u203A", "aria-hidden": "true" }),
@@ -443,9 +690,10 @@ async function carregarTreino() {
 
 botaoDeNovo.addEventListener("click", carregarTreino);
 
-// Há uma caixa de comentário aberta (mesmo vazia) ou um envio no ar?
+// Há uma caixa de comentário aberta (mesmo vazia), um campo de carga com o cursor ou um envio no ar?
 function alunoEstaEscrevendo() {
-  return [...rascunhos.values()].some((estado) => estado.aberto || estado.enviando);
+  const digitandoCarga = document.activeElement?.classList?.contains("meu-carga-campo") === true;
+  return pedidosNoAr > 0 || digitandoCarga || [...rascunhos.values()].some((estado) => estado.aberto || estado.enviando);
 }
 
 // O app do celular fica aberto em segundo plano por horas ou dias (principalmente guardado na tela inicial): ao voltar para ele,
