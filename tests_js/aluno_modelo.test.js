@@ -9,11 +9,14 @@ import {
   TEXTO_COMENTARIO_ENVIADO,
   TEXTO_COMENTARIO_REPETIDO,
   TEXTO_COMENTARIO_VAZIO,
+  TEXTO_CONCLUIDO_HOJE,
+  TEXTO_ESCOLHA_O_TREINO,
   TEXTO_FICHA_FEITA_HOJE,
   TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
   TEXTO_SEM_RESPOSTA,
   TEXTO_SEM_TREINO,
+  TEXTO_TREINO_DE_HOJE,
   chaveDoRascunho,
   comentarioPronto,
   conferirCodigo,
@@ -27,13 +30,14 @@ import {
   descreverResposta,
   descreverVistos,
   descreverTreino,
+  ehFichaDoDia,
   estourouOLimite,
   fichaEscolhida,
   formatarCpf,
-  fotosDoExercicio,
   idsDasRespostasNovas,
   linhasDoExercicio,
   pedidoDoComentario,
+  quantosExercicios,
   soNumeros,
   temDose,
   textoDaNotaDaLista,
@@ -44,6 +48,7 @@ import {
   textoDoContador,
   textoDoLugar,
   textoDoReenvio,
+  textoDosExercicios,
 } from "../app/static/aluno_modelo.js";
 
 describe("soNumeros", () => {
@@ -676,25 +681,64 @@ describe("textoDaNotaDaLista", () => {
   });
 });
 
-describe("fotosDoExercicio", () => {
-  it("monta os dois endereços a partir do nome do par", () => {
-    expect(fotosDoExercicio({ foto: "Leg_Press" })).toEqual({
-      inicio: "/static/exercicios/Leg_Press_0.jpg",
-      fim: "/static/exercicios/Leg_Press_1.jpg",
+describe("lista de fichas (Treino de hoje)", () => {
+  const ficha = (ordem, ...tamanhos) => ({
+    nome: `FICHA ${ordem}`,
+    ordem,
+    grupos: tamanhos.map((n) => ({ nome: null, instrucao: "", exercicios: Array.from({ length: n }, () => ({})) })),
+  });
+
+  it("conta os exercícios de todos os grupos (um bi-set de dois conta 2)", () => {
+    expect(quantosExercicios(ficha(1, 1, 2, 1))).toBe(4);
+    expect(quantosExercicios(ficha(1))).toBe(0);
+  });
+
+  it("não quebra com ficha estranha", () => {
+    expect(quantosExercicios(null)).toBe(0);
+    expect(quantosExercicios({})).toBe(0);
+    expect(quantosExercicios({ grupos: [null, {}] })).toBe(0);
+  });
+
+  it("escreve '1 exercício' no singular e os outros no plural", () => {
+    expect(textoDosExercicios(ficha(1, 1))).toBe("1 exercício");
+    expect(textoDosExercicios(ficha(1, 1, 1, 1, 1, 1, 1, 1))).toBe("7 exercícios");
+    expect(textoDosExercicios(ficha(1))).toBe("0 exercícios");
+  });
+
+  it("a ficha do dia é a que tem a ordem igual a treino.ficha_do_dia", () => {
+    const treino = { ficha_do_dia: 2 };
+    expect(ehFichaDoDia(treino, ficha(1, 1))).toBe(false);
+    expect(ehFichaDoDia(treino, ficha(2, 1))).toBe(true);
+  });
+
+  it("sem ficha_do_dia (ou com algo que não é número) nenhuma ficha é circulada", () => {
+    expect(ehFichaDoDia({}, ficha(1, 1))).toBe(false);
+    expect(ehFichaDoDia({ ficha_do_dia: null }, ficha(1, 1))).toBe(false);
+    expect(ehFichaDoDia({ ficha_do_dia: "1" }, ficha(1, 1))).toBe(false);
+    expect(ehFichaDoDia(null, ficha(1, 1))).toBe(false);
+  });
+
+  it("as frases fixas existem", () => {
+    expect(TEXTO_TREINO_DE_HOJE).toBe("Treino de hoje");
+    expect(TEXTO_CONCLUIDO_HOJE).toContain("Concluído hoje");
+    expect(TEXTO_ESCOLHA_O_TREINO).toMatch(/Toque/);
+  });
+});
+
+describe("descreverMarcacao com a ficha do dia", () => {
+  it("devolve fichaDoDia quando o servidor manda um número", () => {
+    expect(descreverMarcacao(200, { ok: true, ficha: 2, ja_marcada: false, feitas: 1, ficha_do_dia: 2 })).toEqual({
+      tipo: "ok",
+      feitas: 1,
+      jaMarcada: false,
+      fichaDoDia: 2,
     });
-    expect(fotosDoExercicio({ foto: "Wide-Grip_Lat_Pulldown" }).fim).toBe("/static/exercicios/Wide-Grip_Lat_Pulldown_1.jpg");
+    expect(descreverMarcacao(200, { ok: true, ficha: 2, feitas: 0, ficha_do_dia: 1 }).fichaDoDia).toBe(1); // desfazer
   });
 
-  it("sem foto (ou nada), não devolve nada", () => {
-    expect(fotosDoExercicio({ foto: null })).toBeNull();
-    expect(fotosDoExercicio({})).toBeNull();
-    expect(fotosDoExercicio(null)).toBeNull();
-    expect(fotosDoExercicio(undefined)).toBeNull();
-  });
-
-  it("nome com barra, ponto, aspas, espaço ou que não é texto nunca vira endereço", () => {
-    for (const foto of ["../segredo", "a/b", "x.jpg", 'x" onerror="y', "a b", "", 42, ["Leg_Press"], { a: 1 }, "A".repeat(81)]) {
-      expect(fotosDoExercicio({ foto })).toBeNull();
-    }
+  it("sem ficha_do_dia (ou lixo) não inventa fichaDoDia", () => {
+    expect("fichaDoDia" in descreverMarcacao(200, { ok: true, feitas: 1 })).toBe(false);
+    expect("fichaDoDia" in descreverMarcacao(200, { ok: true, feitas: 1, ficha_do_dia: "2" })).toBe(false);
+    expect("fichaDoDia" in descreverMarcacao(200, { ok: true, feitas: 1, ficha_do_dia: null })).toBe(false);
   });
 });

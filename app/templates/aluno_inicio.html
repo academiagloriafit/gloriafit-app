@@ -26,13 +26,21 @@
     </section>
 
     <section id="treino" class="painel painel-aluno" aria-labelledby="titulo-treino" hidden>
-      <div>
+      <!-- Tela 1 (ao entrar): o treino e um botão por ficha. Os exercícios só aparecem depois do toque. -->
+      <div id="treino-cabecalho">
         <h2 id="titulo-treino" class="meu-treino-nome"></h2>
         <p id="treino-datas" class="meu-treino-datas"></p>
+        <p id="treino-dica" class="texto-apoio meu-treino-dica"></p>
       </div>
       <div id="fichas-botoes" class="meu-fichas-botoes" role="group" aria-label="Fichas do treino"></div>
-      <div id="ficha-atual" class="meu-ficha-atual"></div>
-      <div id="comentario-treino" class="meu-comentario-treino"></div>
+      <!-- Tela 2 (depois de tocar numa ficha): os exercícios dela. -->
+      <div id="ficha-topo" class="meu-ficha-topo" hidden>
+        <button id="botao-voltar" class="botao-link meu-voltar" type="button">&#8249; Voltar aos treinos</button>
+        <h3 id="ficha-titulo" class="meu-ficha-titulo" tabindex="-1"></h3>
+        <p id="ficha-etiqueta" class="meu-etiqueta-hoje" hidden></p>
+      </div>
+      <div id="ficha-atual" class="meu-ficha-atual" hidden></div>
+      <div id="comentario-treino" class="meu-comentario-treino" hidden></div>
     </section>
 
     <section id="meus-comentarios" class="painel painel-aluno" aria-labelledby="titulo-meus-comentarios" hidden>

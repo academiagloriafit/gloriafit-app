@@ -125,13 +125,13 @@ def test_o_exercicio_sai_em_texto_pronto(conn):
         "carga": "20 kg",
         "intervalo": "1 min 30 s",
         "observacao": "Descer devagar",
-        "foto": "Barbell_Bench_Press_-_Medium_Grip",  # SUPINO RETO está no mapa de fotos
     }
+    assert "foto" not in primeiro  # a foto de "Como fazer" saiu da tela do aluno (22/10/2026)
     assert segundo["ordem"] == 2 and segundo["etiqueta"] == "2" and segundo["carga"] == "" and segundo["intervalo"] == "" and segundo["observacao"] == ""
 
 
-def test_exercicio_apagado_no_data4u_aparece_sem_a_palavra_apagado_e_com_a_foto(conn):
-    """Treinos importados do Data4U trazem "CADEIRA EXTENSORA APAGADO"; o aluno vê o nome limpo e a foto do exercício."""
+def test_exercicio_apagado_no_data4u_aparece_sem_a_palavra_apagado(conn):
+    """Treinos importados do Data4U trazem "CADEIRA EXTENSORA APAGADO"; o aluno vê o nome limpo."""
     conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('CADEIRA EXTENSORA APAGADO', 'app')")
     conn.execute("INSERT INTO exercicio (nome, origem) VALUES ('(15) CADEIRA ABDUTORA APAGADO', 'app')")
     conn.commit()
@@ -139,8 +139,8 @@ def test_exercicio_apagado_no_data4u_aparece_sem_a_palavra_apagado_e_com_a_foto(
 
     primeiro, segundo = (g["exercicios"][0] for g in treino_do_aluno(conn, 1)["fichas"][0]["grupos"])
 
-    assert primeiro["exercicio"] == "CADEIRA EXTENSORA" and primeiro["foto"] is not None
-    assert segundo["exercicio"] == "CADEIRA ABDUTORA" and segundo["foto"] == "Thigh_Abductor"
+    assert primeiro["exercicio"] == "CADEIRA EXTENSORA"
+    assert segundo["exercicio"] == "CADEIRA ABDUTORA"
     # o nome guardado no banco continua com APAGADO (é a chave do exercício vinda do Data4U)
     assert conn.execute("SELECT nome FROM exercicio WHERE id = 7").fetchone()[0] == "CADEIRA EXTENSORA APAGADO"
 
@@ -380,7 +380,7 @@ def test_marcar_grava_uma_sessao_com_o_momento_certo(conn):
 
     resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
 
-    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 1}
+    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 1, "ficha_do_dia": 1}
     assert _sessoes(conn) == [(1, "2026-10-15 15:00:00")]
 
 
@@ -390,7 +390,7 @@ def test_marcar_de_novo_no_mesmo_dia_nao_conta_duas_vezes(conn):
 
     resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA + timedelta(hours=3))
 
-    assert resposta == {"ficha": 1, "ja_marcada": True, "feitas": 1}
+    assert resposta == {"ficha": 1, "ja_marcada": True, "feitas": 1, "ficha_do_dia": 1}
     assert len(_sessoes(conn)) == 1
 
 
@@ -400,7 +400,7 @@ def test_no_dia_seguinte_conta_de_novo(conn):
 
     resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA + timedelta(days=1))
 
-    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 2}
+    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 2, "ficha_do_dia": 1}
 
 
 def test_o_dia_e_o_de_brasilia_e_nao_o_do_relogio_de_londres(conn):
@@ -514,7 +514,7 @@ def test_desfazer_apaga_a_marcacao_de_hoje_e_deixa_marcar_de_novo(conn):
     _treino_abc(conn)
     marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
 
-    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 0}
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 0, "ficha_do_dia": 1}
     assert marcar_ficha_feita(conn, 1, 1, MEIO_DIA)["ja_marcada"] is False
 
 
@@ -523,7 +523,7 @@ def test_desfazer_nunca_apaga_marcacao_de_outro_dia(conn):
     marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(days=1))
     marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
 
-    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1}
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1, "ficha_do_dia": 2}
     assert _sessoes(conn) == [(1, "2026-10-14 15:00:00")]
 
 
@@ -531,7 +531,7 @@ def test_desfazer_sem_marcacao_hoje_nao_muda_nada(conn):
     _treino_abc(conn)
     marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(days=1))
 
-    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1}
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1, "ficha_do_dia": 2}
 
 
 def test_desfazer_so_mexe_na_ficha_pedida_e_no_proprio_aluno(conn):
@@ -613,10 +613,10 @@ def test_marcar_e_desfazer_pela_rota(caminho, cliente_da_ana):
     desfeita = _post(cliente_da_ana, "desfazer", {"ficha": 1})
     final = cliente_da_ana.get("/api/aluno/treino").get_json()["treino"]["fichas"][0]
 
-    assert primeira.status_code == 200 and primeira.get_json() == {"ok": True, "ficha": 1, "ja_marcada": False, "feitas": 1}
+    assert primeira.status_code == 200 and primeira.get_json() == {"ok": True, "ficha": 1, "ja_marcada": False, "feitas": 1, "ficha_do_dia": 1}
     assert segunda.get_json()["ja_marcada"] is True and segunda.get_json()["feitas"] == 1
     assert depois["feita_hoje"] is True and depois["feitas"] == 1
-    assert desfeita.get_json() == {"ok": True, "ficha": 1, "feitas": 0}
+    assert desfeita.get_json() == {"ok": True, "ficha": 1, "feitas": 0, "ficha_do_dia": 1}
     assert final["feita_hoje"] is False and final["feitas"] == 0
 
 
@@ -681,3 +681,135 @@ def test_o_computador_do_professor_nao_marca_ficha_de_aluno(caminho):
     assert professor.post("/api/autorizar", json={"codigo": codigo}).status_code == 200
 
     assert _post(professor, "feito", {"ficha": 1}).status_code == 401
+
+
+# ------------------------------------------------------------------ "Treino de hoje" (a ficha circulada na tela)
+# Regra (Thiago, 22/10/2026): nunca fez -> a primeira; a última concluída foi hoje -> continua ela; foi em outro dia ->
+# a próxima da sequência, e depois da última volta para a primeira.
+
+ONTEM = MEIO_DIA - timedelta(days=1)
+
+
+def _do_dia(conn, agora=MEIO_DIA, aluno_id=1):
+    return treino_do_aluno(conn, aluno_id, agora)["ficha_do_dia"]
+
+
+def test_do_dia_quem_nunca_concluiu_nenhuma_ficha_comeca_na_primeira(conn):
+    _treino_abc(conn)
+
+    assert _do_dia(conn) == 1
+
+
+def test_do_dia_depois_de_concluir_uma_ficha_ontem_hoje_e_a_proxima(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, ONTEM)
+
+    assert _do_dia(conn) == 2
+
+
+def test_do_dia_depois_da_ultima_ficha_volta_para_a_primeira(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 3, ONTEM)
+
+    assert _do_dia(conn) == 1
+
+
+def test_do_dia_vale_a_ultima_concluida_e_nao_a_de_maior_numero(conn):
+    # fez C há 3 dias e A ontem: a última foi A, então hoje é B (e não "depois do C")
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 3, MEIO_DIA - timedelta(days=3))
+    marcar_ficha_feita(conn, 1, 1, ONTEM)
+
+    assert _do_dia(conn) == 2
+
+
+def test_do_dia_se_concluiu_hoje_o_circulo_continua_nela_ate_amanha(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, ONTEM)
+    marcar_ficha_feita(conn, 1, 2, MEIO_DIA)
+
+    assert _do_dia(conn, MEIO_DIA) == 2
+    assert _do_dia(conn, MEIO_DIA + timedelta(hours=5)) == 2  # ainda hoje (17h em Brasília)
+    assert _do_dia(conn, MEIO_DIA + timedelta(days=1)) == 3  # amanhã: a próxima
+
+
+def test_do_dia_se_concluiu_duas_fichas_hoje_vale_a_ultima(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(hours=2))
+    marcar_ficha_feita(conn, 1, 2, MEIO_DIA)
+
+    assert _do_dia(conn) == 2
+
+
+def test_do_dia_pula_ficha_sem_exercicio(conn):
+    treino_id = _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, ONTEM)
+    conn.execute("DELETE FROM ficha_item WHERE ficha_id = (SELECT id FROM ficha WHERE treino_id = ? AND ordem = 2)", (treino_id,))
+    conn.commit()
+
+    assert _do_dia(conn) == 3  # a B não aparece para o aluno, então a próxima é a C
+
+
+def test_do_dia_a_ultima_concluida_hoje_numa_ficha_que_sumiu_cai_na_regra_da_proxima(conn):
+    treino_id = _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 2, MEIO_DIA)
+    conn.execute("DELETE FROM ficha_item WHERE ficha_id = (SELECT id FROM ficha WHERE treino_id = ? AND ordem = 2)", (treino_id,))
+    conn.commit()
+
+    assert _do_dia(conn) == 3
+
+
+def test_do_dia_o_que_outro_aluno_fez_nao_conta(conn):
+    _treino_abc(conn, aluno_id=1)
+    _treino_abc(conn, aluno_id=2, nome="TREINO DO BRUNO")
+    marcar_ficha_feita(conn, 2, 1, ONTEM)
+
+    assert _do_dia(conn, aluno_id=1) == 1
+    assert _do_dia(conn, aluno_id=2) == 2
+
+
+def test_do_dia_treino_novo_recomeca_na_primeira_ficha(conn):
+    velho = _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, ONTEM)
+    conn.execute("UPDATE treino SET ativo = 0 WHERE id = ?", (velho,))
+    conn.commit()
+    _treino_abc(conn, nome="TREINO NOVO")
+
+    assert _do_dia(conn) == 1  # as sessões do treino velho não valem para o novo
+
+
+def test_do_dia_a_virada_do_dia_e_a_de_brasilia(conn):
+    _treino_abc(conn)
+    # 23h50 em Brasília = 02h50 UTC do dia seguinte
+    tarde_da_noite = datetime(2026, 10, 16, 2, 50, tzinfo=timezone.utc)
+    marcar_ficha_feita(conn, 1, 1, tarde_da_noite)
+
+    assert _do_dia(conn, tarde_da_noite + timedelta(minutes=5)) == 1  # 23h55 em Brasília: ainda é o mesmo dia
+    assert _do_dia(conn, tarde_da_noite + timedelta(minutes=15)) == 2  # 00h05 em Brasília: já é outro dia
+
+
+def test_do_dia_desfazer_a_marcacao_de_hoje_volta_o_circulo(conn):
+    _treino_abc(conn)
+    marcar_ficha_feita(conn, 1, 1, ONTEM)
+    assert marcar_ficha_feita(conn, 1, 3, MEIO_DIA)["ficha_do_dia"] == 3
+
+    resposta = desfazer_marcacao_de_hoje(conn, 1, 3, MEIO_DIA)
+
+    assert resposta["ficha_do_dia"] == 2  # sem a marcação de hoje, a última é a A de ontem: hoje é a B
+    assert _do_dia(conn) == 2
+
+
+def test_do_dia_vem_no_json_da_rota_e_acompanha_o_que_o_aluno_marca(caminho, cliente_da_ana):
+    conn = conectar(caminho)
+    _treino_abc(conn)
+    conn.close()
+
+    inicio = cliente_da_ana.get("/api/aluno/treino").get_json()["treino"]
+    feito_na_b = _post(cliente_da_ana, "feito", {"ficha": 2})  # o aluno treinou a B mesmo sendo a A "do dia"
+    depois = cliente_da_ana.get("/api/aluno/treino").get_json()["treino"]
+    desfeito = _post(cliente_da_ana, "desfazer", {"ficha": 2})
+
+    assert inicio["ficha_do_dia"] == 1
+    assert feito_na_b.get_json()["ficha_do_dia"] == 2  # o círculo vai para a que ele concluiu hoje
+    assert depois["ficha_do_dia"] == 2
+    assert desfeito.get_json()["ficha_do_dia"] == 1

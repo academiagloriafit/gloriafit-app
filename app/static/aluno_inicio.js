@@ -5,15 +5,15 @@ import { atualizarMeusComentarios } from "./aluno_comentarios.js";
 import { el } from "./dom.js";
 import {
   MENSAGEM_SEM_REDE,
-  TEXTO_AVISO_COMO_FAZER,
   TEXTO_COMENTARIO_ENVIADO,
   TEXTO_COMENTARIO_REPETIDO,
-  TEXTO_ESCONDER_COMO_FAZER,
+  TEXTO_CONCLUIDO_HOJE,
+  TEXTO_ESCOLHA_O_TREINO,
   TEXTO_FICHA_FEITA_HOJE,
   TEXTO_JA_MARCADA,
   TEXTO_SEM_EXERCICIOS,
   TEXTO_SEM_TREINO,
-  TEXTO_VER_COMO_FAZER,
+  TEXTO_TREINO_DE_HOJE,
   chaveDoRascunho,
   comentarioPronto,
   decidirAtualizacaoDoTreino,
@@ -21,15 +21,16 @@ import {
   descreverMarcacao,
   descreverTreino,
   dicaDoComentario,
+  ehFichaDoDia,
   estourouOLimite,
   fichaEscolhida,
-  fotosDoExercicio,
   linhasDoExercicio,
   pedidoDoComentario,
   temDose,
   textoDasDatas,
   textoDoAndamento,
   textoDoContador,
+  textoDosExercicios,
 } from "./aluno_modelo.js";
 
 const botaoSair = document.getElementById("botao-sair");
@@ -42,6 +43,13 @@ const datasDoTreino = document.getElementById("treino-datas");
 const botoesDasFichas = document.getElementById("fichas-botoes");
 const areaDaFicha = document.getElementById("ficha-atual");
 const areaDoComentarioDoTreino = document.getElementById("comentario-treino");
+const cabecalhoDoTreino = document.getElementById("treino-cabecalho");
+const dicaDoTreino = document.getElementById("treino-dica");
+const topoDaFicha = document.getElementById("ficha-topo");
+const tituloDaFicha = document.getElementById("ficha-titulo");
+const etiquetaDaFicha = document.getElementById("ficha-etiqueta");
+const botaoVoltar = document.getElementById("botao-voltar");
+const paginaDoAluno = document.querySelector(".pagina-aluno");
 
 // Os rascunhos ficam aqui (e não dentro da caixa): a ficha é desenhada de novo ao trocar de A para B e ao marcar
 // "Treino concluído", e o aluno não pode perder o que estava escrevendo nem a confirmação de que enviou.
@@ -51,7 +59,8 @@ const rascunhos = new Map();
 
 // O que está na tela agora, para saber se o treino mudou quando o aluno voltar para o app (ver `atualizarTreinoAoVoltar`).
 let treinoNaTela = null; // null: a tela mostra um aviso (carregando, sem treino, erro), não um treino
-let fichaNaTela = 0; // a ficha (A, B...) que o aluno estava vendo: continua nela depois de atualizar
+let fichaNaTela = 0; // a ficha (A, B...) que o aluno abriu por último: continua nela depois de atualizar
+let verFicha = false; // false: a lista de fichas (tela 1); true: os exercícios de uma ficha (tela 2)
 let buscandoOTreino = false;
 let ultimaBuscaDoTreino = 0;
 const MINIMO_ENTRE_BUSCAS = 30_000; // ao voltar para o app, busca de novo no máximo a cada 30 segundos (igual à lista de comentários)
@@ -188,40 +197,6 @@ function desenharComentario(treino, ficha = null, exercicio = null) {
   return raiz;
 }
 
-// O botão "Ver como fazer": as duas fotos (início e fim) só são pedidas ao servidor quando o aluno toca.
-function desenharComoFazer(exercicio) {
-  const fotos = fotosDoExercicio(exercicio);
-  if (!fotos) return null;
-  const raiz = el("div", { classe: "como-fazer" });
-  const botao = el("button", { type: "button", classe: "botao-link como-fazer-botao", texto: TEXTO_VER_COMO_FAZER, "aria-expanded": "false" });
-  let area = null;
-  botao.addEventListener("click", () => {
-    if (area) {
-      area.remove();
-      area = null;
-      botao.textContent = TEXTO_VER_COMO_FAZER;
-      botao.setAttribute("aria-expanded", "false");
-      return;
-    }
-    area = el(
-      "div",
-      { classe: "como-fazer-area" },
-      el(
-        "div",
-        { classe: "como-fazer-fotos" },
-        el("img", { classe: "como-fazer-foto", src: fotos.inicio, alt: `${exercicio.exercicio}: posição inicial`, decoding: "async" }),
-        el("img", { classe: "como-fazer-foto como-fazer-foto-fim", src: fotos.fim, alt: `${exercicio.exercicio}: posição final`, decoding: "async" }),
-      ),
-      el("p", { classe: "como-fazer-aviso", texto: TEXTO_AVISO_COMO_FAZER }),
-    );
-    raiz.append(area);
-    botao.textContent = TEXTO_ESCONDER_COMO_FAZER;
-    botao.setAttribute("aria-expanded", "true");
-  });
-  raiz.prepend(botao);
-  return raiz;
-}
-
 function desenharExercicio(exercicio, treino, ficha) {
   return el(
     "li",
@@ -234,7 +209,6 @@ function desenharExercicio(exercicio, treino, ficha) {
       linhasDoExercicio(exercicio).map((linha, posicao) =>
         el("p", { classe: posicao === 0 && temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: linha }),
       ),
-      desenharComoFazer(exercicio),
       desenharComentario(treino, ficha, exercicio),
     ),
   );
@@ -269,6 +243,7 @@ async function marcarFicha(treino, indice, rota, botao) {
     if (resultado.tipo === "ok") {
       ficha.feitas = resultado.feitas;
       ficha.feita_hoje = rota === "feito";
+      if (Number.isInteger(resultado.fichaDoDia)) treino.ficha_do_dia = resultado.fichaDoDia; // o servidor decide quem fica circulada
       mensagem = rota === "feito" ? (resultado.jaMarcada ? TEXTO_JA_MARCADA : TEXTO_FICHA_FEITA_HOJE) : "";
     } else {
       mensagem = resultado.mensagem;
@@ -308,40 +283,116 @@ function desenharRodape(treino, indice, mensagem, deuErro) {
     botaoFeito,
     botaoDesfazer,
     aviso,
+    el("button", { type: "button", classe: "botao-link botao-largo", texto: "Voltar aos treinos", aoClicar: voltarParaALista }),
   );
 }
 
+// Os exercícios de UMA ficha (tela 2). Também redesenha depois de "Treino concluído" e quando o treino é atualizado.
 function mostrarFicha(treino, indice, mensagem = "", deuErro = false) {
   const escolhida = fichaEscolhida(treino.fichas, indice);
   fichaNaTela = escolhida;
-  botoesDasFichas.querySelectorAll("button").forEach((botao, i) => {
-    botao.setAttribute("aria-pressed", i === escolhida ? "true" : "false");
-  });
+  const ficha = treino.fichas[escolhida];
+  tituloDaFicha.textContent = ficha.nome;
+  etiquetaDaFicha.textContent = ehFichaDoDia(treino, ficha) ? TEXTO_TREINO_DE_HOJE : "";
+  etiquetaDaFicha.hidden = !etiquetaDaFicha.textContent;
   areaDaFicha.replaceChildren(
-    ...treino.fichas[escolhida].grupos.map((grupo) => desenharGrupo(grupo, treino, treino.fichas[escolhida])),
+    ...ficha.grupos.map((grupo) => desenharGrupo(grupo, treino, ficha)),
     desenharRodape(treino, escolhida, mensagem, deuErro),
   );
 }
 
-function mostrarTreino(treino, indiceDaFicha = 0) {
+// A lista de botões (tela 1): um por ficha. A do dia vem circulada e com a etiqueta "Treino de hoje".
+// Os exercícios NÃO aparecem aqui: o aluno toca na ficha para vê-los.
+function desenharCartoes(treino) {
+  botoesDasFichas.replaceChildren(
+    ...treino.fichas.map((ficha, i) => {
+      const doDia = ehFichaDoDia(treino, ficha);
+      return el(
+        "button",
+        {
+          type: "button",
+          classe: doDia ? "meu-cartao-ficha meu-cartao-do-dia" : "meu-cartao-ficha",
+          "aria-current": doDia ? "true" : null,
+          aoClicar: () => abrirFicha(treino, i),
+        },
+        el(
+          "span",
+          { classe: "meu-cartao-texto" },
+          doDia && el("span", { classe: "meu-etiqueta-hoje", texto: TEXTO_TREINO_DE_HOJE }),
+          el("span", { classe: "meu-cartao-nome", texto: ficha.nome }),
+          el(
+            "span",
+            { classe: "meu-cartao-detalhe" },
+            el("span", { texto: textoDosExercicios(ficha) }),
+            ficha.feita_hoje && el("span", { classe: "meu-cartao-feita", texto: TEXTO_CONCLUIDO_HOJE }),
+          ),
+        ),
+        el("span", { classe: "meu-cartao-seta", texto: "\u203A", "aria-hidden": "true" }),
+      );
+    }),
+  );
+}
+
+// Troca entre as duas telas só mostrando e escondendo (nada é buscado de novo).
+function trocarTela(mostrarAFicha) {
+  verFicha = mostrarAFicha;
+  cabecalhoDoTreino.hidden = mostrarAFicha;
+  botoesDasFichas.hidden = mostrarAFicha;
+  topoDaFicha.hidden = !mostrarAFicha;
+  areaDaFicha.hidden = !mostrarAFicha;
+  areaDoComentarioDoTreino.hidden = !mostrarAFicha;
+  paginaDoAluno.classList.toggle("modo-ficha", mostrarAFicha); // na tela 2, o resto da página (olá, comentários, sair) sai de cena
+}
+
+// O aluno tocou numa ficha. O "estado" no histórico faz o botão voltar do celular voltar para a lista (em vez de sair do app).
+function abrirFicha(treino, indice) {
+  history.pushState({ tela: "ficha" }, "");
+  mostrarFicha(treino, indice);
+  trocarTela(true);
+  window.scrollTo(0, 0);
+  tituloDaFicha.focus({ preventScroll: true });
+}
+
+function irParaALista() {
+  if (!treinoNaTela) return;
+  desenharCartoes(treinoNaTela); // pode ter mudado: "concluído hoje" e quem é a ficha do dia
+  trocarTela(false);
+  window.scrollTo(0, 0);
+  botoesDasFichas.children[fichaNaTela]?.focus({ preventScroll: true });
+}
+
+// "Voltar": se a ficha foi aberta por toque, volta no histórico (e o `popstate` abaixo mostra a lista); senão mostra a lista direto.
+function voltarParaALista() {
+  if (history.state && history.state.tela === "ficha") history.back();
+  else irParaALista();
+}
+
+botaoVoltar.addEventListener("click", voltarParaALista);
+window.addEventListener("popstate", () => {
+  if (!treinoNaTela) return;
+  if (history.state && history.state.tela === "ficha") {
+    mostrarFicha(treinoNaTela, fichaNaTela);
+    trocarTela(true);
+  } else {
+    irParaALista();
+  }
+});
+
+// `indiceDaFicha` null: mostra a lista (é o que o aluno vê ao entrar); um número: mostra os exercícios daquela ficha.
+function mostrarTreino(treino, indiceDaFicha = null) {
   treinoNaTela = treino;
   tituloDoTreino.textContent = treino.nome;
   datasDoTreino.textContent = textoDasDatas(treino);
   datasDoTreino.hidden = !datasDoTreino.textContent;
-  botoesDasFichas.replaceChildren(
-    ...treino.fichas.map((ficha, i) =>
-      el("button", {
-        type: "button",
-        classe: "meu-ficha-botao",
-        texto: ficha.nome,
-        "aria-pressed": "false",
-        aoClicar: () => mostrarFicha(treino, i),
-      }),
-    ),
-  );
-  botoesDasFichas.hidden = treino.fichas.length < 2; // uma ficha só: não precisa de botão
-  mostrarFicha(treino, indiceDaFicha);
+  dicaDoTreino.textContent = TEXTO_ESCOLHA_O_TREINO;
+  desenharCartoes(treino);
   areaDoComentarioDoTreino.replaceChildren(desenharComentario(treino));
+  if (indiceDaFicha === null) {
+    trocarTela(false);
+  } else {
+    mostrarFicha(treino, indiceDaFicha);
+    trocarTela(true);
+  }
   areaDoTreino.hidden = false;
   avisoTreino.hidden = true;
   botaoDeNovo.hidden = true; // pode ter ficado visível se a tela estava num erro quando o treino chegou
@@ -349,6 +400,8 @@ function mostrarTreino(treino, indiceDaFicha = 0) {
 
 function mostrarAviso(texto, comBotaoDeNovo) {
   treinoNaTela = null;
+  verFicha = false;
+  paginaDoAluno.classList.remove("modo-ficha"); // a saudação (onde o aviso aparece) tem que estar visível
   areaDoTreino.hidden = true;
   avisoTreino.hidden = false;
   avisoTreino.textContent = texto;
@@ -415,7 +468,7 @@ async function atualizarTreinoAoVoltar() {
       window.location.assign("/aluno/entrar");
     } else if (decisao.acao === "mostrar") {
       rascunhos.clear(); // os rascunhos são de "ficha:exercício" do treino velho: no treino novo apontariam para outro exercício
-      mostrarTreino(decisao.treino, fichaNaTela);
+      mostrarTreino(decisao.treino, verFicha ? fichaNaTela : null); // continua na tela em que o aluno estava
     } else if (decisao.acao === "aviso") {
       rascunhos.clear();
       mostrarAviso(decisao.texto, false);
@@ -446,5 +499,7 @@ botaoSair.addEventListener("click", async () => {
   botaoSair.disabled = false;
 });
 
+// Ao recarregar a página o histórico pode guardar o "estado" de uma ficha aberta antes; a página sempre começa na lista.
+if (history.state && history.state.tela) history.replaceState(null, "");
 carregarTreino();
 atualizarMeusComentarios();

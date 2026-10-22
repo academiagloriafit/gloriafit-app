@@ -130,22 +130,34 @@ export function linhasDoExercicio(exercicio) {
   return linhas;
 }
 
-// Fotos de "Como fazer" (posição inicial e final). O servidor manda só o NOME do par (`exercicio.foto`); o endereço
-// é montado aqui. Nome que não seja letras, números, sublinhado e hífen é ignorado: nunca vira parte de um endereço.
-export const TEXTO_VER_COMO_FAZER = "Ver como fazer";
-export const TEXTO_ESCONDER_COMO_FAZER = "Esconder";
-export const TEXTO_AVISO_COMO_FAZER = "Foto de referência: a máquina da academia pode ser um pouco diferente. Na dúvida, pergunte ao professor.";
-const NOME_DE_FOTO_VALIDO = /^[A-Za-z0-9_-]{1,80}$/;
-
-export function fotosDoExercicio(exercicio) {
-  const nome = exercicio && exercicio.foto;
-  if (typeof nome !== "string" || !NOME_DE_FOTO_VALIDO.test(nome)) return null;
-  return { inicio: `/static/exercicios/${nome}_0.jpg`, fim: `/static/exercicios/${nome}_1.jpg` };
-}
-
 // Qual ficha mostrar: a pedida, se existir; senão a primeira. Número fora da lista não quebra nada.
 export function fichaEscolhida(fichas, indice) {
   return Number.isInteger(indice) && indice >= 0 && indice < fichas.length ? indice : 0;
+}
+
+// ------------------------------------------------------------------ lista de fichas ("Treino de hoje")
+
+// Ao entrar, o aluno vê um botão por ficha (e não os exercícios): a ficha do dia vem circulada. Quem escolhe qual é a ficha
+// do dia é o servidor (`treino.ficha_do_dia`, a `ordem` da ficha; ver app/aluno_treino.py); aqui só se desenha.
+export const TEXTO_TREINO_DE_HOJE = "Treino de hoje";
+export const TEXTO_CONCLUIDO_HOJE = "✓ Concluído hoje";
+export const TEXTO_ESCOLHA_O_TREINO = "Toque no treino que você vai fazer.";
+
+// Quantos exercícios a ficha tem (um bi-set de dois conta 2).
+export function quantosExercicios(ficha) {
+  const grupos = Array.isArray(ficha?.grupos) ? ficha.grupos : [];
+  return grupos.reduce((soma, grupo) => soma + (Array.isArray(grupo?.exercicios) ? grupo.exercicios.length : 0), 0);
+}
+
+// "1 exercício" / "8 exercícios".
+export function textoDosExercicios(ficha) {
+  const n = quantosExercicios(ficha);
+  return n === 1 ? "1 exercício" : `${n} exercícios`;
+}
+
+// Esta ficha é a do dia? (sem `ficha_do_dia` no treino, nenhuma é)
+export function ehFichaDoDia(treino, ficha) {
+  return Number.isInteger(treino?.ficha_do_dia) && treino.ficha_do_dia === ficha?.ordem;
 }
 
 // ------------------------------------------------------------------ "Treino concluído"
@@ -160,12 +172,15 @@ export function textoDoAndamento(ficha, meta) {
 
 // Resposta do servidor ao marcar ou desfazer ({ status, corpo }) -> o que a tela faz:
 //   { tipo: "entrar" }                        sessão perdida
-//   { tipo: "ok", feitas, jaMarcada }         deu certo (`jaMarcada`: já estava marcada hoje; só no "feito")
+//   { tipo: "ok", feitas, jaMarcada, fichaDoDia? }  deu certo (`jaMarcada`: já estava marcada hoje; só no "feito")
 //   { tipo: "erro", mensagem }                qualquer outra coisa (com a explicação do servidor, se ela veio)
 export function descreverMarcacao(status, corpo) {
   if (status === 401) return { tipo: "entrar" };
   if (status === 200 && corpo && corpo.ok === true && Number.isInteger(corpo.feitas)) {
-    return { tipo: "ok", feitas: corpo.feitas, jaMarcada: corpo.ja_marcada === true };
+    // `fichaDoDia`: qual ficha fica circulada agora (o servidor decide; só vem se for um número)
+    const resposta = { tipo: "ok", feitas: corpo.feitas, jaMarcada: corpo.ja_marcada === true };
+    if (Number.isInteger(corpo.ficha_do_dia)) resposta.fichaDoDia = corpo.ficha_do_dia;
+    return resposta;
   }
   if (corpo && typeof corpo.erro === "string" && corpo.erro) return { tipo: "erro", mensagem: corpo.erro };
   return { tipo: "erro", mensagem: `Não consegui salvar (código ${status}). Tente de novo em instantes.` };
