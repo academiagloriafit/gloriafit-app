@@ -207,6 +207,58 @@ export function textoDoProgresso(ficha) {
   return feitos > 0 ? `${feitos} de ${todos.length} feitos` : "";
 }
 
+// ---- a tela de cada exercício (pedido do Thiago, 22/10/2026): a ficha é uma lista; tocar num exercício abre a tela dele.
+// "Posição" abaixo é o lugar do exercício na lista da ficha (0, 1, 2...), contando os bi-sets na ordem em que aparecem.
+
+// "Exercício 3 de 8".
+export function textoDaPosicao(posicao, total) {
+  return `Exercício ${posicao + 1} de ${total}`;
+}
+
+// O exercício a abrir depois de marcar `atual` como feito: o primeiro AINDA NÃO FEITO depois dele; se não sobrou nenhum adiante,
+// o primeiro que ficou para trás (o aluno pulou um aparelho ocupado). -1 se todos estão feitos.
+export function proximoSemFazer(exercicios, atual) {
+  const n = exercicios.length;
+  for (let passo = 1; passo < n; passo += 1) {
+    const posicao = (atual + passo) % n;
+    if (exercicios[posicao]?.feito !== true) return posicao;
+  }
+  return -1;
+}
+
+// O botão "Próximo exercício": o da posição seguinte, feito ou não. -1 se este é o último (o botão não aparece).
+export function proximoDaLista(exercicios, atual) {
+  return atual + 1 < exercicios.length ? atual + 1 : -1;
+}
+
+// O treino foi buscado de novo (o professor pode ter mexido): a posição `posicao` ainda é o exercício `nome` desta ficha?
+// Devolve a posição se sim; senão -1 e a tela volta para a lista, em vez de mostrar outro exercício no lugar.
+export function posicaoSeContinuaIgual(ficha, posicao, nome) {
+  return exerciciosDaFicha(ficha)[posicao]?.exercicio === nome ? posicao : -1;
+}
+
+// O bi-set/tri-set a que o exercício da posição pertence (null se ele está sozinho).
+export function grupoDoExercicio(ficha, posicao) {
+  const grupos = Array.isArray(ficha?.grupos) ? ficha.grupos : [];
+  let passou = 0;
+  for (const grupo of grupos) {
+    const quantos = Array.isArray(grupo?.exercicios) ? grupo.exercicios.length : 0;
+    if (posicao < passou + quantos) return grupo?.nome ? grupo : null;
+    passou += quantos;
+  }
+  return null;
+}
+
+// Uma frase para o aluno saber o que aconteceu quando o app o leva sozinho ao próximo exercício.
+export function textoDoExercicioFeito(nome) {
+  return `✓ ${nome} feito.`;
+}
+
+// Quando o último exercício que faltava é marcado, o app volta para a lista com esta frase.
+export function textoDeTodosFeitos(ficha) {
+  return ficha?.feita_hoje ? "Todos os exercícios feitos!" : "Todos os exercícios feitos! Falta só tocar em “Treino concluído”.";
+}
+
 export const TEXTO_MARCAR_FEITO = "Marcar como feito";
 export const TEXTO_FEITO = "✓ Feito";
 export const MENSAGEM_FEITO_NAO_SALVOU = "Não consegui marcar. Tente de novo.";
@@ -262,15 +314,33 @@ export function descreverExercicio(status, corpo) {
   return { tipo: status === 409 ? "atualizar" : "erro", mensagem };
 }
 
-// ---- descanso (cronômetro). O professor escreve o intervalo de cada exercício; o aluno toca para começar a contar.
+// ---- descanso (cronômetro). Pedido do Thiago (22/10/2026): o campo do tempo fica EM BRANCO e o aluno digita os segundos que
+// quer descansar. Só vem preenchido quando o professor lançou o intervalo do exercício (o aluno pode trocar). Nada de tempo
+// "padrão" inventado. Na barra de contagem, "+15 s" soma tempo quando o tempo digitado não basta.
 
-// Só há botão de descanso se o professor informou o intervalo ("1 min 30 s" já vem pronto do servidor).
+export const SEGUNDOS_A_MAIS_NO_DESCANSO = 15;
+export const MAXIMO_DO_DESCANSO = 3600; // uma hora: mais que isso, quase certo que foi engano de digitação
+export const MENSAGEM_DESCANSO_VAZIO = "Digite quantos segundos você quer descansar.";
+export const MENSAGEM_DESCANSO_INVALIDO = `Digite só o número de segundos, de 1 a ${MAXIMO_DO_DESCANSO}.`;
+
+// O professor informou o intervalo deste exercício?
 export function temDescanso(exercicio) {
   return Number.isInteger(exercicio?.pausa_segundos) && exercicio.pausa_segundos > 0;
 }
 
-export function textoDoBotaoDeDescanso(exercicio) {
-  return temDescanso(exercicio) ? `Descansar ${exercicio.intervalo}` : "";
+// O que o campo do tempo mostra ao abrir o exercício: os segundos do professor ou, sem eles, nada ("" = em branco).
+export function descansoSugerido(exercicio) {
+  return temDescanso(exercicio) ? String(exercicio.pausa_segundos) : "";
+}
+
+// O tempo digitado pelo aluno -> { ok: true, segundos } ou { ok: false, mensagem }. Só segundos inteiros, de 1 a 3600.
+export function conferirDescanso(texto) {
+  const limpo = typeof texto === "string" ? texto.trim() : "";
+  if (!limpo) return { ok: false, mensagem: MENSAGEM_DESCANSO_VAZIO };
+  if (!/^[0-9]{1,4}$/.test(limpo)) return { ok: false, mensagem: MENSAGEM_DESCANSO_INVALIDO };
+  const segundos = parseInt(limpo, 10);
+  if (segundos < 1 || segundos > MAXIMO_DO_DESCANSO) return { ok: false, mensagem: MENSAGEM_DESCANSO_INVALIDO };
+  return { ok: true, segundos };
 }
 
 // 90 -> "1:30"; 5 -> "0:05"; 3600 -> "1:00:00".

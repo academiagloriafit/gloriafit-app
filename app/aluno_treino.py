@@ -48,7 +48,7 @@ def _exercicio(item: dict, etiqueta: str) -> dict:
         "dose": dose_do_item(item),
         "carga": (item["carga"] or "").strip(),
         "intervalo": texto_da_pausa(item["pausa"]),
-        "pausa_segundos": item["pausa"] or 0,  # é o que o cronômetro de descanso do celular usa (0 = o professor não informou)
+        "pausa_segundos": item["pausa"] or 0,  # preenche o campo do tempo de descanso no celular (0 = o professor não informou: o campo fica em branco)
         "observacao": (item["observacao"] or "").strip(),
     }
 
@@ -216,7 +216,7 @@ def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | N
     "ficha_do_dia" (a `ordem` da ficha circulada como "Treino de hoje"; ver `ficha_do_dia`),
     "fichas": [{"nome", "ordem", "feitas", "feita_hoje", "esforco_hoje" (1 Leve, 2 Ideal, 3 Pesado ou None), "grupos": [...]}]}.
     Cada exercício leva também o que o aluno fez HOJE e a última vez: "feito" (marcou como feito), "carga_hoje" ("" = nada
-    anotado), "ultima_carga" e "ultima_data" ("" = nunca anotou antes) e "pausa_segundos" (para o cronômetro de descanso).
+    anotado), "ultima_carga" e "ultima_data" ("" = nunca anotou antes) e "pausa_segundos" (preenche o campo do tempo de descanso).
     `ordem` (1 = A, 2 = B...) é o que o celular manda de volta ao marcar a ficha como feita.
     Ficha sem nenhum exercício não aparece (não há o que mostrar).
     """

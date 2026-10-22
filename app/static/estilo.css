@@ -1131,8 +1131,26 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .pagina-aluno.modo-ficha > section:not(#treino) { display: none; }
 .meu-ficha-atual { display: flex; flex-direction: column; gap: 0; }
 .meu-exercicios { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
-.meu-exercicio { display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 8px; align-items: start; padding: 14px 0; }
-.meu-exercicio + .meu-exercicio { border-top: 1px solid var(--linha); }
+.meu-linha + .meu-linha { border-top: 1px solid var(--linha); }
+/* tela 2: cada exercício é uma linha inteira que se toca; o ✓ aparece nos já feitos */
+.meu-linha-botao {
+  width: 100%;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.meu-linha-botao:hover { background: var(--realce); }
+.meu-linha-botao .meu-exercicio-corpo { display: flex; flex-direction: column; gap: 2px; }
+.meu-linha-botao .meu-exercicio-dose { margin-top: 0; font-size: 21px; }
 .meu-exercicio-etiqueta {
   min-width: 0;
   font-family: var(--fonte-titulo);
@@ -1163,7 +1181,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 /* bi-set: os dois exercícios ficam ligados por um fio laranja */
 .meu-grupo-bloco { padding: 12px 0 0 14px; border-top: 1px solid var(--linha); box-shadow: inset 3px 0 0 var(--laranja); display: flex; flex-direction: column; gap: 4px; }
 .meu-grupo-bloco p { margin: 0; }
-.meu-grupo-bloco .meu-exercicio { padding: 10px 0; }
+.meu-grupo-bloco .meu-linha-botao { padding: 10px 0; }
 .meu-grupo-bloco .meu-exercicio-etiqueta { color: var(--laranja-texto); }
 .meu-bloco-titulo { font-size: 14px; font-weight: 750; color: var(--laranja-texto); }
 .meu-bloco-instrucao { font-size: 14.5px; color: var(--texto-suave); }
@@ -1437,8 +1455,10 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 .meu-acoes { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .meu-acoes p { margin: 0; }
 .meu-ultima-carga { font-size: 14.5px; font-weight: 650; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
-.meu-carga { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.meu-carga-rotulo { font-size: 14.5px; font-weight: 600; color: var(--texto-suave); }
+.meu-campo { display: flex; flex-direction: column; gap: 6px; }
+.meu-campo-rotulo { font-size: 14.5px; font-weight: 600; color: var(--texto-suave); }
+.meu-campo-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.meu-campo > .meu-carga-nota { margin: 0; }
 .meu-carga-campo {
   width: 6.5em;
   min-height: 48px;
@@ -1457,27 +1477,48 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 .meu-carga-nota:empty { display: none; }
 .meu-carga-nota.meu-carga-erro { color: var(--erro-texto); font-weight: 600; }
 .meu-acoes .aviso-campo:empty { display: none; }
-.meu-acoes-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
-.meu-feito, .meu-acoes-botoes .meu-descansar {
-  flex: 1 1 118px; /* os dois lado a lado no celular; se o texto não couber, quebra em duas linhas */
+/* "Marcar como feito": o botão grande da tela do exercício */
+.meu-feito {
+  display: flex;
+  align-items: center;
   justify-content: center;
-  min-height: 52px;
-  padding: 6px 10px;
-  border-radius: 10px;
+  width: 100%;
+  min-height: 60px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border: 2px solid var(--laranja);
+  border-radius: 12px;
+  background: var(--laranja);
+  color: var(--sobre-laranja);
   font-family: inherit;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 750;
   line-height: 1.2;
   text-align: center;
   cursor: pointer;
 }
-.meu-feito { display: inline-flex; align-items: center; border: 2px solid var(--contorno-suave); background: var(--papel); color: var(--texto); }
-.meu-feito:hover:not(:disabled) { border-color: var(--contorno-forte); }
-.meu-feito[aria-pressed="true"] { border-color: var(--verde); background: var(--verde-fundo); color: var(--verde); }
+.meu-feito:hover:not(:disabled) { background: #ff6a38; border-color: #ff6a38; }
+.meu-feito[aria-pressed="true"], .meu-feito[aria-pressed="true"]:hover:not(:disabled) { border-color: var(--verde); background: var(--verde-fundo); color: var(--verde); }
+.meu-campo-linha .meu-descansar { min-height: 48px; padding: 0 22px; font-size: 16px; font-weight: 700; }
+.meu-campo-linha .meu-carga-nota { flex: 1 1 12em; min-width: 0; }
 .meu-feito:disabled { cursor: wait; opacity: 0.6; }
 .meu-exercicio-feito .meu-exercicio-etiqueta { color: var(--verde); }
 .meu-exercicio-feito .meu-exercicio-nome::after { content: " ✓"; color: var(--verde); }
 .meu-cartao-progresso { color: var(--laranja-texto); font-weight: 650; }
+
+/* tela 3: um exercício só */
+.meu-exercicio-tela { display: flex; flex-direction: column; gap: 12px; }
+.meu-exercicio-tela p { margin: 0; }
+.meu-exercicio-posicao { font-size: 14.5px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+.meu-aviso-ok { font-size: 15px; font-weight: 700; color: var(--verde); }
+.meu-exercicio-grupo { display: flex; flex-direction: column; gap: 2px; padding-left: 14px; box-shadow: inset 3px 0 0 var(--laranja); }
+.meu-exercicio-titulo { font-size: 30px; }
+.meu-exercicio-tela.meu-exercicio-feito .meu-exercicio-titulo::after { content: " ✓"; color: var(--verde); }
+.meu-exercicio-tela .meu-exercicio-dose { margin-top: 0; }
+.meu-exercicio-tela .meu-exercicio-detalhe { margin-top: 0; font-size: 15.5px; }
+#treino.recem-trocada { pointer-events: none; } /* ver `protegerOsToques` em aluno_inicio.js */
+.meu-exercicio-navegar { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: 1px solid var(--linha); }
+.meu-exercicio-navegar .botao-link { flex: 1 1 140px; justify-content: center; min-height: 52px; padding: 0 12px; font-size: 16px; font-weight: 700; }
 
 .meu-esforco { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
 .meu-esforco p { margin: 0; }
@@ -1515,7 +1556,9 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
+.meu-descanso-botoes { flex: none; display: flex; gap: 8px; }
 .meu-descanso-botao { flex: none; min-height: 48px; padding: 0 20px; font-size: 16px; font-weight: 700; }
+.meu-descanso-botao[hidden] { display: none; }
 .meu-descanso-acabou { border-top-color: var(--verde); background: var(--verde-fundo); }
 .meu-descanso-acabou .meu-descanso-rotulo { color: var(--verde); font-size: 16px; font-weight: 700; }
 .meu-descanso-acabou .meu-descanso-tempo { color: var(--verde); }

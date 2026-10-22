@@ -5,18 +5,29 @@ import {
   MENSAGEM_CARGA_ZERO,
   TEXTO_FEITO,
   TEXTO_MARCAR_FEITO,
+  MAXIMO_DO_DESCANSO,
+  MENSAGEM_DESCANSO_INVALIDO,
+  MENSAGEM_DESCANSO_VAZIO,
   conferirCarga,
+  conferirDescanso,
   decidirAtualizacaoDoTreino,
+  descansoSugerido,
   descreverEsforco,
   descreverExercicio,
   exerciciosDaFicha,
+  grupoDoExercicio,
   pedidoDoEsforco,
   pedidoDoExercicio,
+  posicaoSeContinuaIgual,
+  proximoDaLista,
   proximoEsforco,
+  proximoSemFazer,
   segundosRestantes,
   temDescanso,
+  textoDaPosicao,
   textoDaUltimaCarga,
-  textoDoBotaoDeDescanso,
+  textoDeTodosFeitos,
+  textoDoExercicioFeito,
   textoDoFeito,
   textoDoProgresso,
   textoDoTempo,
@@ -189,7 +200,7 @@ describe("pedido e resposta do exercício", () => {
 });
 
 describe("descanso", () => {
-  it("só há botão quando o professor informou o intervalo", () => {
+  it("sabe se o professor informou o intervalo do exercício", () => {
     expect(temDescanso(exercicio())).toBe(true);
     expect(temDescanso(exercicio({ pausa_segundos: 0 }))).toBe(false);
     expect(temDescanso(exercicio({ pausa_segundos: null }))).toBe(false);
@@ -198,9 +209,42 @@ describe("descanso", () => {
     expect(temDescanso(undefined)).toBe(false);
   });
 
-  it("o botão usa o texto do intervalo que o servidor mandou", () => {
-    expect(textoDoBotaoDeDescanso(exercicio())).toBe("Descansar 1 min 30 s");
-    expect(textoDoBotaoDeDescanso(exercicio({ pausa_segundos: 0, intervalo: "" }))).toBe("");
+  it("o campo do tempo vem preenchido só com o intervalo que o professor lançou", () => {
+    expect(descansoSugerido(exercicio())).toBe("90");
+    expect(descansoSugerido(exercicio({ pausa_segundos: 45, intervalo: "45 s" }))).toBe("45");
+  });
+
+  it("sem intervalo do professor o campo fica EM BRANCO (nada de tempo inventado)", () => {
+    for (const sem of [{ pausa_segundos: 0, intervalo: "" }, { pausa_segundos: null, intervalo: "" }, { pausa_segundos: "90", intervalo: "" }, { pausa_segundos: -5 }]) {
+      expect(descansoSugerido(exercicio(sem))).toBe("");
+    }
+    expect(descansoSugerido(undefined)).toBe("");
+  });
+
+  it.each([
+    ["60", 60],
+    [" 90 ", 90],
+    ["1", 1],
+    ["045", 45],
+    ["3600", 3600],
+  ])("o tempo digitado %j vale %i segundos", (texto, segundos) => {
+    expect(conferirDescanso(texto)).toEqual({ ok: true, segundos });
+  });
+
+  it.each([[""], ["   "], [null], [undefined]])("tempo em branco (%j) pede para digitar", (texto) => {
+    expect(conferirDescanso(texto)).toEqual({ ok: false, mensagem: MENSAGEM_DESCANSO_VAZIO });
+  });
+
+  it.each([["0"], ["000"], ["3601"], ["9999"], ["1,5"], ["1.5"], ["-30"], ["1:30"], ["abc"], ["30 s"], ["12345"], ["+30"]])(
+    "tempo inválido (%j) é recusado com a explicação",
+    (texto) => {
+      expect(conferirDescanso(texto)).toEqual({ ok: false, mensagem: MENSAGEM_DESCANSO_INVALIDO });
+    },
+  );
+
+  it("o limite do descanso é uma hora, e a mensagem diz o limite", () => {
+    expect(MAXIMO_DO_DESCANSO).toBe(3600);
+    expect(MENSAGEM_DESCANSO_INVALIDO).toContain("3600");
   });
 
   it.each([
@@ -288,5 +332,69 @@ describe("o que o aluno marcou não faz o treino parecer 'mudado' quando o celul
     const doServidor = treino(exercicio({ feito: true }));
 
     expect(decidirAtualizacaoDoTreino(naTela, 200, { treino: doServidor }, false).acao).toBe("mostrar");
+  });
+});
+
+
+describe("tela de cada exercício: ir de um para outro", () => {
+  const ex = (nome, feito = false) => exercicio({ exercicio: nome, feito });
+  const tres = [ex("A"), ex("B"), ex("C")];
+
+  it("a posição aparece como 'Exercício 3 de 8'", () => {
+    expect(textoDaPosicao(0, 8)).toBe("Exercício 1 de 8");
+    expect(textoDaPosicao(2, 8)).toBe("Exercício 3 de 8");
+  });
+
+  it("depois de marcar um exercício, vai para o primeiro AINDA NÃO FEITO que vem depois dele", () => {
+    expect(proximoSemFazer([ex("A", true), ex("B"), ex("C")], 0)).toBe(1);
+    expect(proximoSemFazer([ex("A", true), ex("B", true), ex("C")], 0)).toBe(2); // pula o que já está feito
+  });
+
+  it("se adiante está tudo feito, volta para o que ficou para trás", () => {
+    expect(proximoSemFazer([ex("A"), ex("B", true), ex("C", true)], 2)).toBe(0);
+    expect(proximoSemFazer([ex("A", true), ex("B"), ex("C", true)], 2)).toBe(1);
+  });
+
+  it("com tudo feito não há próximo (-1): a tela volta para a lista", () => {
+    expect(proximoSemFazer([ex("A", true), ex("B", true), ex("C", true)], 1)).toBe(-1);
+    expect(proximoSemFazer([ex("A", true)], 0)).toBe(-1);
+    expect(proximoSemFazer([], 0)).toBe(-1);
+  });
+
+  it("só 'feito === true' conta como feito (valor estranho conta como não feito)", () => {
+    expect(proximoSemFazer([ex("A"), exercicio({ feito: "sim" }), ex("C")], 0)).toBe(1);
+  });
+
+  it("o botão 'Próximo exercício' vai para o da posição seguinte, feito ou não; o último não tem próximo", () => {
+    expect(proximoDaLista(tres, 0)).toBe(1);
+    expect(proximoDaLista([ex("A"), ex("B", true), ex("C")], 0)).toBe(1);
+    expect(proximoDaLista(tres, 2)).toBe(-1);
+    expect(proximoDaLista([], 0)).toBe(-1);
+  });
+
+  it("ao buscar o treino de novo, só continua no exercício se ele ainda está naquele lugar", () => {
+    const ficha = { grupos: [{ nome: null, exercicios: [ex("A"), ex("B")] }, { nome: "Bi-set", exercicios: [ex("C"), ex("D")] }] };
+    expect(posicaoSeContinuaIgual(ficha, 2, "C")).toBe(2);
+    expect(posicaoSeContinuaIgual(ficha, 1, "C")).toBe(-1); // o professor trocou a ordem: outro exercício ocuparia o lugar
+    expect(posicaoSeContinuaIgual(ficha, 9, "C")).toBe(-1);
+    expect(posicaoSeContinuaIgual(ficha, -1, "A")).toBe(-1);
+    expect(posicaoSeContinuaIgual(undefined, 0, "A")).toBe(-1);
+  });
+
+  it("acha o bi-set ou tri-set do exercício (e nada para o exercício sozinho)", () => {
+    const biset = { nome: "Bi-set", instrucao: "Faça A1 e A2 seguidos", exercicios: [ex("C"), ex("D")] };
+    const ficha = { grupos: [{ nome: null, instrucao: "", exercicios: [ex("A"), ex("B")] }, biset] };
+    expect(grupoDoExercicio(ficha, 0)).toBeNull();
+    expect(grupoDoExercicio(ficha, 1)).toBeNull();
+    expect(grupoDoExercicio(ficha, 2)).toBe(biset);
+    expect(grupoDoExercicio(ficha, 3)).toBe(biset);
+    expect(grupoDoExercicio(ficha, 4)).toBeNull();
+    expect(grupoDoExercicio(undefined, 0)).toBeNull();
+  });
+
+  it("as frases que o app mostra ao levar o aluno sozinho", () => {
+    expect(textoDoExercicioFeito("SUPINO RETO")).toBe("✓ SUPINO RETO feito.");
+    expect(textoDeTodosFeitos({ feita_hoje: false })).toContain("Treino concluído");
+    expect(textoDeTodosFeitos({ feita_hoje: true })).toBe("Todos os exercícios feitos!");
   });
 });

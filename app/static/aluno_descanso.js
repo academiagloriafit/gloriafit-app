@@ -1,17 +1,18 @@
 // Cronômetro de descanso da tela /aluno (pedido do Thiago, 22/10/2026: "descanso com toque").
-// O aluno toca em "Descansar 1 min 30 s" num exercício; uma barra fica no pé da tela contando, e no fim toca um aviso
+// O aluno digita os segundos na tela do exercício e toca em "Descansar"; uma barra fica no pé da tela contando, e no fim toca um aviso
 // (som + vibração, onde o celular deixa). Só um descanso por vez: tocar em outro recomeça.
 //
 // A conta é pelo RELÓGIO (hora em que o descanso acaba), não por tique: se o celular segurar o JavaScript em segundo plano,
 // ao voltar o tempo certo aparece na hora. Com a tela bloqueada o celular pode não tocar o aviso (limite do navegador);
 // por isso a tela é mantida acesa enquanto o descanso corre (quando o celular permite).
 import { el } from "./dom.js";
-import { TEXTO_DESCANSO_ACABOU, segundosRestantes, textoDoTempo } from "./aluno_modelo.js";
+import { SEGUNDOS_A_MAIS_NO_DESCANSO, TEXTO_DESCANSO_ACABOU, segundosRestantes, textoDoTempo } from "./aluno_modelo.js";
 
 let barra = null;
 let rotulo = null;
 let tempo = null;
 let botao = null;
+let botaoMais = null;
 let anuncio = null;
 let fimEmMs = 0;
 let relogio = null;
@@ -22,9 +23,16 @@ function montarBarra() {
   rotulo = el("span", { classe: "meu-descanso-rotulo" });
   tempo = el("span", { classe: "meu-descanso-tempo", role: "timer", "aria-live": "off" });
   botao = el("button", { type: "button", classe: "botao-link meu-descanso-botao", texto: "Parar", aoClicar: pararDescanso });
+  botaoMais = el("button", {
+    type: "button",
+    classe: "botao-link meu-descanso-botao",
+    texto: `+${SEGUNDOS_A_MAIS_NO_DESCANSO} s`,
+    "aria-label": `Somar ${SEGUNDOS_A_MAIS_NO_DESCANSO} segundos ao descanso`,
+    aoClicar: somarAoDescanso,
+  });
   // O tempo muda a cada segundo (o leitor de tela não deve ler cada um); só o fim é anunciado, por aqui.
   anuncio = el("p", { classe: "so-leitor", role: "status" });
-  barra = el("div", { classe: "meu-descanso", role: "region", "aria-label": "Descanso entre as séries", hidden: true }, el("div", { classe: "meu-descanso-texto" }, rotulo, tempo), botao, anuncio);
+  barra = el("div", { classe: "meu-descanso", role: "region", "aria-label": "Descanso entre as séries", hidden: true }, el("div", { classe: "meu-descanso-texto" }, rotulo, tempo), el("div", { classe: "meu-descanso-botoes" }, botaoMais, botao), anuncio);
   document.body.append(barra);
 }
 
@@ -117,11 +125,12 @@ function atualizar() {
   barra.classList.add("meu-descanso-acabou");
   rotulo.textContent = TEXTO_DESCANSO_ACABOU;
   botao.textContent = "Fechar";
+  botaoMais.hidden = true; // acabou: não há o que somar (para mais tempo, é só tocar em "Descansar" de novo)
   anuncio.textContent = TEXTO_DESCANSO_ACABOU;
   tocarAviso();
 }
 
-// Começa (ou recomeça) o descanso. `segundos` vem do intervalo que o professor escreveu no exercício.
+// Começa (ou recomeça) o descanso. `segundos` é o que o aluno digitou (já conferido por `conferirDescanso`).
 export function iniciarDescanso(segundos, nomeDoExercicio) {
   if (!Number.isFinite(segundos) || segundos <= 0) return;
   if (!barra) montarBarra();
@@ -133,10 +142,18 @@ export function iniciarDescanso(segundos, nomeDoExercicio) {
   document.body.classList.add("com-descanso");
   rotulo.textContent = `Descanso · ${nomeDoExercicio}`;
   botao.textContent = "Parar";
+  botaoMais.hidden = false;
   anuncio.textContent = "";
   atualizar();
   relogio = setInterval(atualizar, 250);
   manterTelaAcesa();
+}
+
+// "+15 s": soma tempo ao descanso que está correndo (a conta continua pelo relógio).
+function somarAoDescanso() {
+  if (!relogio) return;
+  fimEmMs += SEGUNDOS_A_MAIS_NO_DESCANSO * 1000;
+  atualizar();
 }
 
 // "Parar" (no meio) ou "Fechar" (depois do aviso): some com a barra.

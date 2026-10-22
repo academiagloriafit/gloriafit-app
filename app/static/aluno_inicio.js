@@ -22,6 +22,8 @@ import {
   chaveDoRascunho,
   comentarioPronto,
   conferirCarga,
+  conferirDescanso,
+  descansoSugerido,
   decidirAtualizacaoDoTreino,
   descreverComentario,
   descreverEsforco,
@@ -31,19 +33,25 @@ import {
   dicaDoComentario,
   ehFichaDoDia,
   estourouOLimite,
+  exerciciosDaFicha,
   fichaEscolhida,
+  grupoDoExercicio,
   linhasDoExercicio,
   pedidoDoComentario,
   pedidoDoEsforco,
   pedidoDoExercicio,
+  posicaoSeContinuaIgual,
+  proximoDaLista,
   proximoEsforco,
-  temDescanso,
+  proximoSemFazer,
   temDose,
+  textoDaPosicao,
   textoDaUltimaCarga,
   textoDasDatas,
+  textoDeTodosFeitos,
   textoDoAndamento,
-  textoDoBotaoDeDescanso,
   textoDoContador,
+  textoDoExercicioFeito,
   textoDoFeito,
   textoDoProgresso,
   textoDosExercicios,
@@ -58,6 +66,7 @@ const tituloDoTreino = document.getElementById("titulo-treino");
 const datasDoTreino = document.getElementById("treino-datas");
 const botoesDasFichas = document.getElementById("fichas-botoes");
 const areaDaFicha = document.getElementById("ficha-atual");
+const areaDoExercicio = document.getElementById("exercicio-atual");
 const areaDoComentarioDoTreino = document.getElementById("comentario-treino");
 const cabecalhoDoTreino = document.getElementById("treino-cabecalho");
 const dicaDoTreino = document.getElementById("treino-dica");
@@ -72,6 +81,9 @@ const paginaDoAluno = document.querySelector(".pagina-aluno");
 // Cada rascunho também guarda `enviando` (há um envio no ar) e `redesenhar` (a função da caixa que está NA TELA agora):
 // se a ficha for redesenhada no meio de um envio, a resposta atualiza a caixa nova, não uma que já saiu da tela.
 const rascunhos = new Map();
+// O tempo de descanso que o aluno digitou em cada exercício ("ficha:exercício" -> texto): a tela do exercício é desenhada de novo a
+// cada vez que ele entra, e o campo não pode voltar em branco.
+const descansos = new Map();
 // Quantos pedidos de "feito", carga ou nota estão no ar agora: a tela não se redesenha no meio deles (ver `alunoEstaEscrevendo`).
 let pedidosNoAr = 0;
 // Salvamentos de carga em andamento. "Treino concluído" e "voltar" esperam por eles (ver `terminarSalvamentos`): sem isso a tela era
@@ -88,7 +100,8 @@ async function terminarSalvamentos() {
 // O que está na tela agora, para saber se o treino mudou quando o aluno voltar para o app (ver `atualizarTreinoAoVoltar`).
 let treinoNaTela = null; // null: a tela mostra um aviso (carregando, sem treino, erro), não um treino
 let fichaNaTela = 0; // a ficha (A, B...) que o aluno abriu por último: continua nela depois de atualizar
-let verFicha = false; // false: a lista de fichas (tela 1); true: os exercícios de uma ficha (tela 2)
+let tela = "fichas"; // "fichas": a lista de fichas (tela 1); "ficha": os exercícios de uma ficha (tela 2); "exercicio": um exercício (tela 3)
+let posicaoDoExercicio = -1; // na tela 3: qual exercício da ficha está aberto (0, 1, 2...)
 let buscandoOTreino = false;
 let ultimaBuscaDoTreino = 0;
 const MINIMO_ENTRE_BUSCAS = 30_000; // ao voltar para o app, busca de novo no máximo a cada 30 segundos (igual à lista de comentários)
@@ -225,12 +238,15 @@ function desenharComentario(treino, ficha = null, exercicio = null) {
   return raiz;
 }
 
-// O que o aluno faz DURANTE o treino num exercício: marcar como feito, anotar a carga que usou e (se o professor informou o
-// intervalo) tocar para descansar. Tudo é gravado pelo servidor na hora (vale por dia: amanhã volta limpo). O modelo
-// (`exercicio.feito`, `exercicio.carga_hoje`) só muda DEPOIS que o servidor confirma, e mexe nas chaves que já existem, para a
-// comparação "o treino mudou?" ao voltar para o app continuar certa.
-function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
+// O que o aluno faz DURANTE o treino, na tela do exercício: anotar a carga, tocar para descansar e marcar como feito. Tudo é
+// gravado pelo servidor na hora (vale por dia: amanhã volta limpo). O modelo (`exercicio.feito`, `exercicio.carga_hoje`) só muda
+// DEPOIS que o servidor confirma, e mexe nas chaves que já existem, para a comparação "o treino mudou?" ao voltar para o app
+// continuar certa. `raiz` é a tela do exercício (ganha a marca de "feito"). `aoFicarFeito` é chamada quando o exercício acaba de
+// ser marcado como feito E a carga que estava no campo foi salva: aí a tela segue sozinha para o próximo exercício.
+function desenharAcoesDoExercicio(exercicio, ficha, raiz, aoFicarFeito) {
+  const chave = chaveDoRascunho(ficha, exercicio);
   const idDaCarga = `carga-${ficha.ordem}-${exercicio.ordem}`;
+  const idDoDescanso = `descanso-${ficha.ordem}-${exercicio.ordem}`;
   let mensagem = "";
   let deuErro = false;
   let precisaAtualizar = false;
@@ -238,6 +254,7 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
   let gravandoCarga = false;
   let cargaPendente = false;
   let cargaNaoSalvou = false; // o último envio falhou: sair do campo de novo tenta outra vez, mesmo sem o aluno mudar o número
+  let cargaComProblema = false; // o que está no campo da carga NÃO está salvo (número inválido ou sem rede): não vale sair da tela
 
   const aviso = el("p", { classe: "aviso-campo", role: "status" });
   const botaoAtualizar = el("button", { type: "button", classe: "botao-link", texto: "Atualizar a página", aoClicar: () => window.location.reload() });
@@ -265,8 +282,51 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
   });
   const nota = el("p", { id: `${idDaCarga}-nota`, classe: "meu-carga-nota", role: "status" });
 
+  // O tempo do descanso: em branco, a não ser que o professor tenha lançado o intervalo. O que o aluno digita fica guardado em
+  // `descansos`, para o campo continuar igual se ele sair do exercício e voltar.
+  const campoDoDescanso = el("input", {
+    id: idDoDescanso,
+    type: "text",
+    classe: "meu-carga-campo",
+    inputmode: "numeric",
+    autocomplete: "off",
+    maxlength: "4",
+    placeholder: "seg",
+    "aria-describedby": `${idDoDescanso}-nota`,
+    aoDigitar: () => {
+      descansos.set(chave, campoDoDescanso.value);
+      notaDoDescanso.textContent = "";
+    },
+  });
+  campoDoDescanso.value = descansos.has(chave) ? descansos.get(chave) : descansoSugerido(exercicio);
+  campoDoDescanso.addEventListener("keydown", (evento) => {
+    if (evento.key === "Enter") {
+      evento.preventDefault();
+      comecarODescanso();
+    }
+  });
+  const notaDoDescanso = el("p", { id: `${idDoDescanso}-nota`, classe: "meu-carga-nota meu-carga-erro", role: "status" });
+  const botaoDescansar = el("button", {
+    type: "button",
+    classe: "botao-link meu-descansar",
+    texto: "Descansar",
+    "aria-label": "Descansar (começa a contar o tempo digitado)",
+    aoClicar: () => comecarODescanso(),
+  });
+
+  function comecarODescanso() {
+    const conferido = conferirDescanso(campoDoDescanso.value);
+    if (!conferido.ok) {
+      notaDoDescanso.textContent = conferido.mensagem;
+      campoDoDescanso.focus();
+      return;
+    }
+    notaDoDescanso.textContent = "";
+    iniciarDescanso(conferido.segundos, exercicio.exercicio);
+  }
+
   function pintar() {
-    cartao.classList.toggle("meu-exercicio-feito", exercicio.feito === true);
+    raiz.classList.toggle("meu-exercicio-feito", exercicio.feito === true);
     botaoFeito.textContent = textoDoFeito(exercicio.feito);
     botaoFeito.setAttribute("aria-pressed", exercicio.feito === true ? "true" : "false");
     botaoFeito.setAttribute("aria-label", `${textoDoFeito(exercicio.feito)}: ${exercicio.exercicio}`);
@@ -276,7 +336,14 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
     botaoAtualizar.hidden = !precisaAtualizar;
   }
 
-  // Resposta que não é "ok": 401 troca de tela; o resto vira mensagem embaixo do exercício. Devolve true se tratou.
+  // A frase embaixo do campo da carga. `erro`: o que está no campo não foi salvo.
+  function mostrarNota(texto, erro = false) {
+    nota.textContent = texto;
+    nota.classList.toggle("meu-carga-erro", erro);
+    cargaComProblema = erro;
+  }
+
+  // Resposta que não é "ok": 401 troca de tela; o resto vira mensagem embaixo do botão. Devolve true se tratou.
   function trataFalha(resultado) {
     if (resultado.tipo === "entrar") {
       window.location.assign("/aluno/entrar");
@@ -297,17 +364,32 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
     deuErro = false;
     precisaAtualizar = false;
     pintar();
+    let virouFeito = false;
     try {
       const resposta = await enviarJson("/api/aluno/exercicio", pedidoDoExercicio(ficha, exercicio, { feito: exercicio.feito !== true }));
       const resultado = descreverExercicio(resposta.status, resposta.corpo);
-      if (!trataFalha(resultado)) exercicio.feito = resultado.feito;
+      if (!trataFalha(resultado)) {
+        virouFeito = resultado.feito === true && exercicio.feito !== true;
+        exercicio.feito = resultado.feito;
+      }
     } catch {
       mensagem = `${MENSAGEM_FEITO_NAO_SALVOU} ${MENSAGEM_SEM_REDE}`;
       deuErro = true;
     }
+    // Quem marca "feito" com o número da carga ainda no campo (no iPhone o toque no botão não tira o cursor do campo) tem a carga
+    // salva ANTES de a tela seguir: senão o número sumiria junto com a tela.
+    if (virouFeito) await terminarSalvamentos();
     pedidosNoAr -= 1;
     marcando = false;
     pintar();
+    if (!virouFeito) return;
+    if (cargaComProblema) {
+      mensagem = "Marcado como feito, mas a carga não foi salva. Confira o número acima.";
+      deuErro = true;
+      pintar();
+    } else {
+      aoFicarFeito();
+    }
   }
 
   function salvarEAcompanhar() {
@@ -325,22 +407,19 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
     }
     const conferida = conferirCarga(campo.value);
     if (!conferida.ok) {
-      nota.textContent = conferida.mensagem;
-      nota.classList.add("meu-carga-erro");
+      mostrarNota(conferida.mensagem, true);
       return;
     }
     const novo = conferida.valor ?? "";
     campo.value = novo;
     if (novo === exercicio.carga_hoje) {
-      nota.textContent = "";
-      nota.classList.remove("meu-carga-erro");
+      mostrarNota("");
       cargaNaoSalvou = false;
       return;
     }
     gravandoCarga = true;
     pedidosNoAr += 1;
-    nota.textContent = "Salvando…";
-    nota.classList.remove("meu-carga-erro");
+    mostrarNota("Salvando…");
     try {
       const resposta = await enviarJson("/api/aluno/exercicio", pedidoDoExercicio(ficha, exercicio, { carga: conferida.valor }));
       const resultado = descreverExercicio(resposta.status, resposta.corpo);
@@ -348,13 +427,12 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
         exercicio.carga_hoje = resultado.cargaHoje;
         cargaNaoSalvou = false;
         if (!cargaPendente) campo.value = resultado.cargaHoje; // não atropela o que o aluno digitou enquanto salvava
-        nota.textContent = resultado.cargaHoje ? "✓ Anotado" : "Carga apagada";
+        mostrarNota(resultado.cargaHoje ? "✓ Anotado" : "Carga apagada");
       } else if (resultado.tipo === "entrar") {
         window.location.assign("/aluno/entrar");
       } else {
         cargaNaoSalvou = true;
-        nota.textContent = resultado.mensagem;
-        nota.classList.add("meu-carga-erro");
+        mostrarNota(resultado.mensagem, true);
         if (resultado.tipo === "atualizar") {
           mensagem = resultado.mensagem;
           deuErro = true;
@@ -364,8 +442,7 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
       }
     } catch {
       cargaNaoSalvou = true;
-      nota.textContent = `Não salvou. ${MENSAGEM_SEM_REDE}`;
-      nota.classList.add("meu-carga-erro");
+      mostrarNota(`Não salvou. ${MENSAGEM_SEM_REDE}`, true);
     }
     pedidosNoAr -= 1;
     gravandoCarga = false;
@@ -384,49 +461,106 @@ function desenharAcoesDoExercicio(exercicio, treino, ficha, cartao) {
     ultima && el("p", { classe: "meu-ultima-carga", texto: ultima }),
     el(
       "div",
-      { classe: "meu-carga" },
-      el("label", { for: idDaCarga, classe: "meu-carga-rotulo", texto: "Carga que usei (kg)" }),
-      campo,
+      { classe: "meu-campo" },
+      el("label", { for: idDaCarga, classe: "meu-campo-rotulo", texto: "Carga que usei (kg)" }),
+      el("div", { classe: "meu-campo-linha" }, campo, nota),
     ),
-    nota,
     el(
       "div",
-      { classe: "meu-acoes-botoes" },
-      botaoFeito,
-      temDescanso(exercicio) &&
-        el("button", {
-          type: "button",
-          classe: "botao-link meu-descansar",
-          texto: textoDoBotaoDeDescanso(exercicio),
-          "aria-label": `${textoDoBotaoDeDescanso(exercicio)} (começa a contar)`,
-          aoClicar: () => iniciarDescanso(exercicio.pausa_segundos, exercicio.exercicio),
-        }),
+      { classe: "meu-campo" },
+      el("label", { for: idDoDescanso, classe: "meu-campo-rotulo", texto: "Descanso (segundos)" }),
+      el("div", { classe: "meu-campo-linha" }, campoDoDescanso, botaoDescansar),
+      notaDoDescanso,
     ),
+    botaoFeito,
     aviso,
     botaoAtualizar,
   );
 }
 
-function desenharExercicio(exercicio, treino, ficha) {
-  const cartao = el("li", { classe: "meu-exercicio" });
-  cartao.append(
-    el("span", { classe: "meu-exercicio-etiqueta", texto: exercicio.etiqueta, "aria-hidden": "true" }),
+// A tela de UM exercício (tela 3): o nome, o que o professor mandou fazer, a carga, o descanso, "Marcar como feito" e os botões para
+// seguir. Futuramente é aqui que entra o vídeo do exercício. `mensagemInicial`: o que o app diz ao levar o aluno até aqui sozinho.
+function desenharTelaDoExercicio(treino, indiceDaFicha, posicao, mensagemInicial = "") {
+  const ficha = treino.fichas[indiceDaFicha];
+  const exercicios = exerciciosDaFicha(ficha);
+  const exercicio = exercicios[posicao];
+  const grupo = grupoDoExercicio(ficha, posicao);
+  const proximo = proximoDaLista(exercicios, posicao);
+  const raiz = el("div", { classe: "meu-exercicio-tela" });
+
+  const aoFicarFeito = () => {
+    // O servidor demorou para responder: se o aluno já saiu deste exercício, ele não é levado a lugar nenhum.
+    const aindaAqui = tela === "exercicio" && posicaoDoExercicio === posicao && exerciciosDaFicha(treinoNaTela?.fichas?.[fichaNaTela])[posicao] === exercicio;
+    if (!aindaAqui) return;
+    const seguinte = proximoSemFazer(exercicios, posicao);
+    if (seguinte >= 0) abrirExercicio(treino, indiceDaFicha, seguinte, textoDoExercicioFeito(exercicio.exercicio));
+    else voltarParaAFicha(textoDeTodosFeitos(ficha));
+  };
+
+  // (`append` direto escreveria "false" e "null" na tela e não aceita lista: por isso `flat` e `filter`)
+  const filhos = [
     el(
       "div",
-      { classe: "meu-exercicio-corpo" },
-      el("p", { classe: "meu-exercicio-nome", texto: exercicio.exercicio }),
-      linhasDoExercicio(exercicio).map((linha, posicao) =>
-        el("p", { classe: posicao === 0 && temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: linha }),
-      ),
-      desenharAcoesDoExercicio(exercicio, treino, ficha, cartao),
-      desenharComentario(treino, ficha, exercicio),
+      { classe: "meu-ficha-topo" },
+      el("button", { type: "button", classe: "botao-link meu-voltar", texto: "‹ Lista de exercícios", aoClicar: () => voltarParaAFicha() }),
+      el("p", { classe: "meu-exercicio-posicao", texto: `${ficha.nome} · ${textoDaPosicao(posicao, exercicios.length)}` }),
     ),
-  );
-  return cartao;
+    mensagemInicial && el("p", { classe: "meu-aviso-ok", role: "status", texto: mensagemInicial }),
+    grupo &&
+      el(
+        "div",
+        { classe: "meu-exercicio-grupo" },
+        el("p", { classe: "meu-bloco-titulo", texto: `${grupo.nome} · ${exercicio.etiqueta}` }),
+        el("p", { classe: "meu-bloco-instrucao", texto: grupo.instrucao }),
+      ),
+    el("h3", { id: "exercicio-titulo", classe: "meu-ficha-titulo meu-exercicio-titulo", tabindex: "-1", texto: exercicio.exercicio }),
+    linhasDoExercicio(exercicio).map((linha, i) =>
+      el("p", { classe: i === 0 && temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: linha }),
+    ),
+    desenharAcoesDoExercicio(exercicio, ficha, raiz, aoFicarFeito),
+    desenharComentario(treino, ficha, exercicio),
+    el(
+      "div",
+      { classe: "meu-exercicio-navegar" },
+      el("button", { type: "button", classe: "botao-link", texto: "Lista de exercícios", aoClicar: () => voltarParaAFicha() }),
+      proximo >= 0 &&
+        el("button", {
+          type: "button",
+          classe: "botao-link",
+          texto: "Próximo exercício ›",
+          "aria-label": `Próximo exercício: ${exercicios[proximo].exercicio}`,
+          aoClicar: () => abrirExercicio(treino, indiceDaFicha, proximo),
+        }),
+    ),
+  ];
+  raiz.append(...filhos.flat().filter(Boolean));
+  return raiz;
 }
 
-function desenharGrupo(grupo, treino, ficha) {
-  const lista = el("ul", { classe: "meu-exercicios" }, grupo.exercicios.map((exercicio) => desenharExercicio(exercicio, treino, ficha)));
+// Uma linha da lista de exercícios (tela 2): o nome e a dose; tocar abre a tela do exercício. O ✓ aparece nos que já foram feitos.
+function desenharLinha(exercicio, posicao, treino, indiceDaFicha) {
+  const primeira = linhasDoExercicio(exercicio)[0];
+  return el(
+    "li",
+    { classe: exercicio.feito === true ? "meu-linha meu-exercicio-feito" : "meu-linha" },
+    el(
+      "button",
+      { type: "button", classe: "meu-linha-botao", aoClicar: () => abrirExercicio(treino, indiceDaFicha, posicao) },
+      el("span", { classe: "meu-exercicio-etiqueta", texto: exercicio.etiqueta, "aria-hidden": "true" }),
+      el(
+        "span",
+        { classe: "meu-exercicio-corpo" },
+        el("span", { classe: "meu-exercicio-nome" }, exercicio.exercicio, exercicio.feito === true && el("span", { classe: "so-leitor", texto: ", feito" })),
+        primeira && el("span", { classe: temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: primeira }),
+      ),
+      el("span", { classe: "meu-cartao-seta", texto: "›", "aria-hidden": "true" }),
+    ),
+  );
+}
+
+// `primeira`: a posição (0, 1, 2...) do primeiro exercício do grupo na lista da ficha.
+function desenharGrupo(grupo, treino, indiceDaFicha, primeira) {
+  const lista = el("ul", { classe: "meu-exercicios" }, grupo.exercicios.map((exercicio, i) => desenharLinha(exercicio, primeira + i, treino, indiceDaFicha)));
   if (!grupo.nome) return el("div", { classe: "meu-grupo-simples" }, lista);
   return el(
     "div",
@@ -537,7 +671,8 @@ function desenharEsforco(ficha) {
   return raiz;
 }
 
-function desenharRodape(treino, indice, mensagem, deuErro) {
+// `avisoDoFim`: a frase "Todos os exercícios feitos!", que fica acima do botão "Treino concluído" (a `mensagem` fica abaixo dos botões).
+function desenharRodape(treino, indice, mensagem, deuErro, avisoDoFim = "") {
   const ficha = treino.fichas[indice];
   const aviso = el("p", { classe: deuErro ? "aviso-campo aviso-erro" : "aviso-campo", role: "status", texto: mensagem });
   const botaoFeito = ficha.feita_hoje
@@ -560,6 +695,7 @@ function desenharRodape(treino, indice, mensagem, deuErro) {
     "div",
     { classe: "meu-ficha-rodape" },
     el("p", { classe: "meu-ficha-andamento", texto: textoDoAndamento(ficha, treino.meta_por_ficha) }),
+    avisoDoFim && el("p", { classe: "meu-aviso-ok", role: "status", texto: avisoDoFim }),
     ficha.feita_hoje && el("p", { classe: "meu-ficha-feita", texto: "✓ Treino concluído hoje" }),
     ficha.feita_hoje && desenharEsforco(ficha),
     botaoFeito,
@@ -569,18 +705,28 @@ function desenharRodape(treino, indice, mensagem, deuErro) {
   );
 }
 
-// Os exercícios de UMA ficha (tela 2). Também redesenha depois de "Treino concluído" e quando o treino é atualizado.
-function mostrarFicha(treino, indice, mensagem = "", deuErro = false) {
+// Os exercícios de UMA ficha (tela 2): uma linha por exercício. Também redesenha depois de "Treino concluído" e quando o treino é atualizado.
+function mostrarFicha(treino, indice, mensagem = "", deuErro = false, avisoDoFim = "") {
   const escolhida = fichaEscolhida(treino.fichas, indice);
   fichaNaTela = escolhida;
   const ficha = treino.fichas[escolhida];
   tituloDaFicha.textContent = ficha.nome;
   etiquetaDaFicha.textContent = ehFichaDoDia(treino, ficha) ? TEXTO_TREINO_DE_HOJE : "";
   etiquetaDaFicha.hidden = !etiquetaDaFicha.textContent;
-  areaDaFicha.replaceChildren(
-    ...ficha.grupos.map((grupo) => desenharGrupo(grupo, treino, ficha)),
-    desenharRodape(treino, escolhida, mensagem, deuErro),
-  );
+  let primeira = 0; // a posição do primeiro exercício de cada grupo
+  const grupos = ficha.grupos.map((grupo) => {
+    const desenhado = desenharGrupo(grupo, treino, escolhida, primeira);
+    primeira += grupo.exercicios.length;
+    return desenhado;
+  });
+  areaDaFicha.replaceChildren(...grupos, desenharRodape(treino, escolhida, mensagem, deuErro, avisoDoFim));
+}
+
+// Mostra a tela do exercício da posição pedida (sem mexer no histórico nem na rolagem: quem chama cuida disso).
+function mostrarExercicio(treino, indiceDaFicha, posicao, mensagem = "") {
+  fichaNaTela = fichaEscolhida(treino.fichas, indiceDaFicha);
+  posicaoDoExercicio = posicao;
+  areaDoExercicio.replaceChildren(desenharTelaDoExercicio(treino, fichaNaTela, posicao, mensagem));
 }
 
 // A lista de botões (tela 1): um por ficha. A do dia vem circulada e com a etiqueta "Treino de hoje".
@@ -616,30 +762,101 @@ function desenharCartoes(treino) {
   );
 }
 
-// Troca entre as duas telas só mostrando e escondendo (nada é buscado de novo).
-function trocarTela(mostrarAFicha) {
-  verFicha = mostrarAFicha;
-  cabecalhoDoTreino.hidden = mostrarAFicha;
-  botoesDasFichas.hidden = mostrarAFicha;
-  topoDaFicha.hidden = !mostrarAFicha;
-  areaDaFicha.hidden = !mostrarAFicha;
-  areaDoComentarioDoTreino.hidden = !mostrarAFicha;
-  paginaDoAluno.classList.toggle("modo-ficha", mostrarAFicha); // na tela 2, o resto da página (olá, comentários, sair) sai de cena
+// Logo depois de trocar de tela os toques são ignorados por um instante (classe `recem-trocada`, que desliga os toques no CSS):
+// um toque duplo em "Marcar como feito" ou em "Lista de exercícios" não pode cair no botão que acabou de aparecer no mesmo lugar
+// (marcaria o exercício seguinte, ou sairia da ficha, sem o aluno querer).
+const PAUSA_DOS_TOQUES_AO_TROCAR_DE_TELA = 350;
+let liberarOsToques = null;
+function protegerOsToques() {
+  areaDoTreino.classList.add("recem-trocada");
+  clearTimeout(liberarOsToques);
+  liberarOsToques = setTimeout(() => areaDoTreino.classList.remove("recem-trocada"), PAUSA_DOS_TOQUES_AO_TROCAR_DE_TELA);
+}
+
+// Troca entre as telas só mostrando e escondendo (nada é buscado de novo). `nova`: "fichas", "ficha" ou "exercicio".
+function trocarTela(nova) {
+  protegerOsToques();
+  tela = nova;
+  const dentroDeUmaFicha = nova !== "fichas";
+  cabecalhoDoTreino.hidden = dentroDeUmaFicha;
+  botoesDasFichas.hidden = dentroDeUmaFicha;
+  topoDaFicha.hidden = nova !== "ficha";
+  areaDaFicha.hidden = nova !== "ficha";
+  areaDoComentarioDoTreino.hidden = nova !== "ficha";
+  areaDoExercicio.hidden = nova !== "exercicio";
+  if (nova !== "exercicio") {
+    posicaoDoExercicio = -1;
+    areaDoExercicio.replaceChildren(); // some com o campo de carga: nada fica escondido na página, e o próximo exercício começa limpo
+  }
+  paginaDoAluno.classList.toggle("modo-ficha", dentroDeUmaFicha); // nas telas 2 e 3, o resto da página (olá, comentários, sair) sai de cena
 }
 
 // O aluno tocou numa ficha. O "estado" no histórico faz o botão voltar do celular voltar para a lista (em vez de sair do app).
 function abrirFicha(treino, indice) {
   history.pushState({ tela: "ficha" }, "");
   mostrarFicha(treino, indice);
-  trocarTela(true);
+  trocarTela("ficha");
   window.scrollTo(0, 0);
   tituloDaFicha.focus({ preventScroll: true });
+}
+
+// O aluno tocou num exercício (ou o app o levou ao próximo). Ao entrar na tela 3 o histórico ganha UM passo; pular de um exercício para
+// outro não ganha mais nenhum: o "voltar" do celular volta para a lista de exercícios, não para o exercício anterior.
+function abrirExercicio(treino, indiceDaFicha, posicao, mensagem = "") {
+  document.activeElement?.blur?.(); // salva a carga que estava sendo digitada (o campo vai sair da tela)
+  if (tela !== "exercicio") history.pushState({ tela: "exercicio" }, "");
+  mostrarExercicio(treino, indiceDaFicha, posicao, mensagem);
+  trocarTela("exercicio");
+  window.scrollTo(0, 0);
+  document.getElementById("exercicio-titulo")?.focus({ preventScroll: true });
+}
+
+// Da tela do exercício para a lista de exercícios da ficha: volta UM passo no histórico (o que o botão voltar do celular também faz) e
+// o `popstate` abaixo mostra a lista. `mensagem` só vem quando acabaram os exercícios: aí a lista abre no botão "Treino concluído".
+let avisoDoFimPendente = ""; // a frase que o `popstate` põe na lista quando o aluno volta por causa do fim dos exercícios
+let voltando = false; // já há um "voltar" no ar: o `popstate` ainda não chegou
+// Volta UM passo no histórico. Dois toques seguidos no botão não podem voltar dois passos (o segundo levaria para a lista de treinos
+// ou até para fora do app): enquanto o primeiro não chegou, os outros são ignorados.
+function voltarUmPasso() {
+  if (voltando) return;
+  voltando = true;
+  setTimeout(() => {
+    voltando = false; // (rede de segurança: o `popstate` abaixo também zera)
+  }, 800);
+  history.back();
+}
+
+function voltarParaAFicha(mensagem = "") {
+  if (!treinoNaTela) return;
+  document.activeElement?.blur?.(); // salva a carga que estava sendo digitada
+  if (history.state && history.state.tela === "exercicio") {
+    if (voltando) return;
+    avisoDoFimPendente = mensagem;
+    voltarUmPasso();
+  } else {
+    mostrarAListaDeExercicios(mensagem);
+  }
+}
+
+function mostrarAListaDeExercicios(mensagem = "") {
+  const posicao = posicaoDoExercicio;
+  mostrarFicha(treinoNaTela, fichaNaTela, "", false, mensagem);
+  trocarTela("ficha");
+  if (mensagem) areaDaFicha.querySelector(".meu-ficha-rodape button")?.focus();
+  else focarLinha(posicao);
+}
+
+// O foco volta para o exercício de onde o aluno saiu (a lista rola até ele; quem usa teclado ou leitor de tela não se perde).
+function focarLinha(posicao) {
+  const linha = areaDaFicha.querySelectorAll(".meu-linha-botao")[posicao];
+  if (linha) linha.focus();
+  else window.scrollTo(0, 0);
 }
 
 function irParaALista() {
   if (!treinoNaTela) return;
   desenharCartoes(treinoNaTela); // pode ter mudado: "concluído hoje" e quem é a ficha do dia
-  trocarTela(false);
+  trocarTela("fichas");
   window.scrollTo(0, 0);
   botoesDasFichas.children[fichaNaTela]?.focus({ preventScroll: true });
 }
@@ -647,24 +864,32 @@ function irParaALista() {
 // "Voltar": se a ficha foi aberta por toque, volta no histórico (e o `popstate` abaixo mostra a lista); senão mostra a lista direto.
 function voltarParaALista() {
   document.activeElement?.blur?.(); // salva a carga que estava sendo digitada (o campo vai sair da tela)
-  if (history.state && history.state.tela === "ficha") history.back();
+  if (history.state && history.state.tela === "ficha") voltarUmPasso();
   else irParaALista();
 }
 
 botaoVoltar.addEventListener("click", voltarParaALista);
 window.addEventListener("popstate", () => {
+  voltando = false;
   document.activeElement?.blur?.(); // o gesto de voltar do celular também salva a carga que estava sendo digitada
+  const aviso = avisoDoFimPendente;
+  avisoDoFimPendente = "";
   if (!treinoNaTela) return;
-  if (history.state && history.state.tela === "ficha") {
-    mostrarFicha(treinoNaTela, fichaNaTela);
-    trocarTela(true);
+  const estado = history.state?.tela;
+  if (estado === "exercicio" && posicaoDoExercicio >= 0) {
+    mostrarExercicio(treinoNaTela, fichaNaTela, posicaoDoExercicio);
+    trocarTela("exercicio");
+  } else if (estado === "ficha" || estado === "exercicio") {
+    if (estado === "exercicio") history.replaceState({ tela: "ficha" }, ""); // (voltou a um passo velho, sem exercício aberto)
+    mostrarAListaDeExercicios(aviso);
   } else {
     irParaALista();
   }
 });
 
-// `indiceDaFicha` null: mostra a lista (é o que o aluno vê ao entrar); um número: mostra os exercícios daquela ficha.
-function mostrarTreino(treino, indiceDaFicha = null) {
+// `indiceDaFicha` null: mostra a lista de fichas (é o que o aluno vê ao entrar); um número: mostra os exercícios daquela ficha.
+// `exercicioAberto` ({ posicao, nome }): o exercício que estava aberto; continua nele se o treino novo ainda o tem naquele lugar.
+function mostrarTreino(treino, indiceDaFicha = null, exercicioAberto = null) {
   treinoNaTela = treino;
   tituloDoTreino.textContent = treino.nome;
   datasDoTreino.textContent = textoDasDatas(treino);
@@ -673,10 +898,19 @@ function mostrarTreino(treino, indiceDaFicha = null) {
   desenharCartoes(treino);
   areaDoComentarioDoTreino.replaceChildren(desenharComentario(treino));
   if (indiceDaFicha === null) {
-    trocarTela(false);
+    trocarTela("fichas");
   } else {
-    mostrarFicha(treino, indiceDaFicha);
-    trocarTela(true);
+    const escolhida = fichaEscolhida(treino.fichas, indiceDaFicha);
+    const posicao = exercicioAberto && escolhida === indiceDaFicha ? posicaoSeContinuaIgual(treino.fichas[escolhida], exercicioAberto.posicao, exercicioAberto.nome) : -1;
+    if (posicao >= 0) {
+      mostrarExercicio(treino, escolhida, posicao);
+      trocarTela("exercicio");
+    } else {
+      // O exercício que estava aberto mudou de lugar ou saiu do treino: mostra a lista da ficha e tira o passo do exercício do histórico.
+      mostrarFicha(treino, indiceDaFicha);
+      trocarTela("ficha");
+      if (exercicioAberto && history.state?.tela === "exercicio") history.back();
+    }
   }
   areaDoTreino.hidden = false;
   avisoTreino.hidden = true;
@@ -685,7 +919,9 @@ function mostrarTreino(treino, indiceDaFicha = null) {
 
 function mostrarAviso(texto, comBotaoDeNovo) {
   treinoNaTela = null;
-  verFicha = false;
+  tela = "fichas";
+  posicaoDoExercicio = -1;
+  areaDoExercicio.replaceChildren();
   paginaDoAluno.classList.remove("modo-ficha"); // a saudação (onde o aviso aparece) tem que estar visível
   areaDoTreino.hidden = true;
   avisoTreino.hidden = false;
@@ -754,9 +990,13 @@ async function atualizarTreinoAoVoltar() {
       window.location.assign("/aluno/entrar");
     } else if (decisao.acao === "mostrar") {
       rascunhos.clear(); // os rascunhos são de "ficha:exercício" do treino velho: no treino novo apontariam para outro exercício
-      mostrarTreino(decisao.treino, verFicha ? fichaNaTela : null); // continua na tela em que o aluno estava
+      descansos.clear(); // idem para o tempo de descanso digitado
+      // Continua na tela em que o aluno estava (e no mesmo exercício, se ele ainda está lá).
+      const aberto = tela === "exercicio" ? { posicao: posicaoDoExercicio, nome: exerciciosDaFicha(treinoNaTela?.fichas?.[fichaNaTela])[posicaoDoExercicio]?.exercicio } : null;
+      mostrarTreino(decisao.treino, tela === "fichas" ? null : fichaNaTela, aberto);
     } else if (decisao.acao === "aviso") {
       rascunhos.clear();
+      descansos.clear();
       mostrarAviso(decisao.texto, false);
     }
   } finally {

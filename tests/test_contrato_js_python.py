@@ -807,7 +807,7 @@ def test_o_pedido_de_exercicio_montado_pelo_javascript_e_aceito_pelo_servidor(tm
           feito: m.pedidoDoExercicio(ficha, exercicio, {{ feito: true }}),
           carga: m.pedidoDoExercicio(ficha, exercicio, {{ carga: m.conferirCarga("32,50").valor }}),
           esforco: m.pedidoDoEsforco(ficha, 3),
-          descanso: [m.temDescanso(exercicio), m.textoDoBotaoDeDescanso(exercicio)],
+          descanso: [m.temDescanso(exercicio), m.descansoSugerido(exercicio)],
         }}));
     """)
 
@@ -818,7 +818,7 @@ def test_o_pedido_de_exercicio_montado_pelo_javascript_e_aceito_pelo_servidor(tm
     assert definir_esforco(conn, 1, esforco["ficha"], esforco["esforco"]) == {"ficha": 2, "esforco": 3}
     linha = dict(conn.execute("SELECT ficha_ordem, exercicio_ordem, exercicio_nome, feito, carga FROM execucao").fetchone())
     assert linha == {"ficha_ordem": 2, "exercicio_ordem": 1, "exercicio_nome": "CADEIRA ABDUTORA", "feito": 1, "carga": "32,5"}
-    assert js["descanso"] == [True, "Descansar 1 min 30 s"]  # o texto do botão vem do intervalo que o servidor mandou
+    assert js["descanso"] == [True, "90"]  # o campo do tempo vem com os segundos que o professor lançou (90 = 1 min 30 s)
     conn.close()
 
 
