@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 15
+VERSAO_DO_BANCO = 16
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -425,10 +425,36 @@ def _de_14_para_15(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS ix_ia_retorno_dia ON ia_retorno(dia, tipo)")
 
 
+def _de_15_para_16(conn: sqlite3.Connection) -> None:
+    """Histórico do treino feito com a IA: nasce a tabela `treino_ia` (o que o professor escreveu para o robô, a justificativa do robô e o
+    que o professor mudou antes de salvar, ligados ao treino). Só acrescenta uma tabela vazia: nenhum dado que já existe é tocado.
+    `IF NOT EXISTS` de propósito (ver a 13 -> 14)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS treino_ia (
+            treino_id     INTEGER PRIMARY KEY REFERENCES treino(id) ON DELETE CASCADE,
+            objetivo      TEXT    NOT NULL CHECK (length(objetivo) BETWEEN 1 AND 40),
+            nivel         TEXT    NOT NULL CHECK (length(nivel) BETWEEN 1 AND 40),
+            dias          INTEGER NOT NULL CHECK (dias >= 1),
+            minutos       INTEGER NOT NULL CHECK (minutos >= 1),
+            fila          TEXT    CHECK (fila IS NULL OR length(fila) BETWEEN 1 AND 60),
+            observacoes   TEXT    NOT NULL DEFAULT '' CHECK (length(observacoes) <= 1000),
+            conversa      TEXT,
+            justificativa TEXT    NOT NULL,
+            alertas       TEXT    NOT NULL,
+            ajustes       TEXT    NOT NULL,
+            regras        TEXT    NOT NULL CHECK (length(regras) BETWEEN 1 AND 40),
+            modelo        TEXT    NOT NULL CHECK (length(modelo) BETWEEN 1 AND 80)
+        )
+        """
+    )
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
     10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13, 13: _de_13_para_14, 14: _de_14_para_15,
+    15: _de_15_para_16,
 }
 
 

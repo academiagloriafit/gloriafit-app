@@ -81,7 +81,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 
 | Arquivo | Para quê |
 |---|---|
-| `app/schema.sql` | Desenho das tabelas (versão 15): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha, com a nota de esforço `esforco` quando o aluno escolheu uma), `execucao` (o que o aluno marcou como feito e a carga que anotou em cada exercício, por dia), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) e o retorno dos professores sobre o rascunho da IA (`ia_retorno`, sem aluno nem professor) `importacao` (de quando é a última cópia do Data4U aplicada) o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`) e os comentários do aluno (`comentario`). Não há tabela de professores: o nome é digitado a cada treino |
+| `app/schema.sql` | Desenho das tabelas (versão 16): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha, com a nota de esforço `esforco` quando o aluno escolheu uma), `execucao` (o que o aluno marcou como feito e a carga que anotou em cada exercício, por dia), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) o retorno dos professores sobre o rascunho da IA (`ia_retorno`, sem aluno nem professor), o histórico do treino feito com a IA (`treino_ia`, LIGADO ao treino: o que o professor escreveu para o robô e a justificativa do robô) `importacao` (de quando é a última cópia do Data4U aplicada) o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`) e os comentários do aluno (`comentario`). Não há tabela de professores: o nome é digitado a cada treino |
 | `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco de qualquer versão de 4 a 14 até a 15 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
 | `app/importar_exercicios.py` | Lê a planilha `dados/quadro_exercicios_v2.xlsx` e grava no banco |
 | `app/texto.py` | `normalizar`: minúsculas e sem acento ("Bíceps" → "biceps") |
@@ -115,6 +115,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/static/importar_treino.js` | O painel **Importar treino** (abas "Treino padrão" e "Treino de outro aluno"): só lê do servidor e entrega o treino escolhido a `montar.js`; pede confirmação antes de substituir o que já está na tela |
 | `app/static/padrao_ficha.js` | Botão **Salvar como treino padrão** de cada treino na ficha do aluno |
 | `app/ia_retorno.py` | **O robô aprende com os professores:** guarda a avaliação do rascunho da IA ("Serviu", "Serviu com ajustes", "Não serviu" + motivo) e a **diferença** entre o rascunho e o treino que o professor salvou (`comparar`), sem aluno, professor, hora nem número do pedido; e o relatório do terminal (`python -m app.ia_retorno relatorio [--mes AAAA-MM]`). Ver a seção "Retorno dos professores" abaixo |
+| `app/ia_historico.py` | **Por que este treino foi montado assim:** ao salvar um treino feito com a IA, copia para `treino_ia` (permanente, ligado ao treino) o pedido do professor, o texto que ele escreveu para o robô (ou "nenhuma observação"), a conversa de perguntas e respostas, a justificativa e os avisos do robô e o que o professor mudou antes de salvar; `do_aluno` entrega isso à ficha. **Nunca** vai para a tela do aluno nem para a impressão. Ver a seção "Histórico do treino feito com a IA" abaixo |
 | `app/static/avaliacao_ia.js` | A pergunta "O rascunho da IA ajudou?" da tela "Treino salvo" (só aparece quando o treino saiu de um rascunho da IA); a lógica sem tela fica em `treino_ia_modelo.js` |
 | `app/static/dom.js` | `el()`: cria elementos de tela só com `textContent` (nada vindo do banco vira HTML) |
 | `app/static/api.js` | `enviarJson` (POST em JSON) e `buscarJson` (GET) com limite de tempo (20 s) devolvendo status + corpo; `textoDoErro` escolhe a mensagem para mostrar; usado por salvar treino, WhatsApp e importar treino |
@@ -449,11 +450,13 @@ obrigada a entregar o treino.
   A IA tem **duas ferramentas**: `fazer_perguntas` (só oferecida enquanto `perguntar` e sobrar rodada) e `montar_treino`. Com `tool_choice`
   `auto` quem decide é o texto do pedido ("se ainda faltar informação, chame fazer_perguntas; se basta, chame montar_treino"). O resultado de
   `GET .../treino-ia/<pedido>` é o rascunho (`treino`, `resumo`, `alertas`, `removidos`) **ou** `{"perguntas", "rodada", "maximo_de_rodadas"}`; a
-  tela distingue pela presença de `perguntas`. Recarregar a página apaga a conversa (de propósito: resposta sobre saúde não fica em lugar nenhum).
+  tela distingue pela presença de `perguntas`. Recarregar a página apaga a conversa **da tela**. Desde 23/10/2026 o servidor guarda uma cópia do que o robô recebeu junto de cada
+  rascunho (área `_historico` do `ia_pedido.resultado`, apagada em 3 dias) e, **se o professor salvar o treino a partir do rascunho**, a
+  copia para o histórico permanente do treino (`treino_ia`, seção "Histórico do treino feito com a IA" abaixo).
 - **Observações grandes (22/10/2026, pedido do Thiago):** o campo "Observações sobre o aluno" tem 8 linhas e aceita **até 1.000 letras**
   (`LIMITE_DAS_OBSERVACOES`, igual no Python e no JavaScript; `tests/test_contrato_js_python.py` confere; antes eram 300; as **respostas** às
   perguntas da IA continuam em 300). O texto é limpo (espaços e quebras de linha viram um espaço) e vai inteiro para a IA. As regras da casa
-  (`REGRAS_DA_CASA`, regras 13 e 15) mandam a IA **usar** idade, altura, peso, rotina, histórico e lesões para ajustar o treino, **não
+  (`REGRAS_DA_CASA`, regras 13 e 15; a regra 16, de 23/10/2026, manda o robô escrever a justificativa do treino) mandam a IA **usar** idade, altura, peso, rotina, histórico e lesões para ajustar o treino, **não
   inventar** dado que não foi escrito, tratar altura e peso só como contexto (sem diagnóstico, dieta nem peso ideal), seguir o cuidado do
   Adolescente se a idade for menor que 18, **montar direto, sem perguntar,** quando as observações já bastam, e perguntar só o que falta e
   mudaria o treino (inclusive idade, altura e peso, se não foram escritos). O **resumo** do rascunho (até 3 frases, 600 letras) diz quais
@@ -524,7 +527,7 @@ regras novas, que só entram depois de o Thiago aprovar e de a mudança ser publ
   Para não repetir o registro, o app guarda os sinais "já avaliado"/"já registrado" e o contexto numa área `_retorno` dentro de `ia_pedido.resultado`
   (que já é apagado depois de 3 dias); `consultar_pedido` a esconde da tela.
 - **Limites honestos:** no banco não existe campo que ligue um registro a um aluno, mas quem tem o arquivo inteiro do banco ainda poderia, em tese,
-  cruzar o dia e a ordem dos registros com os pedidos (`ia_pedido`) dos últimos 3 dias; o relatório não faz isso. O **motivo** é texto livre: o servidor
+  cruzar o dia e a ordem dos registros com os pedidos (`ia_pedido`) dos últimos 3 dias; o relatório não faz isso. (Desde 23/10/2026 existe também `treino_ia`, que **é** ligado ao treino de propósito; o cruzamento por dia e contexto com `ia_retorno` continua possível em tese para quem tem o arquivo inteiro do banco.) O **motivo** é texto livre: o servidor
   recusa o nome do aluno, e-mail, número longo e data completa, e a tela pede para não escrever sobre a pessoa, mas ele ainda pode citar algo de saúde de
   alguém sem nome ("hérnia de disco"); por isso é curto e só quem cuida do app lê o relatório. Se a LGPD pedir (decisão do Thiago), basta não pedir o motivo.
   Recarregar a página com o rascunho na tela perde o vínculo (o rascunho volta do navegador, mas sem o número do pedido): nesse caso nada é registrado.
@@ -538,6 +541,39 @@ regras novas, que só entram depois de o Thiago aprovar e de a mudança ser publ
   (`app-AAAA-MM-DD-HHMMSS.db`) e o segundo falhava na subida, até o servidor reiniciar sozinho. `backup.BackupJaExiste` (um `BackupFalhou` mais
   específico) é levantado quando a cópia do segundo já existe; `db.migrar` o aceita (a cópia do outro processo foi tirada antes de qualquer passo,
   então já guarda o banco como era) e segue. Qualquer outro erro de cópia continua parando a migração.
+
+## Histórico do treino feito com a IA ("Por que este treino foi montado assim"): como funciona
+
+Ideia de um professor, pedido do Thiago (23/10/2026): quando o professor abre o treino de um aluno na ficha, ele precisa entender **por que o treino está
+dividido daquele jeito e por que tem aquela quantidade de exercícios**. Antes, tudo o que o professor escrevia para o robô (idade, lesões,
+comorbidades, o que o aluno quer) sumia depois de o rascunho ser montado. Agora fica ligado ao treino.
+
+- **O que o professor vê:** na ficha do aluno, ao abrir o treino, o quadro "Por que este treino foi montado assim" (fechado por padrão, com o selo IA) tem
+  três partes: **(1) O que o professor passou para o robô** (objetivo, nível, dias, tempo, fila, o texto das observações, ou "Nenhuma observação foi
+  escrita para o robô.", e as perguntas do robô com as respostas do professor); **(2) Por que o robô montou assim** (3 a 6 pontos escritos pelo próprio
+  robô: divisão das fichas, quantidade de exercícios, séries/repetições/pausas, como pesou as observações; mais os avisos ao professor); **(3) O que o
+  professor mudou antes de salvar** (ou "Nada: o treino foi salvo como o robô montou."). Vale para todo treino salvo a partir de um rascunho da IA,
+  ativo ou já concluído. Treino feito à mão mostra "Sem histórico do robô: ..."; treino copiado do Data4U não mostra nada.
+- **Como é guardado:** ao montar o rascunho, o servidor põe uma cópia do que o robô recebeu (observações e conversa) na área `_historico` do
+  `ia_pedido.resultado` (apagado depois de 3 dias, como o resto do rascunho). Quando o professor salva o treino com o rascunho na tela
+  (`"ia": {"pedido_id": n}`, o mesmo vínculo da avaliação), `ia_historico.registrar` copia tudo para `treino_ia` (uma linha por treino, `PRIMARY KEY
+  treino_id`, `ON DELETE CASCADE`: apagar o treino apaga o histórico). Confere no banco que o treino é do mesmo aluno do rascunho, usa `BEGIN IMMEDIATE` e
+  marca `gravado` (um rascunho gera um histórico só). É um extra: se falhar, o treino já está salvo (resposta 201) e o erro vai só para o log.
+- **A justificativa do robô:** a ferramenta `montar_treino` ganhou o campo obrigatório `justificativa` (lista de textos) e a regra 16 de `REGRAS_DA_CASA`
+  diz o que escrever (e que **só se pode citar o que foi informado**, sem inventar, sem nome do aluno e sem diagnóstico). `conferir_rascunho` limita a
+  6 pontos de 500 letras. Se o robô não escrever nada, vale o `resumo`. **É a explicação que o robô escreveu junto com o treino, não uma prova do que de fato pesou
+  na decisão.** O texto das regras mudou, então `VERSAO_DAS_REGRAS` mudou (`84e92d5c`) e o relatório mensal separa antes e depois sozinho. Custo: o
+  robô escreve um pouco mais por rascunho.
+- **Banco versão 16** (`_de_15_para_16`, com cópia de segurança antes): só acrescenta a tabela `treino_ia` (vazia). Treinos antigos não têm histórico.
+- **LGPD (decisão do Thiago pendente):** o texto das observações e das respostas pode conter **saúde** (lesão, comorbidade). Antes ele passava pelo app
+  e só ficava 3 dias, sem ligação com o aluno; agora **fica enquanto o treino existir, ligado ao aluno**, visível a qualquer computador autorizado que abra a
+  ficha (como o CPF e o WhatsApp) e dentro das cópias de segurança (inclusive a do Drive). O servidor já recusa nome do aluno, CPF/número longo e e-mail
+  nesse texto antes de mandá-lo ao robô, mas o texto livre ainda pode falar de saúde. Se precisar, dá para apagar: `UPDATE treino_ia SET observacoes = '', conversa = NULL`.
+- **Limites honestos:** (a) mudanças feitas depois em "Editar treino" não entram (o quadro avisa); (b) o histórico descreve o rascunho e o que o professor
+  mudou **ao salvar**; (c) rascunho apagado (3 dias) ou treino salvo sem o vínculo (rascunho recarregado) não gera histórico; (d) a justificativa pode estar
+  errada ou genérica, é uma ajuda para o professor ler, não uma garantia.
+- **Voltar atrás:** a imagem anterior (`d167881`, que conhece até a versão 15): app parado, `PRAGMA user_version = 15` (a tabela `treino_ia` extra fica
+  parada e não atrapalha), ou restaurar a cópia feita antes da migração (`/dados/antes-da-migracao`).
 
 ## Editar treino: como funciona
 

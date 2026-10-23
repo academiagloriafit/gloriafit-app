@@ -6,7 +6,8 @@
 // 1) POST /api/alunos/<id>/treino-ia devolve na hora o número do pedido;
 // 2) esta tela pergunta de 2 em 2 segundos (GET .../treino-ia/<pedido>) até o resultado ficar pronto, dar erro ou passar do prazo.
 // O resultado é o rascunho OU as perguntas da IA. O servidor NÃO guarda a conversa: quem guarda é esta tela (`rodadas`), que manda
-// tudo de novo a cada chamada. Fechar ou recarregar a página apaga a conversa; é de propósito (respostas sobre saúde não ficam em lugar nenhum).
+// tudo de novo a cada chamada. Fechar ou recarregar a página apaga a conversa DESTA TELA. Mas, quando o professor salva o treino feito com o rascunho,
+// o servidor guarda no histórico do treino (app/ia_historico.py) o que foi escrito e respondido, para ser consultado na ficha do aluno.
 // A lógica sem tela (conferir o formulário, ler as respostas, escrever o aviso) está em treino_ia_modelo.js.
 import { buscarJson, enviarJson } from "./api.js";
 import * as T from "./treino_ia_modelo.js";

@@ -1,5 +1,9 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 15 (23/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar).
+-- Versão 16 (23/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô e a justificativa do robô).
+-- Mudança da versão 15 para a 16 (histórico do treino feito com a IA): nasceu a tabela `treino_ia` (uma linha por treino salvo a partir de um
+-- rascunho da IA: o pedido do professor, as observações e a conversa com o robô, a justificativa do robô e o que o professor mudou antes de
+-- salvar). Ao contrário de `ia_retorno`, ESTA tabela é ligada ao treino (e portanto ao aluno) de propósito. Bancos da versão 15 são
+-- atualizados sozinhos na subida.
 -- Mudança da versão 14 para a 15 (o robô aprende com os professores): nasceu a tabela `ia_retorno` (uma linha por avaliação do rascunho da IA e uma
 -- por treino salvo a partir de um rascunho, com o que o professor mudou; NÃO tem aluno, professor nem hora, só o dia). Bancos da versão 14 são
 -- atualizados sozinhos na subida.
@@ -44,7 +48,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 15;
+PRAGMA user_version = 16;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -385,6 +389,34 @@ CREATE TABLE IF NOT EXISTS ia_retorno (
     CHECK (tipo <> 'correcao' OR mudancas IS NOT NULL)
 );
 CREATE INDEX IF NOT EXISTS ix_ia_retorno_dia ON ia_retorno(dia, tipo);
+
+-- ------------------------------------------------- por que este treino foi montado assim (versão 16)
+-- Quando o professor salva um treino que saiu de um rascunho da IA, o app guarda aqui, ligado ao treino, o que o robô recebeu e o que ele
+-- respondeu (app/ia_historico.py), para qualquer professor consultar depois na ficha do aluno ("Por que este treino foi montado assim").
+-- DIFERENTE de `ia_retorno` (que não liga nada ao aluno): aqui o texto é do aluno, inclusive saúde, e fica enquanto o treino existir.
+--   objetivo, nivel, dias, minutos, fila: o que o professor escolheu na tela (fila = nome da fila do aluno, ex.: "Mulher", ou NULL).
+--   observacoes: o texto que o professor escreveu para o robô ('' = nenhuma observação); conversa: JSON com as rodadas de perguntas do
+--     robô e as respostas do professor (NULL = o robô não perguntou nada).
+--   justificativa: JSON, lista de pontos que o próprio robô escreveu (divisão das fichas, quantidade de exercícios, séries, o que pesou).
+--   alertas: JSON, lista dos avisos do robô ao professor (pode ser []).
+--   ajustes: JSON com o que o professor mudou entre o rascunho e o treino salvo (app/ia_retorno.comparar). Mudanças feitas DEPOIS, em
+--     "Editar treino", não entram aqui.
+--   regras: versão das regras da IA (hash curto); modelo: o modelo da IA.
+CREATE TABLE IF NOT EXISTS treino_ia (
+    treino_id     INTEGER PRIMARY KEY REFERENCES treino(id) ON DELETE CASCADE,
+    objetivo      TEXT    NOT NULL CHECK (length(objetivo) BETWEEN 1 AND 40),
+    nivel         TEXT    NOT NULL CHECK (length(nivel) BETWEEN 1 AND 40),
+    dias          INTEGER NOT NULL CHECK (dias >= 1),
+    minutos       INTEGER NOT NULL CHECK (minutos >= 1),
+    fila          TEXT    CHECK (fila IS NULL OR length(fila) BETWEEN 1 AND 60),
+    observacoes   TEXT    NOT NULL DEFAULT '' CHECK (length(observacoes) <= 1000),
+    conversa      TEXT,
+    justificativa TEXT    NOT NULL,
+    alertas       TEXT    NOT NULL,
+    ajustes       TEXT    NOT NULL,
+    regras        TEXT    NOT NULL CHECK (length(regras) BETWEEN 1 AND 40),
+    modelo        TEXT    NOT NULL CHECK (length(modelo) BETWEEN 1 AND 80)
+);
 
 -- ------------------------------------------------------- quando os alunos foram atualizados
 -- Uma linha por assunto ('alunos' = a tela/robô que traz os alunos; 'treinos' = o histórico de treinos do Data4U),

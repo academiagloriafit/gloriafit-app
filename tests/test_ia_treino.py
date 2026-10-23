@@ -410,7 +410,7 @@ def test_a_ferramenta_continua_pedindo_o_que_a_conferencia_usa():
     esquema = ia_treino.FERRAMENTA["input_schema"]
     item = esquema["properties"]["fichas"]["items"]["properties"]["itens"]["items"]
 
-    assert set(esquema["required"]) == {"fichas", "resumo"}
+    assert set(esquema["required"]) == {"fichas", "resumo", "justificativa"}
     assert set(item["required"]) == {"exercicio_id", "series", "repeticoes"}
     assert set(item["properties"]) == {"exercicio_id", "series", "repeticoes", "pausa", "observacao", "bloco"}
 
@@ -934,11 +934,17 @@ def test_a_ia_recebe_a_chave_e_so_a_conversa_da_academia(servidor):
         assert segredo not in tudo
 
 
-def test_o_que_o_professor_escreveu_nas_observacoes_nao_fica_no_banco(servidor):
-    _pedir(servidor, IAFalsa(), pedido=_pedido(dias=2, observacoes="TEXTO-SECRETO-DE-SAUDE joelho operado"))
+def test_o_texto_das_observacoes_so_fica_no_resultado_do_pedido_e_some_em_3_dias(servidor):
+    """Desde o histórico do treino (banco v16) o texto fica no `ia_pedido.resultado` (área `_historico`), para ser copiado para o
+    treino se o professor salvar. Em nenhum outro lugar do banco, e some junto com o resultado depois de 3 dias."""
+    pedido_id = _pedir(servidor, IAFalsa(), pedido=_pedido(dias=2, observacoes="TEXTO-SECRETO-DE-SAUDE joelho operado"))
 
     c = conectar(servidor)
     try:
+        guardado = c.execute("SELECT resultado FROM ia_pedido WHERE id = ?", (pedido_id,)).fetchone()["resultado"]
+        assert json.loads(guardado)["_historico"]["observacoes"] == "TEXTO-SECRETO-DE-SAUDE joelho operado"
+        c.execute("UPDATE ia_pedido SET resultado = NULL")  # o mesmo efeito de limpar_pedidos_antigos depois de 3 dias
+        c.commit()
         tudo = "\n".join(c.iterdump())
     finally:
         c.close()

@@ -363,11 +363,12 @@ def test_a_tela_nao_recebe_a_area_interna_do_retorno(cliente, caminho):
     corpo = cliente.get(f"/api/alunos/1/treino-ia/{pedido_id}").get_json()
 
     assert "_retorno" not in corpo and corpo["situacao"] == "pronto"
-    # mas ela está guardada no pedido, sem o texto das observações
+    # mas ela está guardada no pedido, sem o texto das observações (o texto fica só na área `_historico`)
     [linha] = _linhas(caminho, "SELECT resultado FROM ia_pedido")
     guardado = json.loads(linha["resultado"])
     assert guardado["_retorno"]["objetivo"] == "hipertrofia" and guardado["_retorno"]["com_observacoes"] is True
-    assert "joelho" not in linha["resultado"]
+    assert "joelho" not in json.dumps(guardado["_retorno"])  # o texto das observações NUNCA entra na área do retorno
+    assert "_historico" not in corpo  # (o texto fica na área do histórico do treino, que também não vai para a tela)
 
 
 def test_avaliar_exige_computador_autorizado(app, cliente):

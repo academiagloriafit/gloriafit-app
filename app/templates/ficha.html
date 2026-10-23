@@ -148,6 +148,54 @@
               Montado em {{ treino.criado_em }}{% if treino.concluido_em %} · Concluído em {{ treino.concluido_em }}{% endif %}
               {% if treino.sessoes_por_ficha %} · Meta: {{ treino.sessoes_por_ficha }} treinos por ficha{% endif %}
             </p>
+            {# "Por que este treino foi montado assim": o que o professor escreveu para o robô e a justificativa do robô (app/ia_historico.py).
+               É texto do aluno (inclusive saúde): só o professor vê, aqui. O aluno e a impressão nunca levam isto. Tudo sai escapado (nunca HTML). #}
+            {% set h = historicos_ia.get(treino.id) %}
+            {% if h %}
+            <details class="porque-treino" id="porque-treino-{{ treino.id }}">
+              <summary><span class="porque-titulo">Por que este treino foi montado assim</span><span class="selo-ia">IA</span></summary>
+              <div class="porque-corpo">
+                <section class="porque-parte" aria-labelledby="hi-escreveu-{{ treino.id }}">
+                  <h3 id="hi-escreveu-{{ treino.id }}">O que o professor passou para o robô</h3>
+                  <dl class="porque-pedido">
+                    {% for rotulo, valor in h.pedido %}<div><dt>{{ rotulo }}</dt><dd>{{ valor }}</dd></div>{% endfor %}
+                  </dl>
+                  <p class="porque-rotulo">Observações escritas pelo professor</p>
+                  {% if h.observacoes %}<p class="porque-texto">{{ h.observacoes }}</p>
+                  {% else %}<p class="porque-vazio">Nenhuma observação foi escrita para o robô.</p>{% endif %}
+                  {% if h.conversa %}
+                  <p class="porque-rotulo">Perguntas do robô e respostas do professor</p>
+                  {% for rodada in h.conversa %}
+                  <ul class="porque-conversa">
+                    {% for par in rodada %}
+                    <li><span class="porque-pergunta">{{ par.pergunta }}</span><span class="porque-resposta">{{ par.resposta or "(sem resposta)" }}</span></li>
+                    {% endfor %}
+                  </ul>
+                  {% endfor %}
+                  {% endif %}
+                </section>
+                <section class="porque-parte" aria-labelledby="hi-robo-{{ treino.id }}">
+                  <h3 id="hi-robo-{{ treino.id }}">Por que o robô montou assim</h3>
+                  {% if h.justificativa %}
+                  <ul class="porque-pontos">{% for ponto in h.justificativa %}<li>{{ ponto }}</li>{% endfor %}</ul>
+                  {% else %}<p class="porque-vazio">O robô não escreveu justificativa para este treino.</p>{% endif %}
+                  {% if h.alertas %}
+                  <p class="porque-rotulo">Avisos do robô ao professor</p>
+                  <ul class="porque-pontos">{% for aviso in h.alertas %}<li>{{ aviso }}</li>{% endfor %}</ul>
+                  {% endif %}
+                </section>
+                <section class="porque-parte" aria-labelledby="hi-mudou-{{ treino.id }}">
+                  <h3 id="hi-mudou-{{ treino.id }}">O que o professor mudou antes de salvar</h3>
+                  {% if h.ajustes.igual %}<p>Nada: o treino foi salvo como o robô montou.</p>
+                  {% elif h.ajustes.linhas %}<ul class="porque-pontos">{% for linha in h.ajustes.linhas %}<li>{{ linha }}</li>{% endfor %}</ul>
+                  {% else %}<p class="porque-vazio">Não há detalhes das mudanças.</p>{% endif %}
+                </section>
+                <p class="dica">Montado por {{ treino.montado_por }} em {{ treino.criado_em }}. Este quadro mostra como o treino foi montado nesse dia: o que for mudado depois em "Editar treino" não entra aqui. O robô é só uma ajuda; quem decide o treino é o professor.</p>
+              </div>
+            </details>
+            {% elif not treino.do_data4u %}
+            <p class="dica porque-vazio-do-treino">Sem histórico do robô: este treino foi montado sem a IA ou antes de este histórico existir.</p>
+            {% endif %}
             {% for f in treino.fichas %}
             <details class="ficha-detalhe">
               <summary>

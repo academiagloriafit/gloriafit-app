@@ -142,6 +142,8 @@ MAXIMO_DE_RODADAS_DE_PERGUNTAS = 2  # quantas vezes a IA pode perguntar ao profe
 MAXIMO_DE_PERGUNTAS_POR_RODADA = 5
 LIMITE_DAS_PERGUNTAS = 200  # letras por pergunta da IA
 LIMITE_DO_RESUMO = 600  # letras do resumo que a IA escreve ao professor (corta o que passar)
+MAXIMO_DE_PONTOS_DA_JUSTIFICATIVA = 6  # a justificativa do robô (guardada com o treino, ver app/ia_historico.py): quantos pontos, no máximo
+LIMITE_DE_CADA_PONTO_DA_JUSTIFICATIVA = 500  # letras de cada ponto (corta o que passar)
 LIMITE_DAS_RESPOSTAS = 300  # letras por resposta do professor a uma pergunta da IA
 
 NOME_DO_ARQUIVO_DA_CHAVE = "ia_chave"
@@ -260,7 +262,7 @@ class Pedido:
     observacoes: str
     fila: str | None  # nome da fila do aluno (ex.: "Mulher"), só a categoria
     perguntar: bool = False  # a IA pode fazer perguntas ao professor antes de montar (se ainda sobrar rodada)
-    rodadas: tuple = ()  # as rodadas já respondidas: (((pergunta, resposta), ...), ...). Vem do navegador; o servidor não guarda a conversa
+    rodadas: tuple = ()  # as rodadas já respondidas: (((pergunta, resposta), ...), ...). Vem do navegador; o servidor não guarda a conversa ENTRE as chamadas (cada uma vem completa), mas cada rascunho leva uma cópia dela em `_historico`
 
     @property
     def pode_perguntar(self) -> bool:
@@ -521,7 +523,14 @@ escrito para ajustar o treino: volume e intensidade, impacto nas articulações,
 entram ou ficam de fora. Nunca invente nem suponha um dado que não foi escrito. Altura e peso são só contexto: você não faz \
 diagnóstico, não prescreve dieta nem define peso ideal. Idade escrita menor que 18 anos segue o cuidado do aluno Adolescente \
 (regra 7). No "resumo", diga em uma frase quais dessas informações pesaram no treino, para o professor conferir se você as \
-entendeu direito."""
+entendeu direito.
+16. JUSTIFICATIVA (campo "justificativa" da ferramenta montar_treino): ela fica guardada junto do treino, e outros professores vão lê-la \
+meses depois, ao consultar o treino do aluno, sem ter visto esta conversa. Escreva de 3 a 6 pontos curtos (1 a 2 frases cada, em português \
+simples) explicando POR QUE o treino ficou assim: (a) como e por que as fichas foram divididas (quais grupos musculares em cada dia e por \
+quê); (b) por que cada ficha tem aquela quantidade de exercícios (tempo pedido e nível); (c) por que as séries, repetições e pausas foram \
+essas; (d) como pesaram as observações, as respostas do professor e o treino anterior: cite SÓ o que foi realmente informado, nunca invente \
+nem suponha; (e) o que foi evitado ou adaptado por lesão, dor ou condição de saúde que foi escrita. Se não havia observações, diga que o \
+treino seguiu só o objetivo, o nível, os dias e o tempo pedidos. Sem nome do aluno, sem diagnóstico, sem prometer resultado."""
 
 # Um identificador curto que muda sozinho sempre que o texto das regras muda: o relatório do retorno dos professores (app/ia_retorno.py)
 # separa as avaliações por versão das regras, para ver se uma regra nova melhorou ou piorou o rascunho.
@@ -567,8 +576,16 @@ FERRAMENTA = {
             },
             "resumo": {"type": "string", "description": "De 1 a 3 frases para o professor."},
             "alertas": {"type": "array", "items": {"type": "string"}, "description": "Pontos para o professor avaliar. Pode ser vazio."},
+            "justificativa": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    f"De 3 a {MAXIMO_DE_PONTOS_DA_JUSTIFICATIVA} pontos curtos (1 a 2 frases cada) que explicam por que o treino ficou assim: a divisão das "
+                    "fichas, a quantidade de exercícios, as séries/repetições/pausas, como as informações do professor pesaram e o que foi evitado."
+                ),
+            },
         },
-        "required": ["fichas", "resumo"],
+        "required": ["fichas", "resumo", "justificativa"],
     },
 }
 
@@ -840,7 +857,7 @@ def _inteiro_ou_zero(valor) -> int:
 def conferir_rascunho(conn: sqlite3.Connection, entrada: dict, permitidos, pedido: Pedido) -> dict:
     """Confere o treino que o Claude entregou e devolve o resultado para a tela.
 
-    {"treino": {formato de `modelos.para_montar`}, "resumo": str, "alertas": [str], "removidos": int}
+    {"treino": {formato de `modelos.para_montar`}, "resumo": str, "alertas": [str], "justificativa": [str], "removidos": int}
     Exercício fora da lista enviada (id inventado) e repetido na mesma ficha é descartado e contado em `removidos`. Textos
     são cortados nos limites. O que sobrar passa pela conferência de um treino de verdade. Levanta ErroDaIA se não sobrar treino.
     """
@@ -890,7 +907,18 @@ def conferir_rascunho(conn: sqlite3.Connection, entrada: dict, permitidos, pedid
     alertas = [a for a in (_texto_curto(a, 200) for a in (entrada.get("alertas") if isinstance(entrada.get("alertas"), list) else [])) if a][:5]
     if len(confirmadas) != pedido.dias:
         alertas.append(f"Você pediu {pedido.dias} dias por semana e o rascunho veio com {len(confirmadas)} fichas: confira.")
-    return {"treino": treino, "resumo": _texto_curto(entrada.get("resumo"), LIMITE_DO_RESUMO), "alertas": alertas, "removidos": removidos}
+    resumo = _texto_curto(entrada.get("resumo"), LIMITE_DO_RESUMO)
+    return {"treino": treino, "resumo": resumo, "alertas": alertas, "justificativa": _pontos_da_justificativa(entrada.get("justificativa")), "removidos": removidos}
+
+
+def _pontos_da_justificativa(bruto) -> list[str]:
+    """Os pontos da justificativa que o robô escreveu (a lista, limpa e cortada nos limites). Vazio se ele não mandou nada que sirva."""
+    if isinstance(bruto, str):  # defesa: a ferramenta pede uma lista, mas um texto solto também serve
+        bruto = [bruto]
+    if not isinstance(bruto, list):
+        return []
+    pontos = (_texto_curto(ponto, LIMITE_DE_CADA_PONTO_DA_JUSTIFICATIVA) for ponto in bruto)
+    return [ponto for ponto in pontos if ponto][:MAXIMO_DE_PONTOS_DA_JUSTIFICATIVA]
 
 
 def conferir_perguntas(entrada: dict, rodada: int) -> dict:
@@ -982,6 +1010,17 @@ def contexto_do_retorno(pedido: Pedido, modelo: str) -> dict:
     }
 
 
+def contexto_do_historico(pedido: Pedido) -> dict:
+    """O que o robô RECEBEU do professor neste rascunho (observações e conversa), para o histórico "Por que este treino foi montado assim"
+    (app/ia_historico.py). Fica dentro de `ia_pedido.resultado` (apagado depois de 3 dias), na área `_historico`; só vai para a tabela
+    `treino_ia` (permanente) se o professor SALVAR o treino. `consultar_pedido` a esconde da tela. Rascunho que ninguém salvou some em 3 dias."""
+    return {
+        "observacoes": pedido.observacoes,
+        "conversa": [[{"pergunta": pergunta, "resposta": resposta} for pergunta, resposta in rodada] for rodada in pedido.rodadas],
+        "gravado": False,
+    }
+
+
 def criar_pedido(
     caminho_banco: str | Path,
     aluno_id: int,
@@ -1044,6 +1083,7 @@ def executar_pedido(caminho_banco, pedido_id: int, pedido: Pedido, conversa: Con
             try:
                 resultado = conferir_rascunho(conn, resposta.entrada, conversa.permitidos, pedido)
                 resultado["_retorno"] = contexto_do_retorno(pedido, modelo)  # para o professor avaliar o rascunho depois (app/ia_retorno.py)
+                resultado["_historico"] = contexto_do_historico(pedido)  # para o histórico do treino salvo (app/ia_historico.py)
             finally:
                 conn.close()
     except ErroDaIA as falha:
@@ -1095,6 +1135,7 @@ def consultar_pedido(conn: sqlite3.Connection, aluno_id: int, pedido_id: int, ag
             return {"situacao": "erro", "erro": "Este rascunho é antigo e já foi apagado. Peça outro."}
         resultado = json.loads(linha["resultado"])
         resultado.pop("_retorno", None)  # área interna (ver contexto_do_retorno): não vai para a tela
+        resultado.pop("_historico", None)  # idem (ver contexto_do_historico)
         return {"situacao": "pronto", **resultado}
     return {"situacao": "andando"}
 

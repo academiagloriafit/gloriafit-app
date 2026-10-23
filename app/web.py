@@ -29,6 +29,7 @@ from app import (
     execucao,
     exercicios,
     filas,
+    ia_historico,
     ia_retorno,
     ia_treino,
     importacoes,
@@ -865,6 +866,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             hoje=datas.hoje(),
             comentarios_do_aluno=comentarios.listar(conexao(), so_nao_lidos=False, aluno_id=aluno_id, limite=30),
             ultimos_treinos=ciclo.ultimas_sessoes_do_aluno(conexao(), aluno_id),
+            historicos_ia=ia_historico.do_aluno(conexao(), aluno_id),  # "Por que este treino foi montado assim" (só o professor vê)
         )
 
     @app.get("/treinos/<int:treino_id>/imprimir")
@@ -907,7 +909,10 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
         `ia` (opcional): {"pedido_id": n} quando o treino saiu de um rascunho da IA que o professor ajustou. Depois de salvar, o app
         compara o rascunho com o treino salvo e guarda só a diferença, sem aluno nem professor (app/ia_retorno.py). Isso é um extra:
-        se falhar, o treino já está salvo e a resposta é a mesma."""
+        se falhar, o treino já está salvo e a resposta é a mesma.
+
+        O mesmo `ia` também guarda, LIGADO ao treino, o histórico "Por que este treino foi montado assim" (o que o professor escreveu para
+        o robô, a justificativa do robô e o que o professor mudou; app/ia_historico.py), mostrado na ficha do aluno. Também é um extra."""
         dados = corpo_json()
         conn = conexao()
         anterior = ciclo.treino_ativo(conn, aluno_id)  # só para o aviso: quem decide é o salvar_treino
@@ -921,6 +926,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         pedido_da_ia = origem_ia.get("pedido_id") if isinstance(origem_ia, dict) else None
         if isinstance(pedido_da_ia, int) and not isinstance(pedido_da_ia, bool) and pedido_da_ia > 0:
             ia_retorno.registrar_correcao_sem_falhar(conn, aluno_id, pedido_da_ia, treino_id)
+            ia_historico.registrar_sem_falhar(conn, aluno_id, pedido_da_ia, treino_id)
         return jsonify(id=treino_id, concluido_anterior=anterior["nome"] if anterior else None), 201
 
     @app.post("/api/treinos/<int:treino_id>/concluir")
