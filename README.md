@@ -81,8 +81,8 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 
 | Arquivo | Para quê |
 |---|---|
-| `app/schema.sql` | Desenho das tabelas (versão 14): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha, com a nota de esforço `esforco` quando o aluno escolheu uma), `execucao` (o que o aluno marcou como feito e a carga que anotou em cada exercício, por dia), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) `importacao` (de quando é a última cópia do Data4U aplicada) o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`) e os comentários do aluno (`comentario`). Não há tabela de professores: o nome é digitado a cada treino |
-| `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco de qualquer versão de 4 a 13 até a 14 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
+| `app/schema.sql` | Desenho das tabelas (versão 15): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha, com a nota de esforço `esforco` quando o aluno escolheu uma), `execucao` (o que o aluno marcou como feito e a carga que anotou em cada exercício, por dia), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) e o retorno dos professores sobre o rascunho da IA (`ia_retorno`, sem aluno nem professor) `importacao` (de quando é a última cópia do Data4U aplicada) o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`) e os comentários do aluno (`comentario`). Não há tabela de professores: o nome é digitado a cada treino |
+| `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco de qualquer versão de 4 a 14 até a 15 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
 | `app/importar_exercicios.py` | Lê a planilha `dados/quadro_exercicios_v2.xlsx` e grava no banco |
 | `app/texto.py` | `normalizar`: minúsculas e sem acento ("Bíceps" → "biceps") |
 | `app/exercicios.py` | Consultas: grupos e busca de exercícios |
@@ -114,6 +114,8 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/static/montar.js`, `salvar.js`, `biblioteca.js` | Desenho da tela Lançar treino (nome, professor, fichas, tabela), envio do treino ao servidor e lista de exercícios |
 | `app/static/importar_treino.js` | O painel **Importar treino** (abas "Treino padrão" e "Treino de outro aluno"): só lê do servidor e entrega o treino escolhido a `montar.js`; pede confirmação antes de substituir o que já está na tela |
 | `app/static/padrao_ficha.js` | Botão **Salvar como treino padrão** de cada treino na ficha do aluno |
+| `app/ia_retorno.py` | **O robô aprende com os professores:** guarda a avaliação do rascunho da IA ("Serviu", "Serviu com ajustes", "Não serviu" + motivo) e a **diferença** entre o rascunho e o treino que o professor salvou (`comparar`), sem aluno, professor, hora nem número do pedido; e o relatório do terminal (`python -m app.ia_retorno relatorio [--mes AAAA-MM]`). Ver a seção "Retorno dos professores" abaixo |
+| `app/static/avaliacao_ia.js` | A pergunta "O rascunho da IA ajudou?" da tela "Treino salvo" (só aparece quando o treino saiu de um rascunho da IA); a lógica sem tela fica em `treino_ia_modelo.js` |
 | `app/static/dom.js` | `el()`: cria elementos de tela só com `textContent` (nada vindo do banco vira HTML) |
 | `app/static/api.js` | `enviarJson` (POST em JSON) e `buscarJson` (GET) com limite de tempo (20 s) devolvendo status + corpo; `textoDoErro` escolhe a mensagem para mostrar; usado por salvar treino, WhatsApp e importar treino |
 | `app/static/aluno_entrar.js`, `aluno_modelo.js`, `aluno_inicio.js` | Telas do celular do aluno (`/aluno/entrar` e `/aluno`): entrar, pedir o código e criar a senha, sair. O que mostrar para cada resposta e as conferências rápidas ficam em `aluno_modelo.js` (testado à parte) |
@@ -122,7 +124,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 | `app/static/alunos.js`, `ficha.js` | Busca de alunos (espera 200 ms depois de digitar e cancela a busca anterior) e a edição do WhatsApp na ficha |
 | `app/static/fila_ficha.js`, `filas_modelo.js`, `fila_padrao.js` | Cartão **Fila de treino** da ficha (escolher a fila, liberação, tirar da fila), a lógica pura de conferir o que o professor digitou (`filas_modelo.js`, testada à parte) e os campos **Fila** e **Número** do "Salvar como treino padrão" (sugere o próximo número livre) |
 | `app/static/ciclo_ficha.js` | Botões **Concluído** (com confirmação) e **Reativar** da ficha do aluno |
-| `tests/` | Testes do Python (pytest). `schema_v4.sql` a `schema_v11.sql` são cópias dos desenhos antigos, usadas para provar as migrações; `test_contrato_js_python.py` roda o JavaScript (Node) e entrega o pacote dele ao servidor; `test_enviar_alunos.py` confere que o programa do PC monta pacotes **iguais** aos do navegador e roda o envio contra um servidor de verdade |
+| `tests/` | Testes do Python (pytest). `schema_v4.sql` a `schema_v14.sql` são cópias dos desenhos antigos, usadas para provar as migrações; `test_contrato_js_python.py` roda o JavaScript (Node) e entrega o pacote dele ao servidor; `test_enviar_alunos.py` confere que o programa do PC monta pacotes **iguais** aos do navegador e roda o envio contra um servidor de verdade |
 | `tests_js/` | Testes do JavaScript (Vitest) |
 
 ## Como rodar
@@ -294,6 +296,7 @@ O app roda num contêiner Docker (`Dockerfile`), atrás do Traefik, que cuida do
 | `POST /api/alunos/<id>/fila` | O professor coloca o aluno numa fila (ou muda a fila dele). Corpo JSON: `fila_id`, `professor` (até 60 letras, obrigatório) e, nas filas que exigem liberação (Gestante e Grupos de risco), `liberacao_conferida: true` e `liberacao_em` (`AAAA-MM-DD`, não pode ser no futuro). Mudar para OUTRA fila zera a posição; repetir a mesma fila mantém o número. `200 {"ok": true}`; `400 {"erros": [...]}`; `404`; `415` |
 | `POST /api/alunos/<id>/fila/tirar` | Tira o aluno da fila (o treino dele não muda). Corpo `{}`. `200 {"ok": true}`; `404`; `415` |
 | `GET /api/alunos/<id>/treinos-para-copiar` | `{"treinos": [{id, nome, ativo, do_data4u, inicio, montado_por, fichas, exercicios, resumo}]}`: os treinos do aluno que têm exercício (o ativo primeiro). `404` aluno inexistente |
+| `POST /api/alunos/<id>/treino-ia/<pedido>/avaliacao` | O professor avalia o rascunho da IA. Corpo `{"nota": "serviu" \| "com_ajustes" \| "nao_serviu", "motivo": "..." (opcional, até 300 letras; o servidor recusa o nome do aluno, e-mail e número longo)}`. Vale **uma avaliação por rascunho**. `201 {"ok": true}`; `400 {"erros"}`; `404` (rascunho apagado depois de 3 dias, de outro aluno, ou era só uma pergunta da IA); `409` (já avaliado). O registro **não guarda aluno nem professor** |
 | `GET /api/treinos/<id>/para-montar` | Um treino de aluno no formato da tela de montar (igual ao de `/api/modelos/<id>`). **Não grava nada.** `404` |
 | `GET /api/treinos/<id>/para-editar` | Igual a `/api/treinos/<id>/para-montar`, mais `{id, aluno_id, montado_por, inicio, fim, ativo, origem}` (a tela de editar precisa dos dados do treino). **Não grava nada.** `404` |
 | `POST /api/treinos/<id>/editar` | Edita **no lugar** o treino ATIVO criado no app. Corpo JSON igual ao de salvar treino (`nome_treino`, `montado_por`, `inicio`, `fim`, `sessoes_por_ficha`, `fichas`), com a mesma conferência. Troca os dados e **recria as fichas e os exercícios** na mesma gravação (tudo ou nada); o id, o `ativo` e o `criado_em` do treino não mudam. `200 {"id": N}`; `400 {"erros"}`; `404` treino inexistente; `409` treino do Data4U, treino já concluído, ou nome já usado em outro treino do aluno; `413`; `415` |
@@ -498,6 +501,43 @@ obrigada a entregar o treino.
   (limites ficam nas descrições e na conferência do servidor). Testes travam tudo isso (`tests/test_ia_treino.py`).
 - **Voltar atrás:** banco versão 10 só acrescenta a tabela `ia_pedido`. Para a imagem anterior (`b4860bf`, que conhece até a versão 9):
   app parado, `PRAGMA user_version = 9`, ou restaurar a cópia feita antes da migração. Sem a chave, o botão responde `503` e o resto do app não muda. A conversa com perguntas **não muda o banco** (continua versão 10).
+
+## Retorno dos professores sobre o robô de treino: como funciona
+
+Pedido do Thiago (23/10/2026): o robô que monta rascunhos ("Montar rascunho com IA") **não aprende sozinho** (cada pedido é independente;
+o que ele sabe vem das regras em `REGRAS_DA_CASA`). Para melhorar essas regras com o uso de verdade, o app registra dois sinais, **sem ligação
+com o aluno nem com o professor**, e de tempos em tempos o Thiago pede ao Claude (o do projeto, não o do app) que leia o relatório e proponha
+regras novas, que só entram depois de o Thiago aprovar e de a mudança ser publicada.
+
+- **A avaliação:** na tela "Treino salvo", quando o treino saiu de um rascunho da IA, aparece "O rascunho da IA ajudou?" com três botões:
+  *Serviu* (vai direto), *Serviu com ajustes* e *Não serviu* (abrem uma caixa de motivo, opcional, até 300 letras). Uma avaliação por rascunho.
+- **A correção (automática):** ao salvar, o navegador manda junto o número do rascunho (`"ia": {"pedido_id": n}`) **só se o rascunho ainda é o que está
+  na tela** (importar outro treino, ou recarregar a página, solta o vínculo). O servidor lê o treino **salvo** do banco, compara com o rascunho
+  (`ia_retorno.comparar`: fichas casadas pela posição, exercícios pelo id) e guarda **só a diferença**: exercícios tirados e incluídos, séries,
+  repetições e pausa que mudaram (de -> para), quantos textos de observação mudaram (a contagem, nunca o texto), se a ordem mudou, se o número de
+  fichas mudou. **Cargas e observações não entram.** É um extra: se falhar, o treino já está salvo e a resposta é a mesma (vai só para o log).
+  Salvar exatamente o rascunho também é registrado (é o sinal mais valioso: o rascunho estava bom).
+- **O que fica no banco (`ia_retorno`, versão 15):** o **dia** (sem hora), o tipo (`avaliacao` ou `correcao`), o contexto que o próprio professor escolheu
+  (objetivo, nível, dias, minutos, nome da fila, se havia observações, quantas rodadas de perguntas), a **versão das regras** (`VERSAO_DAS_REGRAS`: um
+  hash de 8 letras do texto de `REGRAS_DA_CASA`, que muda sozinho quando a regra muda, para comparar antes e depois), o modelo, a nota, o motivo e a
+  diferença em JSON. **Não há** aluno, professor, nome do treino, número do pedido, hora nem o texto das observações (um teste confere as colunas).
+  Para não repetir o registro, o app guarda os sinais "já avaliado"/"já registrado" e o contexto numa área `_retorno` dentro de `ia_pedido.resultado`
+  (que já é apagado depois de 3 dias); `consultar_pedido` a esconde da tela.
+- **Limites honestos:** no banco não existe campo que ligue um registro a um aluno, mas quem tem o arquivo inteiro do banco ainda poderia, em tese,
+  cruzar o dia e a ordem dos registros com os pedidos (`ia_pedido`) dos últimos 3 dias; o relatório não faz isso. O **motivo** é texto livre: o servidor
+  recusa o nome do aluno, e-mail, número longo e data completa, e a tela pede para não escrever sobre a pessoa, mas ele ainda pode citar algo de saúde de
+  alguém sem nome ("hérnia de disco"); por isso é curto e só quem cuida do app lê o relatório. Se a LGPD pedir (decisão do Thiago), basta não pedir o motivo.
+  Recarregar a página com o rascunho na tela perde o vínculo (o rascunho volta do navegador, mas sem o número do pedido): nesse caso nada é registrado.
+- **O relatório (uma vez por mês):** no terminal do contêiner, `python -m app.ia_retorno relatorio [--mes 2026-11] [--banco /dados/app.db]` (padrão: tudo; o
+  banco vem de `GLORIAFIT_DB`). Texto simples: notas (por objetivo/nível e por versão das regras), quantos treinos foram salvos exatamente como a IA fez,
+  exercícios mais tirados e mais incluídos, campos mais corrigidos e as trocas mais comuns (ex.: séries 3 -> 4), e os motivos escritos. Avisa quando há
+  menos de 10 treinos (pouco para concluir). Só vira regra o que se repete e faz sentido para um professor.
+- **Voltar atrás:** banco versão 15 só acrescenta a tabela `ia_retorno` (vazia). Para a imagem anterior (`2ed2fee`, que conhece até a versão 14): app
+  parado, `PRAGMA user_version = 14`, ou restaurar a cópia feita antes da migração (`/dados/antes-da-migracao`). Sem a tabela, nada mais muda.
+- **Corrida do backup da migração (corrigida junto, 23/10/2026):** dois processos subindo no mesmo segundo podiam disputar o nome da cópia
+  (`app-AAAA-MM-DD-HHMMSS.db`) e o segundo falhava na subida, até o servidor reiniciar sozinho. `backup.BackupJaExiste` (um `BackupFalhou` mais
+  específico) é levantado quando a cópia do segundo já existe; `db.migrar` o aceita (a cópia do outro processo foi tirada antes de qualquer passo,
+  então já guarda o banco como era) e segue. Qualquer outro erro de cópia continua parando a migração.
 
 ## Editar treino: como funciona
 

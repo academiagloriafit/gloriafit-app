@@ -338,6 +338,115 @@ def test_ia_os_limites_da_conversa_sao_os_mesmos_nos_dois_lados():
     assert js["rodadas"] == ia_treino.MAXIMO_DE_RODADAS_DE_PERGUNTAS
 
 
+def test_ia_o_limite_do_motivo_da_avaliacao_e_o_mesmo_nos_dois_lados():
+    from app import ia_retorno
+
+    js = _node(f"""
+        import * as m from "{MODULO_IA}";
+        console.log(JSON.stringify({{ limite: m.LIMITE_DO_MOTIVO, notas: m.NOTAS_DA_AVALIACAO.map((n) => n.valor) }}));
+    """)
+
+    assert js["limite"] == ia_retorno.LIMITE_DO_MOTIVO
+    assert js["notas"] == list(ia_retorno.NOTAS)  # as mesmas notas, na mesma ordem
+
+
+_MOTIVOS = [
+    "",
+    "Faltou exercício de posterior de coxa",
+    "muito volume para iniciante, 5 series de 15",
+    "peso 80 kg, 1,75 m",
+    "cpf 123.456.789-09",
+    "zap 27 98888-7777",
+    "12345678",
+    "1234567",
+    "operou em 15/03/2024",
+    "falar com ana@exemplo.com",
+    "a" * 300,
+    "a" * 301,
+    "💪" * 300,
+    "💪" * 301,
+    "faltou   \n\n  posterior" + " " * 400,
+]
+
+
+def test_ia_o_navegador_e_o_servidor_recusam_os_mesmos_motivos():
+    from app import ia_retorno
+    from app.treinos import validar_texto
+
+    js = _node(f"""
+        import * as m from "{MODULO_IA}";
+        const textos = {json.dumps(_MOTIVOS)};
+        console.log(JSON.stringify(textos.map((t) => m.validarMotivo(t) !== "")));
+    """)
+
+    python = []
+    for texto in _MOTIVOS:
+        problemas = []
+        limpo = validar_texto(texto, "O motivo", ia_retorno.LIMITE_DO_MOTIVO, False, problemas)
+        if limpo:
+            problemas += ia_retorno._problemas_do_motivo(limpo, None)  # o nome do aluno só o servidor sabe conferir
+        python.append(bool(problemas))
+
+    assert js == python, [(t, j, p) for t, j, p in zip(_MOTIVOS, js, python) if j != p]
+
+
+def test_ia_a_avaliacao_e_o_pedido_de_salvar_que_o_navegador_monta_sao_aceitos_pelo_servidor(tmp_path):
+    """O corpo de `montarAvaliacao` e o campo `ia` de `montarPedido` (o rascunho de onde o treino saiu) são o que app/ia_retorno.py espera."""
+    from app import ia_treino
+
+    class IAFalsa:
+        def __call__(self, chave, corpo, *_a, **_k):
+            return {
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "name": "montar_treino", "input": {
+                    "fichas": [{"nome": "A", "itens": [{"exercicio_id": 1, "series": "3", "repeticoes": "12"}]}],
+                    "resumo": "Uma ficha.", "alertas": []}}],
+                "usage": {"input_tokens": 100, "output_tokens": 50},
+            }
+
+    caminho = tmp_path / "ia.db"
+    conn = conectar(caminho)
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ZULEICA FICTICIA')")
+    conn.execute("INSERT INTO exercicio (id, nome, origem, usos_ultimo_ano) VALUES (1, 'SUPINO', 'app', 50), (2, 'REMADA', 'app', 50)")
+    conn.commit()
+    token = acesso.autorizar(conn, acesso.gerar_codigo(conn, "Computador de teste").codigo).token
+    conn.close()
+    ia_treino.guardar_chave(tmp_path / "ia_chave", "sk-ant-chave-de-teste-0123456789abcdef")
+    app = criar_app(caminho)
+    app.config["IA_CHAMADA"] = IAFalsa()
+    app.config["IA_EM_SEGUNDO_PLANO"] = False
+    cliente = app.test_client()
+    cliente.set_cookie(acesso.NOME_DO_COOKIE, token)
+    pedido_id = cliente.post(
+        "/api/alunos/1/treino-ia", json={"objetivo": "hipertrofia", "nivel": "iniciante", "dias": 2, "minutos": 60}
+    ).get_json()["pedido_id"]
+
+    js = _node(f"""
+        import * as T from "{MODULO_IA}";
+        import * as M from "{MODELO_DO_TREINO}";
+        let e = M.criarEstado();
+        e = M.adicionarItem(e, 0, {{ id: 2, nome: "REMADA" }});
+        e = M.atualizarItem(e, 0, 1, "series", "4");
+        e = M.atualizarItem(e, 0, 1, "repeticoes", "10");
+        const dados = {{ nomeTreino: "TREINO A", montadoPor: "Ana Paula", pedidoIa: {pedido_id} }};
+        console.log(JSON.stringify({{
+          avaliacao: T.montarAvaliacao("com_ajustes", "  faltou   posterior "),
+          salvar: M.montarPedido(e, dados),
+          semRascunho: M.montarPedido(e, {{ nomeTreino: "TREINO B", montadoPor: "Ana Paula" }}),
+        }}));
+    """)
+
+    assert js["avaliacao"] == {"nota": "com_ajustes", "motivo": "faltou posterior"}
+    assert js["salvar"]["ia"] == {"pedido_id": pedido_id} and "ia" not in js["semRascunho"]
+    assert cliente.post(f"/api/alunos/1/treino-ia/{pedido_id}/avaliacao", json=js["avaliacao"]).status_code == 201
+    assert cliente.post("/api/alunos/1/treinos", json=js["salvar"]).status_code == 201
+    c = conectar(caminho)
+    linhas = [tuple(l) for l in c.execute("SELECT tipo, nota, motivo FROM ia_retorno ORDER BY id")]
+    c.close()
+    assert linhas == [("avaliacao", "com_ajustes", "faltou posterior"), ("correcao", "com_ajustes", None)]
+
+
 # Textos para o JavaScript e o Python julgarem. Onde um recusa e o outro não, ou o professor vê um aviso que o
 # servidor não daria (confusão), ou passa na tela e é barrado depois de esperar (pior).
 _OBSERVACOES = [

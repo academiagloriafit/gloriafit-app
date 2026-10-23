@@ -1,5 +1,8 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 14 (22/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada).
+-- Versão 15 (23/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar).
+-- Mudança da versão 14 para a 15 (o robô aprende com os professores): nasceu a tabela `ia_retorno` (uma linha por avaliação do rascunho da IA e uma
+-- por treino salvo a partir de um rascunho, com o que o professor mudou; NÃO tem aluno, professor nem hora, só o dia). Bancos da versão 14 são
+-- atualizados sozinhos na subida.
 -- Mudança da versão 13 para a 14 (treino com mais detalhe): a `sessao` ganhou `esforco` (1 leve, 2 ideal, 3 pesado: como o aluno achou o treino
 -- ao concluí-lo) e nasceu a tabela `execucao` (por dia, o exercício que o aluno marcou como feito e a carga que usou). Bancos da versão 13 são
 -- atualizados sozinhos na subida.
@@ -41,7 +44,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 14;
+PRAGMA user_version = 15;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -332,7 +335,8 @@ CREATE INDEX IF NOT EXISTS ix_senha_administrador_falha_em ON senha_administrado
 -- aluno_id: para quem foi pedido (um pedido só pode ser lido pelo mesmo aluno da tela).
 -- dia: o dia de Brasília 'AAAA-MM-DD' do pedido (limite de pedidos por dia).
 -- situacao: 'andando' (esperando a resposta), 'pronto' (resultado guardado) ou 'erro' (erro guarda o motivo em português).
--- resultado: o rascunho em JSON (formato da tela de montar). Nunca guarda o que o professor escreveu em "observações".
+-- resultado: o rascunho em JSON (formato da tela de montar) e, só nos rascunhos, a área `_retorno` (o contexto escolhido na tela e os sinais "já
+-- avaliado" e "já registrado", ver `ia_retorno` abaixo). Nunca guarda o que o professor escreveu em "observações".
 -- tokens_entrada / tokens_saida: o que a Anthropic informou ter usado (para acompanhar o gasto). Vazios se deu erro antes.
 -- Os resultados são apagados depois de alguns dias (ia_treino.limpar_pedidos_antigos); a contagem do dia fica.
 CREATE TABLE IF NOT EXISTS ia_pedido (
@@ -350,6 +354,37 @@ CREATE TABLE IF NOT EXISTS ia_pedido (
 );
 CREATE INDEX IF NOT EXISTS ix_ia_pedido_dia ON ia_pedido(dia);
 CREATE INDEX IF NOT EXISTS ix_ia_pedido_aluno ON ia_pedido(aluno_id);
+
+-- --------------------------------------------- o que o robô aprende com os professores (versão 15)
+-- Duas coisas ficam registradas (app/ia_retorno.py), para o Thiago rever de tempos em tempos e propor regras novas à IA:
+--   'avaliacao': o professor avaliou o rascunho da IA (serviu / serviu com ajustes / não serviu) e, se quis, escreveu o motivo.
+--   'correcao':  o professor salvou um treino que veio de um rascunho da IA; `mudancas` guarda só a DIFERENÇA entre o rascunho e o treino
+--                salvo (exercícios tirados e incluídos, séries/repetições/pausa mudadas), em JSON. Cargas e textos de observação NÃO entram.
+-- De propósito NÃO há aluno, professor, número do pedido nem hora aqui, só o DIA: ninguém consegue saber de quem foi o treino.
+-- Os campos de contexto são só categorias que o professor escolhe na tela (objetivo, nível, dias, minutos, nome da fila do aluno, ex.: "Mulher").
+--   com_observacoes: 1 se o professor escreveu observações (o texto delas nunca é guardado). rodadas: quantas rodadas de perguntas a IA fez.
+--   regras: identificador curto da versão das regras da IA (app/ia_treino.py) com que o rascunho foi feito; modelo: o modelo da IA.
+--   motivo: texto livre do professor (até 300 letras; o app recusa nome do aluno, e-mail e números longos).
+CREATE TABLE IF NOT EXISTS ia_retorno (
+    id              INTEGER PRIMARY KEY,
+    dia             TEXT    NOT NULL CHECK (dia GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    tipo            TEXT    NOT NULL CHECK (tipo IN ('avaliacao', 'correcao')),
+    objetivo        TEXT    NOT NULL CHECK (length(objetivo) BETWEEN 1 AND 40),
+    nivel           TEXT    NOT NULL CHECK (length(nivel) BETWEEN 1 AND 40),
+    dias            INTEGER NOT NULL CHECK (dias >= 1),
+    minutos         INTEGER NOT NULL CHECK (minutos >= 1),
+    fila            TEXT    CHECK (fila IS NULL OR length(fila) BETWEEN 1 AND 60),
+    com_observacoes INTEGER NOT NULL CHECK (com_observacoes IN (0, 1)),
+    rodadas         INTEGER NOT NULL CHECK (rodadas BETWEEN 0 AND 9),
+    regras          TEXT    NOT NULL CHECK (length(regras) BETWEEN 1 AND 40),
+    modelo          TEXT    NOT NULL CHECK (length(modelo) BETWEEN 1 AND 80),
+    nota            TEXT    CHECK (nota IS NULL OR nota IN ('serviu', 'com_ajustes', 'nao_serviu')),
+    motivo          TEXT    CHECK (motivo IS NULL OR length(motivo) <= 300),
+    mudancas        TEXT,
+    CHECK (tipo <> 'avaliacao' OR nota IS NOT NULL),
+    CHECK (tipo <> 'correcao' OR mudancas IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS ix_ia_retorno_dia ON ia_retorno(dia, tipo);
 
 -- ------------------------------------------------------- quando os alunos foram atualizados
 -- Uma linha por assunto ('alunos' = a tela/robô que traz os alunos; 'treinos' = o histórico de treinos do Data4U),

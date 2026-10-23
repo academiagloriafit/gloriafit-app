@@ -250,6 +250,20 @@
         <button type="button" id="montar-outro" class="botao-principal">Lançar outro treino</button>
         <a id="ver-ficha" class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=aluno.id) }}">Ver ficha do aluno</a>
       </div>
+
+      {# Só aparece quando o treino saiu de um rascunho da IA (montar.js abre). A nota vai para o servidor SEM aluno e SEM professor. #}
+      <section class="avaliacao-ia" id="avaliacao-ia" aria-labelledby="titulo-avaliacao-ia" hidden>
+        <h2 id="titulo-avaliacao-ia">O rascunho da IA ajudou?</h2>
+        <p class="dica">Sua resposta ensina o robô a montar treinos melhores. O app não guarda o nome do aluno nem o seu junto dela.</p>
+        <div id="notas-ia" class="barra-salvar" role="group" aria-label="Como foi o rascunho da IA"></div>
+        <div class="campo campo-largo" id="motivo-ia" hidden>
+          <label for="motivo-ia-texto">O que faltou ou estava errado? <span class="opcional">(opcional)</span></label>
+          <textarea id="motivo-ia-texto" rows="3" aria-describedby="dica-motivo-ia"></textarea>
+          <p id="dica-motivo-ia" class="dica">Até {{ ia_limite_do_motivo }} letras. Escreva sobre o treino (por exemplo, "faltou exercício de posterior de coxa"), <strong>não sobre a pessoa</strong>: sem nome, telefone nem documento do aluno.</p>
+          <div class="barra-salvar"><button type="button" id="enviar-avaliacao-ia" class="botao-escuro">Enviar avaliação</button></div>
+        </div>
+        <p id="aviso-avaliacao-ia" class="aviso-campo" role="status" aria-live="polite"></p>
+      </section>
     </section>
   </main>
 

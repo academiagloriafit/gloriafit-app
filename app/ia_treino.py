@@ -48,10 +48,15 @@ Cuidados de segurança e de privacidade deste arquivo:
   (`LIMITE_DE_PEDIDOS_POR_DIA`) e de pedidos ao mesmo tempo, contra clique repetido e laço.
 - Os erros da API viram frases em português para o professor; o detalhe técnico vai só para o log do servidor (sem a chave
   e sem as observações).
+- O RETORNO DOS PROFESSORES (23/10/2026, app/ia_retorno.py): junto do rascunho, o resultado do pedido guarda uma área `_retorno` com o
+  contexto (objetivo, nível, dias, tempo, nome da fila, se havia observações, quantas rodadas de perguntas, versão das regras, modelo) para
+  a avaliação ("serviu / com ajustes / não serviu") e a comparação com o treino salvo irem para `ia_retorno` sem aluno nem professor.
+  `consultar_pedido` tira essa área da resposta; o texto das observações continua sem ser guardado.
 """
 
 import argparse
 import getpass
+import hashlib
 import http.client
 import json
 import logging
@@ -518,6 +523,10 @@ diagnóstico, não prescreve dieta nem define peso ideal. Idade escrita menor qu
 (regra 7). No "resumo", diga em uma frase quais dessas informações pesaram no treino, para o professor conferir se você as \
 entendeu direito."""
 
+# Um identificador curto que muda sozinho sempre que o texto das regras muda: o relatório do retorno dos professores (app/ia_retorno.py)
+# separa as avaliações por versão das regras, para ver se uma regra nova melhorou ou piorou o rascunho.
+VERSAO_DAS_REGRAS = hashlib.sha256(REGRAS_DA_CASA.encode("utf-8")).hexdigest()[:8]
+
 # `strict`: a API garante que a entrada segue este formato. Regras dela (documentação): additionalProperties false em TODO objeto,
 # e sem minimum/maximum/minLength/maxLength/maxItems (por isso os limites ficam nas descrições e na conferência do servidor).
 FERRAMENTA = {
@@ -953,6 +962,26 @@ def pedidos_de_hoje(conn: sqlite3.Connection, agora: datetime | None = None) -> 
     ).fetchone()[0]
 
 
+def contexto_do_retorno(pedido: Pedido, modelo: str) -> dict:
+    """O que o app lembra do rascunho para a avaliação e a correção do professor (app/ia_retorno.py): só categorias que o próprio
+    professor escolheu na tela e dois dados do rascunho. NUNCA o texto das observações nem das respostas (só se existiram), nem o aluno.
+    Fica dentro de `ia_pedido.resultado` (apagado depois de 3 dias), na área `_retorno`; `consultar_pedido` a esconde da tela."""
+    return {
+        "objetivo": pedido.objetivo,
+        "nivel": pedido.nivel,
+        "dias": pedido.dias,
+        "minutos": pedido.minutos,
+        "fila": pedido.fila,
+        "com_observacoes": bool(pedido.observacoes),
+        "rodadas": len(pedido.rodadas),
+        "regras": VERSAO_DAS_REGRAS,
+        "modelo": modelo,
+        "avaliado": False,
+        "nota": None,
+        "corrigido": False,
+    }
+
+
 def criar_pedido(
     caminho_banco: str | Path,
     aluno_id: int,
@@ -1014,6 +1043,7 @@ def executar_pedido(caminho_banco, pedido_id: int, pedido: Pedido, conversa: Con
             conn = db.conectar(caminho_banco)
             try:
                 resultado = conferir_rascunho(conn, resposta.entrada, conversa.permitidos, pedido)
+                resultado["_retorno"] = contexto_do_retorno(pedido, modelo)  # para o professor avaliar o rascunho depois (app/ia_retorno.py)
             finally:
                 conn.close()
     except ErroDaIA as falha:
@@ -1063,7 +1093,9 @@ def consultar_pedido(conn: sqlite3.Connection, aluno_id: int, pedido_id: int, ag
     if linha["situacao"] == "pronto":
         if linha["resultado"] is None:
             return {"situacao": "erro", "erro": "Este rascunho é antigo e já foi apagado. Peça outro."}
-        return {"situacao": "pronto", **json.loads(linha["resultado"])}
+        resultado = json.loads(linha["resultado"])
+        resultado.pop("_retorno", None)  # área interna (ver contexto_do_retorno): não vai para a tela
+        return {"situacao": "pronto", **resultado}
     return {"situacao": "andando"}
 
 

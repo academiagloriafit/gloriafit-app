@@ -6,6 +6,7 @@ import { limparEspacos, tamanho } from "./treino_modelo.js";
 
 export const LIMITE_DAS_OBSERVACOES = 1000; // o mesmo de app/ia_treino.py (tests/test_contrato_js_python.py confere)
 export const LIMITE_DAS_RESPOSTAS = 300; // letras por resposta do professor às perguntas da IA (também conferido contra o Python)
+export const LIMITE_DO_MOTIVO = 300; // letras do motivo da avaliação do rascunho (o mesmo de app/ia_retorno.py; também conferido)
 export const MAXIMO_DE_RODADAS = 2; // quantas vezes a IA pode perguntar antes de entregar o treino (o servidor é quem manda; isto é o padrão)
 export const INTERVALO_DA_CONSULTA_MS = 2000;
 export const TEMPO_MAXIMO_DA_ESPERA_MS = 5 * 60 * 1000; // o servidor cancela o pedido que passa de 4 minutos
@@ -152,4 +153,49 @@ export function avisoDoRascunho({ treino, resumo = "", alertas = [], removidos =
         : ` A IA sugeriu ${removidos} exercícios que não existem na academia; eles foram tirados.`;
   }
   return { texto, atencao: alertas.length > 0 || removidos > 0 };
+}
+
+// ------------------------------------------------------------------ avaliar o rascunho (app/ia_retorno.py)
+// Depois de salvar, o professor diz se o rascunho da IA ajudou. O servidor não guarda aluno nem professor junto da nota.
+
+// As três notas, na ordem da tela. `pedeMotivo`: nas duas que apontam um defeito a tela abre a caixa do motivo (opcional).
+export const NOTAS_DA_AVALIACAO = [
+  { valor: "serviu", rotulo: "Serviu", pedeMotivo: false },
+  { valor: "com_ajustes", rotulo: "Serviu com ajustes", pedeMotivo: true },
+  { valor: "nao_serviu", rotulo: "Não serviu", pedeMotivo: true },
+];
+
+// Confere o motivo escrito pelo professor (opcional). Devolve o texto do problema, ou "" se está tudo certo.
+// Mesmas regras do servidor: nada que identifique o aluno (o nome dele só o servidor sabe conferir).
+export function validarMotivo(motivo = "") {
+  const texto = limparEspacos(motivo);
+  if (tamanho(texto) > LIMITE_DO_MOTIVO) return `O motivo tem ${tamanho(texto)} letras; o máximo é ${LIMITE_DO_MOTIVO}.`;
+  if (NUMERO_LONGO.test(texto)) {
+    return "Tire do motivo números de CPF, telefone ou documento, e datas completas como 15/03/2024: ele não deve identificar o aluno.";
+  }
+  if (texto.includes("@")) return "Tire do motivo o e-mail: ele não deve identificar o aluno.";
+  return "";
+}
+
+// O corpo da avaliação (POST /api/alunos/<id>/treino-ia/<pedido>/avaliacao). Motivo em branco não vai.
+export function montarAvaliacao(nota, motivo = "") {
+  const texto = limparEspacos(motivo);
+  return texto ? { nota, motivo: texto } : { nota };
+}
+
+// A resposta ao envio da avaliação: { tipo: "enviada" } | { tipo: "ja_avaliado", mensagem } | { tipo: "recusada", mensagem }.
+// "recusada" deixa o professor tentar de novo (motivo a corrigir, rede, computador sem autorização); "ja_avaliado" e a falta do rascunho encerram.
+export function interpretarAvaliacao(resposta) {
+  if (resposta?.status === 201) return { tipo: "enviada" };
+  const lida = resposta ?? { status: 0, corpo: null };
+  if (lida.status === 409) return { tipo: "ja_avaliado", mensagem: textoDoErro(lida, "Este rascunho já foi avaliado") };
+  if (lida.status === 404) {
+    return { tipo: "sem_rascunho", mensagem: textoDoErro(lida, "Este rascunho não existe mais, então não dá para avaliar") };
+  }
+  return { tipo: "recusada", mensagem: textoDoErro(lida, "Não consegui enviar a avaliação") };
+}
+
+export function textoDaAvaliacaoEnviada(nota) {
+  const rotulo = NOTAS_DA_AVALIACAO.find((n) => n.valor === nota)?.rotulo ?? "";
+  return `Avaliação enviada${rotulo ? ` (${rotulo})` : ""}. Obrigado: é assim que o robô aprende a montar treinos melhores.`;
 }

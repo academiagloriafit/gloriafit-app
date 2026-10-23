@@ -25,7 +25,8 @@ function elemento(tag, classe, texto) {
 
 // alunoId: o aluno da tela.
 // temTreinoNaTela(): true se já há exercícios na tela (o rascunho vai substituí-los: pede confirmação antes de gastar).
-// aoCarregar(resultado): põe o rascunho na tela; `resultado` = { treino, resumo, alertas, removidos } (o que o servidor devolveu).
+// aoCarregar(resultado): põe o rascunho na tela; `resultado` = { treino, resumo, alertas, removidos, pedidoId } (o que o servidor devolveu
+// e o número do pedido, que a tela guarda para o servidor comparar o rascunho com o treino salvo e para a avaliação).
 // Devolve null se deu certo ou o texto do problema.
 export function iniciarTreinoIa({ alunoId, temTreinoNaTela, aoCarregar }) {
   const botaoAbrir = pegar("abrir-ia");
@@ -169,7 +170,7 @@ export function iniciarTreinoIa({ alunoId, temTreinoNaTela, aoCarregar }) {
       const lida = resposta === null ? { tipo: "falha", mensagem: SEM_REDE } : T.interpretarConsulta(resposta);
       if (lida.tipo !== "falha") {
         falhas = 0;
-        if (lida.tipo !== "andando") return lida;
+        if (lida.tipo !== "andando") return { ...lida, pedidoId };
       } else if (++falhas >= T.FALHAS_SEGUIDAS_PARA_DESISTIR) {
         return { tipo: "erro", mensagem: `${lida.mensagem} O resultado pode ter ficado pronto no servidor, mas não consegui buscar.` };
       }

@@ -3,7 +3,7 @@
 import sqlite3
 from pathlib import Path
 
-from app.backup import fazer_backup
+from app.backup import BackupJaExiste, fazer_backup
 from app.datas import dia_local
 from app.texto import normalizar
 
@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 14
+VERSAO_DO_BANCO = 15
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -396,10 +396,39 @@ def _de_13_para_14(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS ix_execucao_exercicio ON execucao(aluno_id, exercicio_nome, dia)")
 
 
+def _de_14_para_15(conn: sqlite3.Connection) -> None:
+    """O robô aprende com os professores: nasce a tabela `ia_retorno` (avaliação do rascunho da IA e o que o professor mudou antes de
+    salvar). Só acrescenta uma tabela vazia: nenhum dado que já existe é tocado. `IF NOT EXISTS` de propósito (ver a 13 -> 14)."""
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS ia_retorno (
+            id              INTEGER PRIMARY KEY,
+            dia             TEXT    NOT NULL CHECK (dia GLOB {_PADRAO_DE_DIA}),
+            tipo            TEXT    NOT NULL CHECK (tipo IN ('avaliacao', 'correcao')),
+            objetivo        TEXT    NOT NULL CHECK (length(objetivo) BETWEEN 1 AND 40),
+            nivel           TEXT    NOT NULL CHECK (length(nivel) BETWEEN 1 AND 40),
+            dias            INTEGER NOT NULL CHECK (dias >= 1),
+            minutos         INTEGER NOT NULL CHECK (minutos >= 1),
+            fila            TEXT    CHECK (fila IS NULL OR length(fila) BETWEEN 1 AND 60),
+            com_observacoes INTEGER NOT NULL CHECK (com_observacoes IN (0, 1)),
+            rodadas         INTEGER NOT NULL CHECK (rodadas BETWEEN 0 AND 9),
+            regras          TEXT    NOT NULL CHECK (length(regras) BETWEEN 1 AND 40),
+            modelo          TEXT    NOT NULL CHECK (length(modelo) BETWEEN 1 AND 80),
+            nota            TEXT    CHECK (nota IS NULL OR nota IN ('serviu', 'com_ajustes', 'nao_serviu')),
+            motivo          TEXT    CHECK (motivo IS NULL OR length(motivo) <= 300),
+            mudancas        TEXT,
+            CHECK (tipo <> 'avaliacao' OR nota IS NOT NULL),
+            CHECK (tipo <> 'correcao' OR mudancas IS NOT NULL)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_ia_retorno_dia ON ia_retorno(dia, tipo)")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
-    10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13, 13: _de_13_para_14,
+    10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13, 13: _de_13_para_14, 14: _de_14_para_15,
 }
 
 
@@ -435,7 +464,13 @@ def migrar(conn: sqlite3.Connection) -> list[int]:
                 continue
             arquivo = _arquivo_do_banco(conn)
             if arquivo is not None and not copia_tirada:
-                fazer_backup(arquivo, arquivo.parent / PASTA_ANTES_DA_MIGRACAO, COPIAS_ANTES_DA_MIGRACAO)
+                try:
+                    fazer_backup(arquivo, arquivo.parent / PASTA_ANTES_DA_MIGRACAO, COPIAS_ANTES_DA_MIGRACAO)
+                except BackupJaExiste:
+                    # O outro processo que sobe junto tirou a cópia neste mesmo segundo (o nome só tem segundos): essa cópia foi
+                    # tirada por ele ANTES do primeiro passo (quem tem a trava de escrita é um de cada vez), então já guarda o
+                    # banco como era. Não é falha: seguimos sem tirar outra. Qualquer OUTRO erro de cópia continua parando a migração.
+                    pass
                 copia_tirada = True
             MIGRACOES[versao](conn)
             conn.execute(f"PRAGMA user_version = {versao + 1}")  # número do código, nunca de fora

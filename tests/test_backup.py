@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.backup import BackupFalhou, fazer_backup, main
+from app.backup import BackupFalhou, BackupJaExiste, fazer_backup, main
 from app.db import conectar, criar_tabelas
 
 AGORA = datetime(2026, 10, 7, 20, 30, 15, tzinfo=timezone.utc)
@@ -89,6 +89,19 @@ def test_nao_sobrescreve_uma_copia_existente(banco, tmp_path):
 
     with pytest.raises(BackupFalhou, match="não vou sobrescrever"):
         fazer_backup(banco, tmp_path / "bk", agora=AGORA)
+
+
+def test_copia_que_ja_existe_levanta_o_erro_proprio_mas_continua_sendo_uma_falha_de_backup(banco, tmp_path):
+    # Quem só quer "a cópia existir" (a migração do banco) separa este caso dos outros; os demais chamadores seguem tratando BackupFalhou.
+    fazer_backup(banco, tmp_path / "bk", agora=AGORA)
+    antes = {c.name: c.read_bytes() for c in (tmp_path / "bk").glob("app-*.db")}
+
+    with pytest.raises(BackupJaExiste) as erro:
+        fazer_backup(banco, tmp_path / "bk", agora=AGORA)
+
+    assert isinstance(erro.value, BackupFalhou)
+    assert {c.name: c.read_bytes() for c in (tmp_path / "bk").glob("app-*.db")} == antes  # nada novo e nada sobrescrito
+    assert len(antes) == 1
 
 
 def test_guardar_zero_e_recusado_para_nao_apagar_tudo(banco, tmp_path):

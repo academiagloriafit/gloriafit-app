@@ -323,6 +323,16 @@ describe("montarPedido", () => {
     expect([simples.inicio, simples.fim, simples.sessoes_por_ficha]).toEqual(["2026-10-08", null, null]);
   });
 
+  it("leva o número do rascunho da IA de onde o treino saiu, e só ele (nada de aluno nem professor)", () => {
+    const com = montarPedido(treinoPronto(), { nomeTreino: "x", montadoPor: "y", pedidoIa: 42 });
+    expect(com.ia).toEqual({ pedido_id: 42 });
+
+    for (const invalido of [null, undefined, 0, -1, 1.5, "42", true, NaN]) {
+      expect(montarPedido(treinoPronto(), { nomeTreino: "x", montadoPor: "y", pedidoIa: invalido })).not.toHaveProperty("ia");
+    }
+    expect(montarPedido(treinoPronto(), { nomeTreino: "x", montadoPor: "y" })).not.toHaveProperty("ia");
+  });
+
   it("limpa os espaços dos dois textos digitados", () => {
     const pedido = montarPedido(treinoPronto(), { nomeTreino: "  Meu   treino ", montadoPor: "  Ana   Paula " });
     expect(pedido.nome_treino).toBe("Meu treino");

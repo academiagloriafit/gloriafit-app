@@ -31,6 +31,10 @@ class BackupFalhou(Exception):
     """Não deu para fazer uma cópia confiável. Nada de errado fica guardado no lugar dela."""
 
 
+class BackupJaExiste(BackupFalhou):
+    """Já há uma cópia com o nome deste segundo. Nunca se sobrescreve uma cópia (quem chama decide o que fazer)."""
+
+
 def fazer_backup(
     banco: str | Path,
     pasta: str | Path,
@@ -49,7 +53,7 @@ def fazer_backup(
     agora = agora or datetime.now(timezone.utc)
     destino = pasta / f"app-{agora:%Y-%m-%d-%H%M%S}.db"
     if destino.exists():
-        raise BackupFalhou(f"Já existe {destino.name}: não vou sobrescrever uma cópia.")
+        raise BackupJaExiste(f"Já existe {destino.name}: não vou sobrescrever uma cópia.")
     provisorio = destino.with_name(destino.name + ".parcial")
     provisorio.unlink(missing_ok=True)
 

@@ -488,7 +488,9 @@ export function validarDadosDoTreino({ nomeTreino, montadoPor, inicio = "", fim 
 // O pedido completo que vai para o servidor ao salvar.
 // `filaModeloId`: só quando o professor abriu o treino SUGERIDO pela fila (?fila=ID): vai como `fila_modelo_id` e o
 // servidor passa o aluno para esse número da fila ao salvar. Sem ele o pedido é o de sempre.
-export function montarPedido(estado, { nomeTreino, montadoPor, inicio = "", fim = "", sessoesPorFicha = "", filaModeloId = null }) {
+// `pedidoIa`: o número do rascunho da IA de onde o treino saiu (só se o rascunho ainda é o que está na tela): vai como
+// `ia: { pedido_id }` e o servidor guarda o que o professor mudou, sem aluno nem professor (app/ia_retorno.py).
+export function montarPedido(estado, { nomeTreino, montadoPor, inicio = "", fim = "", sessoesPorFicha = "", filaModeloId = null, pedidoIa = null }) {
   return {
     nome_treino: limparEspacos(nomeTreino),
     montado_por: limparEspacos(montadoPor),
@@ -497,6 +499,7 @@ export function montarPedido(estado, { nomeTreino, montadoPor, inicio = "", fim 
     sessoes_por_ficha: lerSessoesPorFicha(sessoesPorFicha) ?? null,
     fichas: paraEnvio(estado).fichas,
     ...(ehInteiro(filaModeloId) ? { fila_modelo_id: filaModeloId } : {}),
+    ...(ehInteiro(pedidoIa) ? { ia: { pedido_id: pedidoIa } } : {}),
   };
 }
 

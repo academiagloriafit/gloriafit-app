@@ -29,6 +29,7 @@ from app import (
     execucao,
     exercicios,
     filas,
+    ia_retorno,
     ia_treino,
     importacoes,
     importar_alunos,
@@ -707,6 +708,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             ia_dias=range(ia_treino.MINIMO_DE_DIAS, ia_treino.MAXIMO_DE_DIAS + 1),
             ia_minutos=list(ia_treino.EXERCICIOS_POR_FICHA),
             ia_limite_das_observacoes=ia_treino.LIMITE_DAS_OBSERVACOES,
+            ia_limite_do_motivo=ia_retorno.LIMITE_DO_MOTIVO,
         )
 
     @app.get("/alunos")
@@ -901,7 +903,11 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         """Grava um treino novo para o aluno. Corpo: JSON (ver treinos.salvar_treino).
 
         Se o aluno já tinha um treino ativo, ele é concluído na mesma gravação; a resposta traz o nome
-        dele em `concluido_anterior` (ou null) para a tela avisar o professor."""
+        dele em `concluido_anterior` (ou null) para a tela avisar o professor.
+
+        `ia` (opcional): {"pedido_id": n} quando o treino saiu de um rascunho da IA que o professor ajustou. Depois de salvar, o app
+        compara o rascunho com o treino salvo e guarda só a diferença, sem aluno nem professor (app/ia_retorno.py). Isso é um extra:
+        se falhar, o treino já está salvo e a resposta é a mesma."""
         dados = corpo_json()
         conn = conexao()
         anterior = ciclo.treino_ativo(conn, aluno_id)  # só para o aviso: quem decide é o salvar_treino
@@ -911,6 +917,10 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(erro="Aluno não encontrado."), 404
         except treinos.TreinoInvalido as erro:
             return jsonify(erros=erro.problemas), erro.status
+        origem_ia = dados.get("ia") if isinstance(dados, dict) else None
+        pedido_da_ia = origem_ia.get("pedido_id") if isinstance(origem_ia, dict) else None
+        if isinstance(pedido_da_ia, int) and not isinstance(pedido_da_ia, bool) and pedido_da_ia > 0:
+            ia_retorno.registrar_correcao_sem_falhar(conn, aluno_id, pedido_da_ia, treino_id)
         return jsonify(id=treino_id, concluido_anterior=anterior["nome"] if anterior else None), 201
 
     @app.post("/api/treinos/<int:treino_id>/concluir")
@@ -1163,5 +1173,24 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(ia_treino.consultar_pedido(conexao(), aluno_id, pedido_id))
         except ia_treino.PedidoNaoEncontrado:
             return jsonify(erro="Pedido não encontrado."), 404
+
+    @app.post("/api/alunos/<int:aluno_id>/treino-ia/<int:pedido_id>/avaliacao")
+    def api_avaliar_treino_ia(aluno_id: int, pedido_id: int):
+        """O professor avalia o rascunho da IA. Corpo: {"nota": "serviu" | "com_ajustes" | "nao_serviu", "motivo" (opcional, até 300
+        letras, sem identificar o aluno)}. Vale uma avaliação por rascunho. O registro não guarda aluno nem professor (app/ia_retorno.py).
+        201 {"ok"}; 400 {"erros"}; 404 se o rascunho não existe mais (os rascunhos são apagados depois de 3 dias), é de outro aluno
+        ou era só uma pergunta da IA; 409 se já foi avaliado."""
+        dados = corpo_json()
+        if not isinstance(dados, dict):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        try:
+            ia_retorno.avaliar(conexao(), aluno_id, pedido_id, dados.get("nota"), dados.get("motivo"))
+        except ia_retorno.RetornoInvalido as erro:
+            return jsonify(erros=erro.problemas), 400
+        except ia_retorno.RascunhoNaoEncontrado:
+            return jsonify(erro="Este rascunho não existe mais (eles são apagados depois de 3 dias), então não dá para avaliar."), 404
+        except ia_retorno.JaAvaliado:
+            return jsonify(erro="Este rascunho já foi avaliado. Obrigado!"), 409
+        return jsonify(ok=True), 201
 
     return app

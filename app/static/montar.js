@@ -3,6 +3,7 @@
 // Palavras do Data4U: o TREINO tem um nome e várias FICHAS (A, B, C...); cada ficha
 // tem exercícios com séries, repetições, peso, intervalo e observações.
 import { buscarJson, enviarJson, motivoDaSenha, textoDoErro } from "./api.js";
+import { iniciarAvaliacaoIa } from "./avaliacao_ia.js";
 import { iniciarBiblioteca } from "./biblioteca.js";
 import { el } from "./dom.js";
 import { ligarSeletorDeFila } from "./fila_padrao.js";
@@ -64,7 +65,7 @@ let nomeEditadoPeloProfessor = false; // se sim, não trocamos o nome por outra 
 let erroDeBloco = "";
 let origemImportada = null; // de onde veio o treino copiado por "Importar treino" ou por "Editar treino" de um do Data4U (ou null)
 let textoDaEdicao = null; // a faixa de aviso de quem está editando um treino no lugar (ou null)
-let rascunhoIa = null; // { resumo, alertas, removidos } do rascunho que o "Treino sob medida" (IA) colocou na tela (ou null)
+let rascunhoIa = null; // { resumo, alertas, removidos, pedidoId } do rascunho que o "Treino sob medida" (IA) colocou na tela (ou null)
 let posicaoDaFila = null; // { fila, numero } do treino aberto por "?fila=ID" (ou null)
 let editandoUmaCopia = false; // "?copiar=": ao salvar vira treino novo e o atual é concluído
 let focoPendente = null; // onde devolver o foco depois de redesenhar
@@ -580,7 +581,14 @@ function dadosDoAlto() {
     fim: campoFim.value,
     sessoesPorFicha: campoSessoes.value,
     filaModeloId: abrindoDaFila && posicaoDaFila ? modo.modeloId : null, // o treino da fila que está sendo salvo
+    pedidoIa: pedidoDaIaNaTela(),
   };
+}
+
+// O número do rascunho da IA que ainda é o que está na tela (ou null: não veio de rascunho, foi trocado por um treino importado, ou é uma edição).
+// Vai ao servidor ao salvar (ele guarda o que o professor mudou) e abre a pergunta "o rascunho ajudou?" depois de salvar.
+function pedidoDaIaNaTela() {
+  return !editandoNoLugar && Number.isInteger(rascunhoIa?.pedidoId) && rascunhoIa.pedidoId > 0 ? rascunhoIa.pedidoId : null;
 }
 
 // Tudo o que impede de salvar, na ordem da tela: nome do treino e professor (no alto),
@@ -631,6 +639,8 @@ function atualizarProblemas() {
 
 const textoDoBotaoSalvar = () => (editandoNoLugar ? "Salvar alterações" : "Salvar treino");
 
+const avaliacaoIa = iniciarAvaliacaoIa({ alunoId: raiz.dataset.aluno });
+
 const salvar = iniciarSalvar({
   edicao: editandoNoLugar ? { treinoId: modo.treinoId } : null,
   alunoId: raiz.dataset.aluno,
@@ -640,10 +650,12 @@ const salvar = iniciarSalvar({
   textoDaFila: () =>
     abrindoDaFila && posicaoDaFila ? `O aluno agora está no Treino ${posicaoDaFila.numero} da fila ${posicaoDaFila.fila}.` : null,
   aoSalvar: () => {
+    const pedidoDaIa = pedidoDaIaNaTela();
     origemImportada = null;
     textoDaEdicao = null;
     rascunhoIa = null;
     apagarRascunho();
+    if (pedidoDaIa !== null) avaliacaoIa.mostrar(pedidoDaIa); // a pergunta "o rascunho ajudou?" na tela de "Treino salvo"
   },
   aoTravar: (travado) => {
     areaMontagem.inert = travado; // nada se edita enquanto o servidor responde
@@ -809,7 +821,7 @@ function carregarRascunhoDaIa(resultado) {
   errosDoServidor = [];
   campoSessoes.value = "";
   origemImportada = null;
-  rascunhoIa = { resumo: resultado.resumo, alertas: resultado.alertas, removidos: resultado.removidos };
+  rascunhoIa = { resumo: resultado.resumo, alertas: resultado.alertas, removidos: resultado.removidos, pedidoId: resultado.pedidoId };
   mostrarProblemas = M.contarIndisponiveis(novo) > 0;
   guardarRascunho();
   desenhar();

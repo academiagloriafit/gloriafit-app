@@ -4,15 +4,21 @@ import {
   INTERVALO_DA_CONSULTA_MS,
   LIMITE_DAS_OBSERVACOES,
   LIMITE_DAS_RESPOSTAS,
+  LIMITE_DO_MOTIVO,
   MAXIMO_DE_RODADAS,
+  NOTAS_DA_AVALIACAO,
   TEMPO_MAXIMO_DA_ESPERA_MS,
   avisoDoRascunho,
   historicoDaConversa,
+  interpretarAvaliacao,
   interpretarConsulta,
   interpretarPedido,
+  montarAvaliacao,
   montarPedido,
+  textoDaAvaliacaoEnviada,
   textoDaRodada,
   textoDeEspera,
+  validarMotivo,
   validarPedido,
   validarRespostas,
 } from "../app/static/treino_ia_modelo.js";
@@ -392,5 +398,66 @@ describe("a conversa na tela", () => {
 
   it("o máximo de rodadas é 2, como no servidor", () => {
     expect(MAXIMO_DE_RODADAS).toBe(2);
+  });
+});
+
+
+describe("avaliar o rascunho", () => {
+  it("tem as três notas, na ordem da tela; só as que apontam defeito pedem o motivo", () => {
+    expect(NOTAS_DA_AVALIACAO.map((n) => n.valor)).toEqual(["serviu", "com_ajustes", "nao_serviu"]);
+    expect(NOTAS_DA_AVALIACAO.map((n) => n.pedeMotivo)).toEqual([false, true, true]);
+    expect(NOTAS_DA_AVALIACAO.every((n) => n.rotulo.length > 0)).toBe(true);
+  });
+
+  it("validarMotivo aceita texto sobre o treino, em branco ou até o limite", () => {
+    expect(validarMotivo("")).toBe("");
+    expect(validarMotivo()).toBe("");
+    expect(validarMotivo("Faltou exercício de posterior de coxa")).toBe("");
+    expect(validarMotivo("a".repeat(LIMITE_DO_MOTIVO))).toBe("");
+    expect(validarMotivo("💪".repeat(LIMITE_DO_MOTIVO))).toBe(""); // emoji vale 1 letra, como no servidor
+  });
+
+  it("validarMotivo recusa o que passa do limite, número longo, data completa e e-mail", () => {
+    expect(validarMotivo("a".repeat(LIMITE_DO_MOTIVO + 1))).toContain(`o máximo é ${LIMITE_DO_MOTIVO}`);
+    expect(validarMotivo("cpf 123.456.789-09")).toMatch(/Tire do motivo números/);
+    expect(validarMotivo("zap 27 98888-7777")).toMatch(/Tire do motivo números/);
+    expect(validarMotivo("operou em 15/03/2024")).toMatch(/datas completas/);
+    expect(validarMotivo("fale com ana@exemplo.com")).toMatch(/e-mail/);
+  });
+
+  it("validarMotivo conta as letras depois de limpar os espaços (como o servidor)", () => {
+    expect(validarMotivo("a".repeat(LIMITE_DO_MOTIVO) + " ".repeat(500))).toBe("");
+    expect(validarMotivo("  faltou \n\n  posterior  ")).toBe("");
+  });
+
+  it("montarAvaliacao limpa o motivo e não manda motivo em branco", () => {
+    expect(montarAvaliacao("serviu")).toEqual({ nota: "serviu" });
+    expect(montarAvaliacao("serviu", "   \n ")).toEqual({ nota: "serviu" });
+    expect(montarAvaliacao("com_ajustes", "  faltou   posterior\n de coxa ")).toEqual({ nota: "com_ajustes", motivo: "faltou posterior de coxa" });
+  });
+
+  it("interpretarAvaliacao: enviada, já avaliada, rascunho que sumiu, recusada e sem resposta", () => {
+    expect(interpretarAvaliacao({ status: 201, corpo: { ok: true } })).toEqual({ tipo: "enviada" });
+    expect(interpretarAvaliacao({ status: 409, corpo: { erro: "Este rascunho já foi avaliado. Obrigado!" } })).toEqual({
+      tipo: "ja_avaliado",
+      mensagem: "Este rascunho já foi avaliado. Obrigado!",
+    });
+    expect(interpretarAvaliacao({ status: 404, corpo: { erro: "Este rascunho não existe mais." } })).toEqual({
+      tipo: "sem_rascunho",
+      mensagem: "Este rascunho não existe mais.",
+    });
+    expect(interpretarAvaliacao({ status: 400, corpo: { erros: ["Tire do motivo o e-mail.", "Outro problema."] } })).toEqual({
+      tipo: "recusada",
+      mensagem: "Tire do motivo o e-mail. Outro problema.",
+    });
+    expect(interpretarAvaliacao({ status: 401, corpo: null })).toEqual({ tipo: "recusada", mensagem: MENSAGEM_NAO_AUTORIZADO });
+    expect(interpretarAvaliacao({ status: 500, corpo: null }).mensagem).toBe("Não consegui enviar a avaliação (código 500).");
+    expect(interpretarAvaliacao(undefined)).toEqual({ tipo: "recusada", mensagem: "Não consegui enviar a avaliação (código 0)." });
+  });
+
+  it("textoDaAvaliacaoEnviada agradece e diz qual nota foi", () => {
+    expect(textoDaAvaliacaoEnviada("nao_serviu")).toContain("(Não serviu)");
+    expect(textoDaAvaliacaoEnviada("serviu")).toMatch(/^Avaliação enviada \(Serviu\)\. Obrigado/);
+    expect(textoDaAvaliacaoEnviada("qualquer")).toMatch(/^Avaliação enviada\. Obrigado/);
   });
 });
