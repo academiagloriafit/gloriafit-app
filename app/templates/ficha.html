@@ -152,8 +152,8 @@
                É texto do aluno (inclusive saúde): só o professor vê, aqui. O aluno e a impressão nunca levam isto. Tudo sai escapado (nunca HTML). #}
             {% set h = historicos_ia.get(treino.id) %}
             {% if h %}
-            <details class="porque-treino" id="porque-treino-{{ treino.id }}">
-              <summary><span class="porque-titulo">Por que este treino foi montado assim</span><span class="selo-ia">IA</span></summary>
+            <details class="porque-treino" id="porque-treino-{{ treino.id }}"> {# sem "open": começa FECHADO; o professor clica no botão quando quiser ver #}
+              <summary><span class="porque-ver">Ver por que este treino foi montado assim</span><span class="porque-esconder">Esconder por que este treino foi montado assim</span><span class="selo-ia">IA</span></summary>
               <div class="porque-corpo">
                 <section class="porque-parte" aria-labelledby="hi-escreveu-{{ treino.id }}">
                   <h3 id="hi-escreveu-{{ treino.id }}">O que o professor passou para o robô</h3>

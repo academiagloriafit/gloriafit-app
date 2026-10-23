@@ -548,7 +548,9 @@ Ideia de um professor, pedido do Thiago (23/10/2026): quando o professor abre o 
 dividido daquele jeito e por que tem aquela quantidade de exercícios**. Antes, tudo o que o professor escrevia para o robô (idade, lesões,
 comorbidades, o que o aluno quer) sumia depois de o rascunho ser montado. Agora fica ligado ao treino.
 
-- **O que o professor vê:** na ficha do aluno, ao abrir o treino, o quadro "Por que este treino foi montado assim" (fechado por padrão, com o selo IA) tem
+- **O que o professor vê:** na ficha do aluno, ao abrir o treino, aparece só um **botão** "Ver por que este treino foi montado assim" (com o selo IA). O quadro **sempre começa
+  fechado** (pedido do Thiago: senão fica informação demais): clicar mostra o quadro e o botão vira "Esconder por que este treino foi montado assim"; clicar de novo esconde.
+  É um `<details>` (abre e fecha sem JavaScript e com o teclado; o texto do botão troca por CSS) e não lembra o estado: ao recarregar volta fechado. O quadro tem
   três partes: **(1) O que o professor passou para o robô** (objetivo, nível, dias, tempo, fila, o texto das observações, ou "Nenhuma observação foi
   escrita para o robô.", e as perguntas do robô com as respostas do professor); **(2) Por que o robô montou assim** (3 a 6 pontos escritos pelo próprio
   robô: divisão das fichas, quantidade de exercícios, séries/repetições/pausas, como pesou as observações; mais os avisos ao professor); **(3) O que o

@@ -398,7 +398,7 @@ def test_a_ficha_mostra_o_que_o_professor_escreveu_e_a_justificativa_do_robo(cli
 
     pagina = _ficha(cliente)
 
-    assert "Por que este treino foi montado assim" in pagina
+    assert "Ver por que este treino foi montado assim" in pagina
     for texto in (
         OBSERVACOES,
         "Treina há quanto tempo?",
@@ -463,7 +463,7 @@ def test_treino_montado_sem_a_ia_diz_que_nao_ha_historico_e_o_do_data4u_fica_qui
     pagina = _ficha(cliente)
 
     assert pagina.count("Sem histórico do robô") == 1  # só o treino feito no app; o copiado do Data4U não leva a frase
-    assert "Por que este treino foi montado assim" not in pagina
+    assert "por que este treino foi montado assim" not in pagina
 
 
 # ------------------------------------------------------------------ o aluno e a impressão nunca recebem isto
@@ -548,7 +548,7 @@ def test_editar_o_treino_no_lugar_nao_apaga_o_historico(cliente, caminho):
     assert linha["treino_id"] == treino_id and linha["observacoes"] == OBSERVACOES
     pagina = _ficha(cliente)
     assert "TREINO DA ANA EDITADO" in pagina and OBSERVACOES in pagina  # o treino mudou de nome, o histórico continua
-    assert 'Editar treino' in pagina and "Por que este treino foi montado assim" in pagina
+    assert 'Editar treino' in pagina and "Ver por que este treino foi montado assim" in pagina
 
 
 def test_treino_concluido_continua_com_o_historico_na_ficha(cliente):
@@ -558,3 +558,19 @@ def test_treino_concluido_continua_com_o_historico_na_ficha(cliente):
 
     pagina = _ficha(cliente)
     assert OBSERVACOES in pagina and JUSTIFICATIVA[0] in pagina
+
+
+# ------------------------------------------------------------------ o botão "Ver / Esconder" (pedido do Thiago, 23/10)
+
+
+def test_o_quadro_comeca_fechado_e_tem_um_botao_para_ver_e_esconder(cliente):
+    _salvar(cliente, _pedir(cliente))
+
+    pagina = _ficha(cliente)
+
+    inicio = pagina.index('<details class="porque-treino"')
+    marca = pagina[inicio : pagina.index(">", inicio) + 1]
+    assert " open" not in marca  # sempre fechado ao abrir a ficha: só aparece o botão
+    assert "Ver por que este treino foi montado assim" in pagina
+    assert "Esconder por que este treino foi montado assim" in pagina  # o texto do botão quando está aberto (a tela troca por CSS)
+    assert pagina.index("<summary><span class=\"porque-ver\">", inicio) < pagina.index("O que o professor passou para o robô")

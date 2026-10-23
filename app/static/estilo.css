@@ -812,19 +812,41 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
   gap: 4px 12px;
   cursor: pointer;
 }
-/* "Por que este treino foi montado assim": o que o professor passou ao robô e a justificativa do robô (ficha do aluno, dentro do treino) */
-.porque-treino { border: 1px solid var(--linha); border-radius: 8px; background: var(--papel); }
+/* "Por que este treino foi montado assim": o que o professor passou ao robô e a justificativa do robô (ficha do aluno, dentro do treino).
+   FECHADO por padrão (pedido do Thiago, 23/10): só aparece o botão; clicar mostra o quadro, clicar de novo esconde. É um <details> de propósito
+   (abre e fecha sem JavaScript, funciona com o teclado); o "botão" é o <summary>, com o texto trocado por CSS conforme está aberto ou fechado. */
+.porque-treino { margin: 4px 0; }
 .porque-treino > summary {
-  min-height: 48px;
-  padding: 8px 14px;
-  display: flex;
-  flex-wrap: wrap;
+  min-height: 44px;
+  padding: 6px 18px;
+  border: 1px solid var(--contorno);
+  border-radius: 8px;
+  display: inline-flex;
   align-items: center;
-  gap: 4px 6px;
+  gap: 4px 8px;
+  max-width: 100%;
+  background: var(--papel);
+  font-size: 15px;
+  font-weight: 650;
   cursor: pointer;
+  list-style: none;
+  transition: background-color 0.12s, border-color 0.12s;
 }
-.porque-titulo { font-weight: 750; }
-.porque-corpo { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 16px; }
+.porque-treino > summary::-webkit-details-marker { display: none; }
+.porque-treino > summary:hover, .porque-treino[open] > summary { border-color: var(--contorno-forte); background: var(--fundo); }
+.porque-treino > summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.porque-treino > summary .selo-ia { margin-left: 0; flex: none; }
+.porque-treino:not([open]) .porque-esconder, .porque-treino[open] .porque-ver { display: none; }
+.porque-corpo {
+  margin-top: 8px;
+  padding: 14px;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: var(--papel);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 .porque-parte { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .porque-parte + .porque-parte { padding-top: 14px; border-top: 1px solid var(--linha); }
 .porque-parte h3 { margin: 0; font-size: 16px; font-weight: 750; }
@@ -1428,7 +1450,7 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 .tema-largo .etiqueta { font-stretch: 100%; font-size: 20px; }
 /* cantos retos */
 .tema-largo .painel, .tema-largo .cartao, .tema-largo .cartao-lista, .tema-largo .coluna-lateral, .tema-largo .filtro-grupos,
-.tema-largo .ficha-detalhe, .tema-largo .porque-treino, .tema-largo .problemas, .tema-largo .aviso-troca, .tema-largo .aviso-importado, .tema-largo .conversa-ia,
+.tema-largo .ficha-detalhe, .tema-largo .porque-treino > summary, .tema-largo .porque-corpo, .tema-largo .problemas, .tema-largo .aviso-troca, .tema-largo .aviso-importado, .tema-largo .conversa-ia,
 .tema-largo .bloco-liberacao, .tema-largo .relatorio-importacao, .tema-largo .comentario-resposta,
 .tema-largo .botao-adicionar, .tema-largo .botao-escuro, .tema-largo .botao-principal, .tema-largo .botao-perigo, .tema-largo .botao-discreto,
 .tema-largo .botao-icone, .tema-largo .botao-link, .tema-largo .campo input, .tema-largo .campo select, .tema-largo .campo textarea,
