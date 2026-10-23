@@ -142,7 +142,17 @@ def test_a_resposta_da_ia_com_erro_chega_como_erro_em_portugues(cliente, app):
 
 @pytest.mark.parametrize(
     "mudanca",
-    [{"objetivo": "x"}, {"nivel": None}, {"dias": 9}, {"minutos": 5}, {"observacoes": "meu cpf 123.456.789-09"}, {"observacoes": "x" * (ia_treino.LIMITE_DAS_OBSERVACOES + 1)}],
+    [
+        {"objetivo": "x"},
+        {"nivel": None},
+        {"dias": 9},
+        {"minutos": 5},
+        {"observacoes": "meu cpf 123.456.789-09"},
+        {"observacoes": "x" * (ia_treino.LIMITE_DAS_OBSERVACOES + 1)},
+        {"fichas_diferentes": 1},
+        {"fichas_diferentes": "3"},
+        {"dias": 3, "fichas_diferentes": 4},  # mais fichas diferentes do que dias
+    ],
 )
 def test_pedido_invalido_devolve_400_com_os_motivos(cliente, ia, mudanca):
     resposta = _pedir(cliente, **mudanca)
@@ -229,6 +239,17 @@ def test_a_ia_pergunta_o_professor_responde_e_a_ia_monta(cliente, app):
     assert final["situacao"] == "pronto" and [f["nome"] for f in final["treino"]["fichas"]] == ["A - PEITO", "B - COSTAS"]
     enviado = ia.corpos[1]["messages"][0]["content"]
     assert "Condropatia no joelho esquerdo." in enviado and "Pergunta 1: Qual o foco?" in enviado
+
+
+def test_fichas_diferentes_escolhidas_chegam_ao_robo_e_sem_escolha_o_robo_decide(cliente, ia):
+    assert _pedir(cliente, dias=5, fichas_diferentes=3).status_code == 202
+    assert _pedir(cliente, dias=5, fichas_diferentes=None).status_code == 202
+    assert _pedir(cliente, dias=5).status_code == 202  # navegador antigo, sem o campo
+
+    escolhido, decide_null, decide_ausente = (c["messages"][0]["content"] for c in ia.corpos)
+    assert "Fichas diferentes: 3 (escolha do professor: entregue exatamente 3 fichas; com 5 dias por semana elas se repetem)" in escolhido
+    assert "Fichas diferentes: o professor deixou para você decidir" in decide_null
+    assert "Fichas diferentes: o professor deixou para você decidir" in decide_ausente
 
 
 def test_pedido_sem_perguntar_nao_oferece_a_ferramenta_de_perguntas(cliente, ia):
@@ -386,6 +407,11 @@ def test_cartao_tem_as_opcoes_certas_e_o_limite_das_observacoes(cliente):
         assert f'<option value="{dias}">{dias} dias</option>' in html
     for minutos in ia_treino.EXERCICIOS_POR_FICHA:
         assert f'<option value="{minutos}">{minutos} minutos</option>' in html
+    # "Fichas diferentes": opcional, começa em "O robô decide" e vai de 2 até o máximo de dias
+    campo = re.search(r'<select id="ia-fichas".*?</select>', html, re.S).group(0)
+    assert re.search(r'<option value="">O robô decide</option>', campo) and "aria-required" not in campo
+    assert re.findall(r'<option value="(\d+)">', campo) == [str(n) for n in range(ia_treino.MINIMO_DE_FICHAS, ia_treino.MAXIMO_DE_DIAS + 1)]
+    assert "A-B-C-A-B" in html  # a dica explica como a semana roda quando há mais dias do que fichas
 
 
 def test_cartao_avisa_para_nao_escrever_quem_e_o_aluno(cliente):

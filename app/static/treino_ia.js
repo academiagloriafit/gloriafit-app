@@ -50,6 +50,7 @@ export function iniciarTreinoIa({ alunoId, temTreinoNaTela, aoCarregar }) {
     nivel: pegar("ia-nivel"),
     dias: pegar("ia-dias"),
     minutos: pegar("ia-minutos"),
+    fichas: pegar("ia-fichas"),
     observacoes: pegar("ia-observacoes"),
   };
   const aEscolha = () => Object.fromEntries(Object.entries(campos).map(([nome, campo]) => [nome, campo.value]));

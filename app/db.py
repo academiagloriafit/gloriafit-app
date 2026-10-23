@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 16
+VERSAO_DO_BANCO = 17
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -450,11 +450,20 @@ def _de_15_para_16(conn: sqlite3.Connection) -> None:
     )
 
 
+def _de_16_para_17(conn: sqlite3.Connection) -> None:
+    """Fichas diferentes dos dias: a `treino_ia` ganha `fichas_pedidas` (quantas fichas diferentes o professor pediu ao robô; 0 = deixou o
+    robô decidir; vazio nos treinos de antes). Só acrescenta uma coluna vazia: nenhum dado que já existe é tocado. Confere antes de
+    acrescentar, como a 13 -> 14 (número da versão baixado à mão não quebra a subida)."""
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(treino_ia)")}
+    if "fichas_pedidas" not in colunas:
+        conn.execute("ALTER TABLE treino_ia ADD COLUMN fichas_pedidas INTEGER CHECK (fichas_pedidas IS NULL OR fichas_pedidas BETWEEN 0 AND 6)")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
     10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13, 13: _de_13_para_14, 14: _de_14_para_15,
-    15: _de_15_para_16,
+    15: _de_15_para_16, 16: _de_16_para_17,
 }
 
 

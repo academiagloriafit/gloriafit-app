@@ -1,5 +1,8 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 16 (23/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô e a justificativa do robô).
+-- Versão 17 (23/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô).
+-- Mudança da versão 16 para a 17 (fichas diferentes dos dias): `treino_ia` ganhou `fichas_pedidas` (quantas fichas DIFERENTES o professor pediu ao
+-- robô: 0 = deixou o robô decidir; 2 a 6 = escolheu; vazio = treino de antes desta função, quando o número de fichas era sempre igual aos dias).
+-- Bancos da versão 16 são atualizados sozinhos na subida.
 -- Mudança da versão 15 para a 16 (histórico do treino feito com a IA): nasceu a tabela `treino_ia` (uma linha por treino salvo a partir de um
 -- rascunho da IA: o pedido do professor, as observações e a conversa com o robô, a justificativa do robô e o que o professor mudou antes de
 -- salvar). Ao contrário de `ia_retorno`, ESTA tabela é ligada ao treino (e portanto ao aluno) de propósito. Bancos da versão 15 são
@@ -48,7 +51,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 16;
+PRAGMA user_version = 17;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -402,6 +405,7 @@ CREATE INDEX IF NOT EXISTS ix_ia_retorno_dia ON ia_retorno(dia, tipo);
 --   ajustes: JSON com o que o professor mudou entre o rascunho e o treino salvo (app/ia_retorno.comparar). Mudanças feitas DEPOIS, em
 --     "Editar treino", não entram aqui.
 --   regras: versão das regras da IA (hash curto); modelo: o modelo da IA.
+--   fichas_pedidas: quantas fichas DIFERENTES o professor pediu (0 = deixou o robô decidir; NULL = treino de antes da versão 17).
 CREATE TABLE IF NOT EXISTS treino_ia (
     treino_id     INTEGER PRIMARY KEY REFERENCES treino(id) ON DELETE CASCADE,
     objetivo      TEXT    NOT NULL CHECK (length(objetivo) BETWEEN 1 AND 40),
@@ -415,7 +419,8 @@ CREATE TABLE IF NOT EXISTS treino_ia (
     alertas       TEXT    NOT NULL,
     ajustes       TEXT    NOT NULL,
     regras        TEXT    NOT NULL CHECK (length(regras) BETWEEN 1 AND 40),
-    modelo        TEXT    NOT NULL CHECK (length(modelo) BETWEEN 1 AND 80)
+    modelo        TEXT    NOT NULL CHECK (length(modelo) BETWEEN 1 AND 80),
+    fichas_pedidas INTEGER CHECK (fichas_pedidas IS NULL OR fichas_pedidas BETWEEN 0 AND 6)
 );
 
 -- ------------------------------------------------------- quando os alunos foram atualizados

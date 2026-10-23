@@ -112,6 +112,7 @@ ROTULOS_DOS_OBJETIVOS = {
 }
 ROTULOS_DOS_NIVEIS = {"iniciante": "Iniciante", "intermediario": "Intermediário", "avancado": "Avançado"}
 MINIMO_DE_DIAS, MAXIMO_DE_DIAS = 2, 6
+MINIMO_DE_FICHAS = 2  # "Fichas diferentes" que o professor pode impor (o máximo são os dias, no máximo MAXIMO_DE_DIAS)
 # tempo por treino (minutos) -> (mínimo, máximo) de exercícios por ficha. Os treinos padrão da academia têm de 7 a 11.
 EXERCICIOS_POR_FICHA = {30: (4, 6), 45: (5, 7), 60: (6, 9), 75: (7, 10), 90: (8, 11)}
 LIMITE_DAS_OBSERVACOES = 1000  # letras (pedido do Thiago, 22/10/2026: espaço para idade, altura, peso, lesões, rotina...)
@@ -263,6 +264,7 @@ class Pedido:
     fila: str | None  # nome da fila do aluno (ex.: "Mulher"), só a categoria
     perguntar: bool = False  # a IA pode fazer perguntas ao professor antes de montar (se ainda sobrar rodada)
     rodadas: tuple = ()  # as rodadas já respondidas: (((pergunta, resposta), ...), ...). Vem do navegador; o servidor não guarda a conversa ENTRE as chamadas (cada uma vem completa), mas cada rascunho leva uma cópia dela em `_historico`
+    fichas: int | None = None  # quantas fichas DIFERENTES o professor quer (2 a 6, no máximo os dias); None = o robô decide (regra 3)
 
     @property
     def pode_perguntar(self) -> bool:
@@ -322,6 +324,14 @@ def conferir_pedido(conn: sqlite3.Connection, aluno_id: int, dados) -> Pedido:
     minutos = dados.get("minutos")
     if not _inteiro(minutos) or minutos not in EXERCICIOS_POR_FICHA:
         problemas.append("Escolha o tempo de cada treino.")
+    fichas = dados.get("fichas_diferentes")
+    if fichas is not None:  # opcional: ausente ou null = "o robô decide"
+        if not _inteiro(fichas) or not MINIMO_DE_FICHAS <= fichas <= MAXIMO_DE_DIAS:
+            problemas.append(f"Fichas diferentes: escolha de {MINIMO_DE_FICHAS} a {MAXIMO_DE_DIAS}, ou deixe o robô decidir.")
+            fichas = None
+        elif _inteiro(dias) and fichas > dias:
+            problemas.append("As fichas diferentes não podem ser mais do que os dias por semana.")
+            fichas = None
     observacoes = validar_texto(dados.get("observacoes"), "As observações", LIMITE_DAS_OBSERVACOES, False, problemas)
     if observacoes:
         problemas.extend(_problemas_de_privacidade(observacoes, aluno["nome"]))
@@ -345,7 +355,7 @@ def conferir_pedido(conn: sqlite3.Connection, aluno_id: int, dados) -> Pedido:
                 "gravidez",
             )
     fila = _fila_do_aluno(conn, aluno_id)
-    return Pedido(objetivo, nivel, dias, minutos, observacoes or "", fila["nome"] if fila else None, perguntar, rodadas)
+    return Pedido(objetivo, nivel, dias, minutos, observacoes or "", fila["nome"] if fila else None, perguntar, rodadas, fichas)
 
 
 def _conferir_rodadas(bruto, nome_do_aluno: str, problemas: list[str]) -> tuple:
@@ -483,8 +493,16 @@ REGRAS
 invente exercício nem número.
 2. Siga o jeito da casa: veja os TREINOS PADRÃO (formato id:séries x repetições, tamanho das fichas, ordem dos \
 exercícios). Não copie um padrão inteiro: monte o treino que foi pedido.
-3. Uma ficha por dia de treino na semana (A, B, C...), com a quantidade de exercícios pedida em cada ficha. Nome da ficha: \
-até 15 letras, em maiúsculas (ex.: "A - PEITO E TRI").
+3. NÚMERO DE FICHAS: os dias por semana NÃO são o número de fichas. Na academia o normal é repetir as fichas durante a semana \
+(5 dias com 3 fichas = A, B, C, A, B): o aluno grava os exercícios, compara a carga de um dia com a do outro, e cada músculo \
+trabalha cerca de 2 vezes por semana; o app gira as fichas na ordem. Decida o número de fichas assim, nesta ordem: \
+(a) se o pedido trouxer "Fichas diferentes: N", entregue exatamente N fichas; \
+(b) se o aluno tem treino anterior, mantenha o MESMO número de fichas e a mesma lógica de divisão dele (quem fazia ABC continua em \
+ABC), evoluindo os exercícios pela regra 12, mesmo que o pedido tenha mais dias; só mude o número de fichas se as observações ou \
+as respostas do professor pedirem; \
+(c) sem treino anterior: 2 dias = 2 fichas; 3 dias = 3 fichas; de 4 a 6 dias, iniciante 2 ou 3 fichas, intermediário 3 ou 4 e \
+avançado 4 ou 5, repetindo as fichas nos dias que sobram. Nunca entregue mais fichas do que dias por semana. Cada ficha com a \
+quantidade de exercícios pedida. Nome da ficha: até 15 letras, em maiúsculas (ex.: "A - PEITO E TRI").
 4. "series" e "repeticoes" são textos curtos de até 11 caracteres (ex.: series "3", repeticoes "12" ou "8 a 10").
 5. Não prescreva carga/peso: o professor define na hora. "pausa" é o intervalo em segundos (30 a 180), ou 0 para não indicar.
 6. Não repita o mesmo exercício na mesma ficha. Equilibre os grupos musculares na semana, grupos grandes antes dos \
@@ -527,7 +545,7 @@ entendeu direito.
 16. JUSTIFICATIVA (campo "justificativa" da ferramenta montar_treino): ela fica guardada junto do treino, e outros professores vão lê-la \
 meses depois, ao consultar o treino do aluno, sem ter visto esta conversa. Escreva de 3 a 6 pontos curtos (1 a 2 frases cada, em português \
 simples) explicando POR QUE o treino ficou assim: (a) como e por que as fichas foram divididas (quais grupos musculares em cada dia e por \
-quê); (b) por que cada ficha tem aquela quantidade de exercícios (tempo pedido e nível); (c) por que as séries, repetições e pausas foram \
+quê), por que esse NÚMERO de fichas e, se há mais dias do que fichas, como a semana roda (ex.: A-B-C-A-B); (b) por que cada ficha tem aquela quantidade de exercícios (tempo pedido e nível); (c) por que as séries, repetições e pausas foram \
 essas; (d) como pesaram as observações, as respostas do professor e o treino anterior: cite SÓ o que foi realmente informado, nunca invente \
 nem suponha; (e) o que foi evitado ou adaptado por lesão, dor ou condição de saúde que foi escrita. Se não havia observações, diga que o \
 treino seguiu só o objetivo, o nível, os dias e o tempo pedidos. Sem nome do aluno, sem diagnóstico, sem prometer resultado."""
@@ -548,7 +566,7 @@ FERRAMENTA = {
         "properties": {
             "fichas": {
                 "type": "array",
-                "description": "Uma ficha por dia de treino.",
+                "description": "As fichas diferentes do treino. O número segue a regra 3: pode ser menor que os dias por semana (as fichas se repetem).",
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
@@ -672,6 +690,15 @@ def treino_anterior(conn: sqlite3.Connection, aluno_id: int, permitidos, agora: 
     return "\n".join([cabecalho, *partes])
 
 
+def _linha_das_fichas(pedido: Pedido) -> str:
+    """A linha "Fichas diferentes" do pedido que vai para o robô (regra 3): o que o professor escolheu, ou "decida você"."""
+    if pedido.fichas is None:
+        return "- Fichas diferentes: o professor deixou para você decidir (regra 3)"
+    if pedido.fichas == pedido.dias:
+        return f"- Fichas diferentes: {pedido.fichas} (escolha do professor: uma ficha por dia, sem repetir)"
+    return f"- Fichas diferentes: {pedido.fichas} (escolha do professor: entregue exatamente {pedido.fichas} fichas; com {pedido.dias} dias por semana elas se repetem)"
+
+
 def montar_conversa(conn: sqlite3.Connection, pedido: Pedido, aluno_id: int | None = None, agora: datetime | None = None) -> Conversa:
     """O texto que vai para o Claude: as regras e as listas da academia (sistema) e o pedido deste aluno (usuário).
 
@@ -689,7 +716,8 @@ def montar_conversa(conn: sqlite3.Connection, pedido: Pedido, aluno_id: int | No
         "Monte o rascunho deste treino:",
         f"- Objetivo: {OBJETIVOS[pedido.objetivo]}",
         f"- Nível: {NIVEIS[pedido.nivel]}",
-        f"- Dias de treino por semana: {pedido.dias} (então {pedido.dias} fichas)",
+        f"- Dias de treino por semana: {pedido.dias}",
+        _linha_das_fichas(pedido),
         f"- Tempo de cada treino: {pedido.minutos} minutos (de {minimo} a {maximo} exercícios por ficha)",
     ]
     if pedido.fila:
@@ -905,8 +933,16 @@ def conferir_rascunho(conn: sqlite3.Connection, entrada: dict, permitidos, pedid
     treino = modelos.para_montar(conn, "", None, confirmadas)
 
     alertas = [a for a in (_texto_curto(a, 200) for a in (entrada.get("alertas") if isinstance(entrada.get("alertas"), list) else [])) if a][:5]
-    if len(confirmadas) != pedido.dias:
-        alertas.append(f"Você pediu {pedido.dias} dias por semana e o rascunho veio com {len(confirmadas)} fichas: confira.")
+    descartadas = len([f for f in fichas_cruas[:26] if isinstance(f, dict)]) - len(confirmadas)
+    if descartadas > 0:
+        alertas.append(f"{descartadas} ficha(s) do rascunho foram descartadas (sem exercício válido ou sem nome): confira.")
+    if pedido.fichas is not None and len(confirmadas) != pedido.fichas:
+        alertas.append(f"Você pediu {pedido.fichas} fichas diferentes e o rascunho veio com {len(confirmadas)}: confira.")
+    elif pedido.fichas is None and len(confirmadas) > pedido.dias:
+        alertas.append(f"O rascunho veio com {len(confirmadas)} fichas, mais do que os {pedido.dias} dias por semana: confira.")
+    elif pedido.fichas is None and len(confirmadas) < MINIMO_DE_FICHAS:
+        # Rede de segurança: com o robô decidindo, 3 fichas para 5 dias é normal, mas UMA ficha só quase sempre é treino cortado.
+        alertas.append(f"O rascunho veio com só {len(confirmadas)} ficha para {pedido.dias} dias por semana: confira.")
     resumo = _texto_curto(entrada.get("resumo"), LIMITE_DO_RESUMO)
     return {"treino": treino, "resumo": resumo, "alertas": alertas, "justificativa": _pontos_da_justificativa(entrada.get("justificativa")), "removidos": removidos}
 
@@ -1017,6 +1053,7 @@ def contexto_do_historico(pedido: Pedido) -> dict:
     return {
         "observacoes": pedido.observacoes,
         "conversa": [[{"pergunta": pergunta, "resposta": resposta} for pergunta, resposta in rodada] for rodada in pedido.rodadas],
+        "fichas_pedidas": pedido.fichas or 0,  # 0 = o professor deixou o robô decidir
         "gravado": False,
     }
 
@@ -1218,12 +1255,15 @@ def _comando_diagnosticar(
     observacoes: str,
     perguntar: bool = False,
     aluno_id: int | None = None,
+    nivel: str = "iniciante",
+    fichas: int | None = None,
 ) -> int:
     """Um pedido COMPLETO de verdade (custa alguns centavos), sem aluno e sem gravar nada: mostra o tempo, os tokens, o custo
     estimado e o rascunho conferido, ou o motivo exato da recusa da API. Serve para testar a chave, o modelo e o esforço.
 
     `perguntar`: a IA pode fazer perguntas (mostra as perguntas e para; não há quem responda aqui). `aluno_id`: manda também o
-    treino anterior desse aluno (só exercícios, séries e repetições, como no uso normal); nada é gravado."""
+    treino anterior desse aluno (só exercícios, séries e repetições, como no uso normal); nada é gravado.
+    `nivel` e `fichas` (fichas diferentes; None = o robô decide) deixam testar a regra "fichas diferentes dos dias"."""
     try:
         chave = ler_chave(caminho_da_chave(banco))
     except ChaveNaoConfigurada:
@@ -1232,7 +1272,10 @@ def _comando_diagnosticar(
     if dias not in range(MINIMO_DE_DIAS, MAXIMO_DE_DIAS + 1) or minutos not in EXERCICIOS_POR_FICHA:
         print(f"Use --dias de {MINIMO_DE_DIAS} a {MAXIMO_DE_DIAS} e --minutos entre {sorted(EXERCICIOS_POR_FICHA)}.")
         return 1
-    pedido = Pedido("hipertrofia", "iniciante", dias, minutos, observacoes[:LIMITE_DAS_OBSERVACOES], None, perguntar)
+    if nivel not in NIVEIS or (fichas is not None and not MINIMO_DE_FICHAS <= fichas <= dias):
+        print(f"Use --nivel entre {sorted(NIVEIS)} e --fichas de {MINIMO_DE_FICHAS} até o número de dias.")
+        return 1
+    pedido = Pedido("hipertrofia", nivel, dias, minutos, observacoes[:LIMITE_DAS_OBSERVACOES], None, perguntar, (), fichas)
     conn = db.conectar(banco)
     try:
         conversa = montar_conversa(conn, pedido, aluno_id)
@@ -1290,13 +1333,16 @@ def principal(argumentos: list[str] | None = None) -> int:
     grupo.add_argument("--dias", type=int, default=3)
     grupo.add_argument("--minutos", type=int, default=60)
     grupo.add_argument("--observacoes", default="")
+    grupo.add_argument("--nivel", default="iniciante", help="nível do aluno (padrão: iniciante)")
+    grupo.add_argument("--fichas", type=int, default=None, help="quantas fichas diferentes (padrão: o robô decide)")
     grupo.add_argument("--perguntar", action="store_true", help="deixa a IA fazer perguntas (mostra as perguntas e para)")
     grupo.add_argument("--aluno", type=int, default=None, help="número do aluno: manda também o treino anterior dele (só exercícios)")
     ns = analisador.parse_args(argumentos)
     banco = ns.banco or _caminho_do_banco_do_ambiente()
     if ns.comando == "diagnosticar":
         return _comando_diagnosticar(
-            banco, ns.esforco, False if ns.sem_pensar else None, ns.dias, ns.minutos, ns.observacoes, ns.perguntar, ns.aluno
+            banco, ns.esforco, False if ns.sem_pensar else None, ns.dias, ns.minutos, ns.observacoes, ns.perguntar, ns.aluno,
+            ns.nivel, ns.fichas,
         )
     return {"definir-chave": _comando_definir_chave, "situacao": _comando_situacao, "testar": _comando_testar}[ns.comando](banco)
 

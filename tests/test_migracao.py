@@ -1,8 +1,8 @@
 """Testes das atualizações do banco: 4 -> 5 (histórico de treinos do Data4U), 5 -> 6 (ciclo do treino),
 6 -> 7 (treinos padrão), 7 -> 8 (filas numeradas), 8 -> 9 (senha de administrador), 9 -> 10 (treino sob medida, IA),
-10 -> 11 (quando os alunos foram atualizados), 11 -> 12 (login do aluno) e 12 -> 13 (comentários do aluno), 13 -> 14 (esforço ao concluir, exercício feito e carga) 14 -> 15 (o robô aprende com os professores) e 15 -> 16 (histórico do treino feito com a IA).
+10 -> 11 (quando os alunos foram atualizados), 11 -> 12 (login do aluno) e 12 -> 13 (comentários do aluno), 13 -> 14 (esforço ao concluir, exercício feito e carga) 14 -> 15 (o robô aprende com os professores) 15 -> 16 (histórico do treino feito com a IA) e 16 -> 17 (fichas diferentes dos dias).
 
-Os bancos antigos são montados a partir de `schema_v4.sql` ... `schema_v15.sql`: cópias exatas dos desenhos que
+Os bancos antigos são montados a partir de `schema_v4.sql` ... `schema_v16.sql`: cópias exatas dos desenhos que
 estiveram em produção (a versão 4 desde 07/10/2026, a 5 e a 6 desde 08/10/2026, a 7 desde 09/10/2026, a 8 desde 13/10/2026, a 9 desde 13/10/2026, a 10 desde 14/10/2026, a 11 desde 14/10/2026, a 12 desde 15/10/2026, a 13 desde 15/10/2026, a 14 desde 22/10/2026, a 15 desde 23/10/2026). Se alguém
 mexer no schema.sql sem escrever a migração, o teste "banco migrado fica igual a um banco novo" falha.
 """
@@ -30,6 +30,7 @@ SCHEMA_V12 = Path(__file__).with_name("schema_v12.sql")
 SCHEMA_V13 = Path(__file__).with_name("schema_v13.sql")
 SCHEMA_V14 = Path(__file__).with_name("schema_v14.sql")
 SCHEMA_V15 = Path(__file__).with_name("schema_v15.sql")
+SCHEMA_V16 = Path(__file__).with_name("schema_v16.sql")
 
 
 def _banco_v4(caminho) -> None:
@@ -411,6 +412,37 @@ def caminho_v15(tmp_path):
     return caminho
 
 
+def _banco_v16(caminho) -> None:
+    """Cria um banco da versão 16 (a de produção até as fichas diferentes dos dias), com um aluno, um treino e o histórico de um treino feito com a IA."""
+    conn = sqlite3.connect(caminho)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.executescript(SCHEMA_V16.read_text(encoding="utf-8"))
+    conn.execute("INSERT INTO exercicio (id, nome, origem) VALUES (1, 'SUPINO RETO', 'app')")
+    conn.execute(
+        "INSERT INTO aluno (id, nome, cpf, whatsapp, data4u_id, situacao) VALUES (1, 'MARIANA COSTA', '11144477735', '27988887766', 77, 'A')"
+    )
+    conn.execute(
+        "INSERT INTO treino (id, aluno_id, nome, montado_por, inicio, sessoes_por_ficha)"
+        " VALUES (1, 1, 'TREINO ABC', 'ANA', '2026-10-05', 15)"
+    )
+    conn.execute("INSERT INTO ficha (id, treino_id, nome, ordem) VALUES (1, 1, 'A PEITO', 1)")
+    conn.execute("INSERT INTO ficha_item (ficha_id, ordem, exercicio_id, series, repeticoes) VALUES (1, 1, 1, '4', '12')")
+    conn.execute(
+        "INSERT INTO treino_ia (treino_id, objetivo, nivel, dias, minutos, observacoes, justificativa, alertas, ajustes, regras, modelo)"
+        " VALUES (1, 'hipertrofia', 'iniciante', 3, 60, 'dor no joelho', '[\"ponto\"]', '[]', '{}', 'abc123', 'claude-sonnet-5-5')"
+    )
+    conn.commit()
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    conn.close()
+
+
+@pytest.fixture
+def caminho_v16(tmp_path):
+    caminho = tmp_path / "app.db"
+    _banco_v16(caminho)
+    return caminho
+
+
 def _colunas(conn, tabela):
     return {
         linha["name"]: (linha["type"], linha["notnull"], linha["dflt_value"], linha["pk"])
@@ -437,8 +469,8 @@ def test_migra_da_4_para_a_5_sem_perder_nada(caminho_v4):
 
     aplicadas = migrar(conn)
 
-    assert aplicadas == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # a 4 -> 5 e, na sequência, 5 -> 6, 6 -> 7, 7 -> 8 e 8 -> 9
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSAO_DO_BANCO == 16
+    assert aplicadas == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]  # a 4 -> 5 e, na sequência, 5 -> 6, 6 -> 7, 7 -> 8 e 8 -> 9
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSAO_DO_BANCO == 17
     treinos = conn.execute("SELECT id, nome, montado_por, origem, data4u_id FROM treino ORDER BY id").fetchall()
     assert [tuple(t) for t in treinos] == [
         (1, "TREINO ABC", "ANA", "app", None),
@@ -450,10 +482,10 @@ def test_migra_da_4_para_a_5_sem_perder_nada(caminho_v4):
     conn.close()
 
 
-@pytest.mark.parametrize("versao_de_partida", [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+@pytest.mark.parametrize("versao_de_partida", [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
 def test_banco_migrado_fica_igual_a_um_banco_novo(tmp_path, versao_de_partida):
     caminho = tmp_path / "app.db"
-    {4: _banco_v4, 5: _banco_v5, 6: _banco_v6, 7: _banco_v7, 8: _banco_v8, 9: _banco_v9, 10: _banco_v10, 11: _banco_v11, 12: _banco_v12, 13: _banco_v13, 14: _banco_v14, 15: _banco_v15}[versao_de_partida](caminho)
+    {4: _banco_v4, 5: _banco_v5, 6: _banco_v6, 7: _banco_v7, 8: _banco_v8, 9: _banco_v9, 10: _banco_v10, 11: _banco_v11, 12: _banco_v12, 13: _banco_v13, 14: _banco_v14, 15: _banco_v15, 16: _banco_v16}[versao_de_partida](caminho)
     migrado = conectar(caminho)
     migrar(migrado)
     novo = conectar()
@@ -468,7 +500,7 @@ def test_banco_migrado_fica_igual_a_um_banco_novo(tmp_path, versao_de_partida):
 
 def test_rodar_de_novo_nao_faz_nada(caminho_v4):
     conn = conectar(caminho_v4)
-    assert migrar(conn) == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    assert migrar(conn) == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     assert migrar(conn) == []
     criar_tabelas(conn)  # também não pode dar erro num banco já atual
     conn.close()
@@ -479,7 +511,7 @@ def test_criar_tabelas_atualiza_banco_antigo_e_completa_o_resto(caminho_v4):
 
     criar_tabelas(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert "origem" in _colunas(conn, "treino")
     assert "inicio" in _colunas(conn, "treino")
     conn.close()
@@ -489,7 +521,7 @@ def test_banco_novo_nao_e_migrado():
     conn = conectar()
     assert migrar(conn) == []  # sem tabelas: nada a migrar
     criar_tabelas(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     conn.close()
 
 
@@ -497,7 +529,7 @@ def test_banco_na_memoria_migra_sem_copia():
     conn = conectar()
     conn.executescript(SCHEMA_V4.read_text(encoding="utf-8"))
 
-    assert migrar(conn) == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # não há arquivo para copiar, e não pode dar erro por isso
+    assert migrar(conn) == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]  # não há arquivo para copiar, e não pode dar erro por isso
     conn.close()
 
 
@@ -522,7 +554,7 @@ def test_tira_copia_de_seguranca_antes_de_migrar(caminho_v4):
 def test_copia_de_seguranca_da_versao_5_guarda_o_banco_como_era(caminho_v5):
     conn = conectar(caminho_v5)
 
-    assert migrar(conn) == [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    assert migrar(conn) == [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     conn.close()
 
     copias = list((caminho_v5.parent / PASTA_ANTES_DA_MIGRACAO).glob("app-*.db"))
@@ -561,7 +593,7 @@ def test_copia_que_outro_processo_acabou_de_tirar_no_mesmo_segundo_nao_impede_a_
     monkeypatch.setattr(db, "fazer_backup", ja_existe)
     conn = conectar(caminho_v4)
 
-    assert migrar(conn) == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # migrou tudo
+    assert migrar(conn) == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]  # migrou tudo
 
     assert chamadas == [1]  # tentou a cópia uma vez só (não repete a cada passo)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSAO_DO_BANCO
@@ -626,9 +658,9 @@ def test_dois_processos_subindo_juntos_migram_uma_vez_so(caminho_v4):
 
     assert erros == []
     # cada passo roda uma vez só; quem chega primeiro faz o que dá, o outro faz o resto (ou nada)
-    assert sorted(a for r in resultados for a in r) == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    assert sorted(a for r in resultados for a in r) == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     conn = conectar(caminho_v4)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     conn.close()
 
 
@@ -639,7 +671,7 @@ def test_app_atualiza_banco_antigo_ao_subir(caminho_v4):
     criar_app(caminho_v4)
 
     conn = conectar(caminho_v4)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     conn.close()
 
 
@@ -815,8 +847,8 @@ def test_5_para_6_banco_sem_nenhum_treino(tmp_path):
     vazio.close()
     conn = conectar(caminho)
 
-    assert migrar(conn) == [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert migrar(conn) == [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     conn.close()
 
 
@@ -887,9 +919,9 @@ def test_sessao_exige_treino_que_existe_e_ficha_a_partir_de_1(conn_nova):
 def test_6_para_7_nao_perde_nada_e_a_tabela_dos_padroes_nasce_vazia(caminho_v6):
     conn = conectar(caminho_v6)
 
-    assert migrar(conn) == [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # a 6 -> 7 e, na sequência, 7 -> 8 e 8 -> 9
+    assert migrar(conn) == [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]  # a 6 -> 7 e, na sequência, 7 -> 8 e 8 -> 9
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM modelo_treino").fetchone()[0] == 0
     assert conn.execute("SELECT nome, ativo, inicio, sessoes_por_ficha FROM treino").fetchone()[:] == ("TREINO ABC", 1, "2026-10-05", 15)
     assert conn.execute("SELECT COUNT(*) FROM ficha_item").fetchone()[0] == 1
@@ -939,9 +971,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_6_sobe_de_novo_sem_perder_os_padr
     conn.execute("PRAGMA user_version = 6")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)  # o nome da cópia leva só o segundo: aqui não importa
 
-    assert migrar(conn) == [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # a tabela já existe: não pode falhar
+    assert migrar(conn) == [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]  # a tabela já existe: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT nome FROM modelo_treino").fetchall()[0][0] == "BÁSICO"
     conn.close()
 
@@ -973,9 +1005,9 @@ def test_nome_do_modelo_nao_repete_nem_com_outra_caixa(conn_nova):
 def test_7_para_8_nao_perde_nada_e_nascem_as_cinco_filas(caminho_v7):
     conn = conectar(caminho_v7)
 
-    assert migrar(conn) == [7, 8, 9, 10, 11, 12, 13, 14, 15]
+    assert migrar(conn) == [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     filas = [tuple(f) for f in conn.execute("SELECT id, nome, exige_liberacao, ordem FROM fila ORDER BY ordem")]
     assert filas == [
         (1, "Homem", 0, 1),
@@ -1037,9 +1069,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_7_sobe_de_novo_sem_perder_as_fila
     conn.execute("PRAGMA user_version = 7")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)  # o nome da cópia leva só o segundo: aqui não importa
 
-    assert migrar(conn) == [7, 8, 9, 10, 11, 12, 13, 14, 15]  # as tabelas e as colunas já existem: não pode falhar
+    assert migrar(conn) == [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]  # as tabelas e as colunas já existem: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT fila_id, numero FROM modelo_treino").fetchone()[:] == (2, 3)
     assert conn.execute("SELECT fila_id, numero_atual FROM aluno_fila").fetchone()[:] == (2, 3)
     assert conn.execute("SELECT COUNT(*) FROM fila").fetchone()[0] == 5
@@ -1090,9 +1122,9 @@ def test_aluno_fila_regras_do_banco(conn_nova):
 def test_8_para_9_nao_perde_nada_e_nascem_as_tabelas_da_senha_vazias(caminho_v8):
     conn = conectar(caminho_v8)
 
-    assert migrar(conn) == [8, 9, 10, 11, 12, 13, 14, 15]
+    assert migrar(conn) == [8, 9, 10, 11, 12, 13, 14, 15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM senha_administrador").fetchone()[0] == 0  # sem senha: ações protegidas fechadas
     assert conn.execute("SELECT COUNT(*) FROM senha_administrador_falha").fetchone()[0] == 0
     assert conn.execute("SELECT nome, ativo, sessoes_por_ficha FROM treino").fetchone()[:] == ("TREINO ABC", 1, 15)
@@ -1144,9 +1176,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_8_sobe_de_novo_e_a_senha_continua
     conn.execute("PRAGMA user_version = 8")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
 
-    assert migrar(conn) == [8, 9, 10, 11, 12, 13, 14, 15]  # as tabelas já existem: não pode falhar
+    assert migrar(conn) == [8, 9, 10, 11, 12, 13, 14, 15, 16]  # as tabelas já existem: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     administrador.conferir_senha(conn, "senha-de-teste-1")  # a senha que já estava lá continua valendo
     conn.close()
 
@@ -1154,9 +1186,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_8_sobe_de_novo_e_a_senha_continua
 def test_9_para_10_nao_perde_nada_e_nasce_a_tabela_dos_pedidos_de_ia_vazia(caminho_v9):
     conn = conectar(caminho_v9)
 
-    assert migrar(conn) == [9, 10, 11, 12, 13, 14, 15]
+    assert migrar(conn) == [9, 10, 11, 12, 13, 14, 15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM ia_pedido").fetchone()[0] == 0
     assert conn.execute("SELECT nome, ativo, sessoes_por_ficha FROM treino").fetchone()[:] == ("TREINO ABC", 1, 15)
     assert conn.execute("SELECT nome, fila_id, numero FROM modelo_treino").fetchone()[:] == ("BÁSICO", 2, 1)
@@ -1208,9 +1240,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_9_sobe_de_novo_e_os_pedidos_conti
     conn.execute("PRAGMA user_version = 9")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
 
-    assert migrar(conn) == [9, 10, 11, 12, 13, 14, 15]  # a tabela já existe: não pode falhar
+    assert migrar(conn) == [9, 10, 11, 12, 13, 14, 15, 16]  # a tabela já existe: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM ia_pedido").fetchone()[0] == 1  # o pedido que já estava lá continua
     conn.close()
 
@@ -1226,9 +1258,9 @@ def test_pedido_de_ia_confere_dia_situacao_e_tokens(conn_nova):
 def test_10_para_11_nao_perde_nada_e_nasce_a_tabela_do_registro_vazia(caminho_v10):
     conn = conectar(caminho_v10)
 
-    assert migrar(conn) == [10, 11, 12, 13, 14, 15]
+    assert migrar(conn) == [10, 11, 12, 13, 14, 15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM importacao").fetchone()[0] == 0
     assert conn.execute("SELECT nome, ativo, sessoes_por_ficha FROM treino").fetchone()[:] == ("TREINO ABC", 1, 15)
     assert conn.execute("SELECT nome, fila_id, numero FROM modelo_treino").fetchone()[:] == ("BÁSICO", 2, 1)
@@ -1281,9 +1313,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_10_sobe_de_novo_e_o_registro_cont
     conn.execute("PRAGMA user_version = 10")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
 
-    assert migrar(conn) == [10, 11, 12, 13, 14, 15]  # a tabela já existe: não pode falhar
+    assert migrar(conn) == [10, 11, 12, 13, 14, 15, 16]  # a tabela já existe: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT extraido_em FROM importacao WHERE tipo = 'alunos'").fetchone()[0] == "2026-10-14 08:00:17"
     conn.close()
 
@@ -1304,9 +1336,9 @@ def test_registro_da_importacao_confere_tipo_e_formato_da_data(conn_nova):
 def test_11_para_12_nao_perde_nada_e_nascem_as_tabelas_do_login_do_aluno_vazias(caminho_v11):
     conn = conectar(caminho_v11)
 
-    assert migrar(conn) == [11, 12, 13, 14, 15]
+    assert migrar(conn) == [11, 12, 13, 14, 15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     for tabela in ("aluno_senha", "aluno_codigo", "aluno_sessao", "aluno_evento"):
         assert conn.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0] == 0, tabela
     assert conn.execute("SELECT nome, cpf, whatsapp, situacao FROM aluno").fetchone()[:] == (
@@ -1361,9 +1393,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_11_sobe_de_novo_e_a_senha_do_alun
     conn.execute("PRAGMA user_version = 11")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
 
-    assert migrar(conn) == [11, 12, 13, 14, 15]  # as tabelas já existem: não pode falhar
+    assert migrar(conn) == [11, 12, 13, 14, 15, 16]  # as tabelas já existem: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT senha_hash FROM aluno_senha WHERE aluno_id = 1").fetchone()[0] == "scrypt$y"
     conn.close()
 
@@ -1395,9 +1427,9 @@ def test_login_do_aluno_regras_do_banco(conn_nova):
 def test_12_para_13_nao_perde_nada_e_nasce_a_tabela_dos_comentarios_vazia(caminho_v12):
     conn = conectar(caminho_v12)
 
-    assert migrar(conn) == [12, 13, 14, 15]
+    assert migrar(conn) == [12, 13, 14, 15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM comentario").fetchone()[0] == 0
     assert conn.execute("SELECT nome, cpf, whatsapp, situacao FROM aluno").fetchone()[:] == (
         "MARIANA COSTA", "11144477735", "27988887766", "A",
@@ -1455,9 +1487,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_12_sobe_de_novo_e_os_comentarios_
     conn.execute("PRAGMA user_version = 12")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
 
-    assert migrar(conn) == [12, 13, 14, 15]  # a tabela já existe: não pode falhar
+    assert migrar(conn) == [12, 13, 14, 15, 16]  # a tabela já existe: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT texto FROM comentario").fetchone()[0] == "Está leve demais"
     conn.close()
 
@@ -1514,9 +1546,9 @@ def test_comentario_regras_do_banco(conn_nova):
 def test_13_para_14_nao_perde_nada_e_nascem_a_coluna_do_esforco_e_a_tabela_das_cargas_vazias(caminho_v13):
     conn = conectar(caminho_v13)
 
-    assert migrar(conn) == [13, 14, 15]
+    assert migrar(conn) == [13, 14, 15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM execucao").fetchone()[0] == 0
     # a sessão que já existia continua, agora com o esforço vazio
     assert conn.execute("SELECT ficha_ordem, feita_em, esforco FROM sessao").fetchone()[:] == (1, "2026-10-15 20:00:00", None)
@@ -1574,9 +1606,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_13_sobe_de_novo_e_o_que_o_aluno_a
     conn.execute("PRAGMA user_version = 13")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
 
-    assert migrar(conn) == [13, 14, 15]  # a coluna e a tabela já existem: não pode falhar
+    assert migrar(conn) == [13, 14, 15, 16]  # a coluna e a tabela já existem: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT esforco FROM sessao").fetchone()[0] == 3
     assert conn.execute("SELECT carga FROM execucao").fetchone()[0] == "20"
     conn.close()
@@ -1641,9 +1673,9 @@ def test_execucao_regras_do_banco(conn_nova):
 def test_14_para_15_nao_perde_nada_e_nasce_a_tabela_do_retorno_vazia(caminho_v14):
     conn = conectar(caminho_v14)
 
-    assert migrar(conn) == [14, 15]
+    assert migrar(conn) == [14, 15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM ia_retorno").fetchone()[0] == 0
     assert conn.execute("SELECT nome FROM treino").fetchone()[0] == "TREINO ABC"
     assert conn.execute("SELECT carga FROM execucao").fetchone()[0] == "20"
@@ -1698,9 +1730,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_14_sobe_de_novo_e_o_retorno_conti
     conn.execute("PRAGMA user_version = 14")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
 
-    assert migrar(conn) == [14, 15]  # a tabela já existe: não pode falhar
+    assert migrar(conn) == [14, 15, 16]  # a tabela já existe: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT nota FROM ia_retorno").fetchone()[0] == "serviu"
     conn.close()
 
@@ -1775,9 +1807,9 @@ def test_ia_retorno_nao_tem_como_chegar_ao_aluno_nem_ao_professor(conn_nova):
 def test_15_para_16_nao_perde_nada_e_nasce_a_tabela_do_historico_vazia(caminho_v15):
     conn = conectar(caminho_v15)
 
-    assert migrar(conn) == [15]
+    assert migrar(conn) == [15, 16]
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT COUNT(*) FROM treino_ia").fetchone()[0] == 0
     assert conn.execute("SELECT nome FROM treino").fetchone()[0] == "TREINO ABC"
     assert conn.execute("SELECT nota FROM ia_retorno").fetchone()[0] == "serviu"
@@ -1829,9 +1861,9 @@ def test_banco_com_o_numero_baixado_a_mao_para_15_sobe_de_novo_e_o_historico_con
     conn.execute("PRAGMA user_version = 15")
     monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
 
-    assert migrar(conn) == [15]  # a tabela já existe: não pode falhar
+    assert migrar(conn) == [15, 16]  # a tabela já existe: não pode falhar
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     assert conn.execute("SELECT observacoes FROM treino_ia").fetchone()[0] == "dor no joelho"
     conn.close()
 
@@ -1849,4 +1881,83 @@ def test_o_historico_some_junto_com_o_treino(caminho_v15):
     conn.commit()
 
     assert conn.execute("SELECT COUNT(*) FROM treino_ia").fetchone()[0] == 0
+    conn.close()
+
+
+# ------------------------------------------------------------------ 16 -> 17 (fichas diferentes dos dias)
+
+
+def test_16_para_17_nao_perde_nada_e_nasce_a_coluna_vazia(caminho_v16):
+    conn = conectar(caminho_v16)
+
+    assert migrar(conn) == [16]
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
+    linha = conn.execute("SELECT observacoes, justificativa, fichas_pedidas FROM treino_ia").fetchone()
+    assert linha["observacoes"] == "dor no joelho" and linha["justificativa"] == '["ponto"]'
+    assert linha["fichas_pedidas"] is None  # treino de antes: o número de fichas era sempre igual aos dias
+    assert conn.execute("SELECT nome FROM treino").fetchone()[0] == "TREINO ABC"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    conn.close()
+
+
+def test_copia_de_seguranca_da_versao_16_guarda_o_banco_como_era(caminho_v16):
+    conn = conectar(caminho_v16)
+    migrar(conn)
+    conn.close()
+
+    copias = sorted((caminho_v16.parent / PASTA_ANTES_DA_MIGRACAO).glob("*.db"))
+    assert len(copias) == 1
+    copia = sqlite3.connect(copias[0])
+    assert copia.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert "fichas_pedidas" not in {linha[1] for linha in copia.execute("PRAGMA table_info(treino_ia)")}
+    assert copia.execute("SELECT observacoes FROM treino_ia").fetchone()[0] == "dor no joelho"
+    copia.close()
+
+
+def test_migracao_16_para_17_que_quebra_no_fim_nao_deixa_rastro(caminho_v16, monkeypatch):
+    def quebra(conn):
+        db._de_16_para_17(conn)
+        raise RuntimeError("falha no fim")
+
+    monkeypatch.setitem(db.MIGRACOES, 16, quebra)
+    conn = conectar(caminho_v16)
+
+    with pytest.raises(RuntimeError, match="falha no fim"):
+        migrar(conn)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert "fichas_pedidas" not in {linha[1] for linha in conn.execute("PRAGMA table_info(treino_ia)")}
+    assert not conn.in_transaction
+    conn.close()
+
+
+def test_banco_com_o_numero_baixado_a_mao_para_16_sobe_de_novo_e_as_fichas_pedidas_continuam_la(caminho_v16, monkeypatch):
+    # Para abrir o banco com o app antigo (que ignora o que é novo) alguém pode baixar o número da versão.
+    conn = conectar(caminho_v16)
+    migrar(conn)
+    conn.execute("UPDATE treino_ia SET fichas_pedidas = 3")
+    conn.commit()
+    conn.execute("PRAGMA user_version = 16")
+    monkeypatch.setattr(db, "fazer_backup", lambda *_a, **_k: None)
+
+    assert migrar(conn) == [16]  # a coluna já existe: não pode falhar
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
+    assert conn.execute("SELECT fichas_pedidas FROM treino_ia").fetchone()[0] == 3
+    conn.close()
+
+
+@pytest.mark.parametrize("valor, aceito", [(None, True), (0, True), (2, True), (6, True), (-1, False), (7, False)])
+def test_fichas_pedidas_so_aceita_vazio_ou_de_0_a_6(caminho_v16, valor, aceito):
+    conn = conectar(caminho_v16)
+    migrar(conn)
+
+    if aceito:
+        conn.execute("UPDATE treino_ia SET fichas_pedidas = ?", (valor,))
+        assert conn.execute("SELECT fichas_pedidas FROM treino_ia").fetchone()[0] == valor
+    else:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute("UPDATE treino_ia SET fichas_pedidas = ?", (valor,))
     conn.close()

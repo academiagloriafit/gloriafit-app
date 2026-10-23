@@ -19,12 +19,16 @@ const NUMERO_LONGO = /\d(?:[\s.\-()/]*\d){7,}/;
 const COMPLEMENTO_DO_NUMERO_LONGO = "números de CPF, telefone ou documento, e datas completas como 15/03/2024 (escreva só o mês e o ano, ou a idade): a IA não precisa deles.";
 
 // Confere o que o professor escolheu. Devolve [{ campo (id do campo na tela), mensagem }], vazio se está tudo certo.
-export function validarPedido({ objetivo = "", nivel = "", dias = "", minutos = "", observacoes = "" } = {}) {
+export function validarPedido({ objetivo = "", nivel = "", dias = "", minutos = "", fichas = "", observacoes = "" } = {}) {
   const problemas = [];
   if (!objetivo) problemas.push({ campo: "ia-objetivo", mensagem: "Escolha o objetivo do aluno." });
   if (!nivel) problemas.push({ campo: "ia-nivel", mensagem: "Escolha o nível do aluno." });
   if (!dias) problemas.push({ campo: "ia-dias", mensagem: "Escolha quantos dias por semana o aluno treina." });
   if (!minutos) problemas.push({ campo: "ia-minutos", mensagem: "Escolha o tempo de cada treino." });
+  // Fichas diferentes é opcional ("" = o robô decide); escolhidas, não podem passar dos dias (o servidor confere de novo).
+  if (fichas && dias && Number(fichas) > Number(dias)) {
+    problemas.push({ campo: "ia-fichas", mensagem: "As fichas diferentes não podem ser mais do que os dias por semana." });
+  }
   const texto = limparEspacos(observacoes);
   if (tamanho(texto) > LIMITE_DAS_OBSERVACOES) {
     problemas.push({
@@ -60,15 +64,17 @@ export function validarRespostas(respostas = []) {
   return problemas;
 }
 
-// O corpo do pedido ao servidor (POST /api/alunos/<id>/treino-ia). Dias e minutos vão como número.
+// O corpo do pedido ao servidor (POST /api/alunos/<id>/treino-ia). Dias e minutos vão como número; `fichas_diferentes` vai
+// como número ou null (null = o robô decide).
 // `perguntar`: a IA pode fazer perguntas antes de montar. `rodadas`: o que já foi perguntado e respondido,
 // [{ perguntas: [texto], respostas: [texto] }] (o servidor não guarda a conversa: o navegador manda tudo de novo a cada chamada).
-export function montarPedido({ objetivo, nivel, dias, minutos, observacoes = "" }, { perguntar = false, rodadas = [] } = {}) {
+export function montarPedido({ objetivo, nivel, dias, minutos, fichas = "", observacoes = "" }, { perguntar = false, rodadas = [] } = {}) {
   return {
     objetivo,
     nivel,
     dias: Number(dias),
     minutos: Number(minutos),
+    fichas_diferentes: fichas ? Number(fichas) : null,
     observacoes: limparEspacos(observacoes),
     perguntar: perguntar === true,
     rodadas: rodadas.map((r) => ({

@@ -39,6 +39,18 @@ describe("validarPedido", () => {
     expect(problemas.every((p) => typeof p.mensagem === "string" && p.mensagem.endsWith("."))).toBe(true);
   });
 
+  it("fichas diferentes é opcional: vazio vale, e escolhida não pode passar dos dias", () => {
+    expect(validarPedido({ ...COMPLETO, dias: "5", fichas: "" })).toEqual([]);
+    expect(validarPedido({ ...COMPLETO, dias: "5", fichas: "3" })).toEqual([]);
+    expect(validarPedido({ ...COMPLETO, dias: "3", fichas: "3" })).toEqual([]);
+
+    const problemas = validarPedido({ ...COMPLETO, dias: "3", fichas: "4" });
+
+    expect(problemas).toHaveLength(1);
+    expect(problemas[0].campo).toBe("ia-fichas");
+    expect(problemas[0].mensagem).toBe("As fichas diferentes não podem ser mais do que os dias por semana.");
+  });
+
   it("sem argumento nenhum também não quebra", () => {
     expect(validarPedido()).toHaveLength(4);
   });
@@ -113,10 +125,17 @@ describe("montarPedido", () => {
       nivel: "iniciante",
       dias: 3,
       minutos: 60,
+      fichas_diferentes: null,
       observacoes: "dor no joelho",
       perguntar: false,
       rodadas: [],
     });
+  });
+
+  it("fichas diferentes vai como número quando o professor escolheu e como null quando o robô decide", () => {
+    expect(montarPedido({ ...COMPLETO, fichas: "3" }).fichas_diferentes).toBe(3);
+    expect(montarPedido({ ...COMPLETO, fichas: "" }).fichas_diferentes).toBeNull();
+    expect(montarPedido(COMPLETO).fichas_diferentes).toBeNull();
   });
 
   it("por padrão a IA não pergunta e não leva conversa nenhuma", () => {

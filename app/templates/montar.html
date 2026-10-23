@@ -114,6 +114,14 @@
                 {% for n in ia_minutos %}<option value="{{ n }}">{{ n }} minutos</option>{% endfor %}
               </select>
             </div>
+            <div class="campo campo-largo campo-fichas">
+              <label for="ia-fichas">Fichas diferentes <span class="opcional">(opcional)</span></label>
+              <select id="ia-fichas" aria-describedby="dica-ia-fichas">
+                <option value="">O robô decide</option>
+                {% for n in ia_fichas %}<option value="{{ n }}">{{ n }} fichas diferentes</option>{% endfor %}
+              </select>
+              <p id="dica-ia-fichas" class="dica">Quantos treinos diferentes (A, B, C…) o aluno terá. Com 5 dias e 3 fichas, a semana roda A-B-C-A-B. Em "O robô decide", ele mantém a divisão do treino anterior do aluno; sem treino anterior, escolhe pelo nível, nunca mais fichas do que dias.</p>
+            </div>
             <div class="campo campo-largo">
               <label for="ia-observacoes">Observações sobre o aluno <span class="opcional">(opcional)</span></label>
               <textarea id="ia-observacoes" rows="8" maxlength="{{ ia_limite_das_observacoes }}" aria-describedby="dica-ia-observacoes" placeholder="Ex.: 35 anos, 1,75 m, 82 kg. Trabalha sentado o dia todo. Dor no joelho direito ao agachar. Treinou por 2 anos e parou há 1 ano. Não gosta de esteira; prefere máquinas."></textarea>

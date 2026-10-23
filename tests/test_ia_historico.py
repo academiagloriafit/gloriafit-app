@@ -316,6 +316,7 @@ def test_o_pedido_guarda_o_que_o_robo_recebeu_inclusive_as_rodadas(cliente, cami
     assert historico == {
         "observacoes": OBSERVACOES,
         "conversa": [[{"pergunta": "Já treinou antes?", "resposta": ""}]],
+        "fichas_pedidas": 0,  # 0 = o professor deixou o robô decidir quantas fichas
         "gravado": False,
     }
 
@@ -423,6 +424,53 @@ def test_sem_observacoes_a_ficha_diz_que_nenhuma_foi_escrita(cliente):
 
     assert "Nenhuma observação foi escrita para o robô." in pagina
     assert "Perguntas do robô e respostas do professor" not in pagina
+
+
+def test_fichas_diferentes_que_o_professor_escolheu_ficam_no_historico_e_aparecem_na_ficha(cliente, caminho):
+    _salvar(cliente, _pedir(cliente, dias=5, fichas_diferentes=2))
+
+    [linha] = _linhas(caminho)
+    assert linha["fichas_pedidas"] == 2 and linha["dias"] == 5
+    pagina = _ficha(cliente)
+    assert "Fichas diferentes" in pagina and "2 (escolha do professor)" in pagina
+
+
+def test_sem_escolher_as_fichas_a_ficha_diz_que_o_robo_decidiu(cliente, caminho):
+    _salvar(cliente, _pedir(cliente))
+
+    assert _linhas(caminho)[0]["fichas_pedidas"] == 0
+    pagina = _ficha(cliente)
+    assert "Fichas diferentes" in pagina and "O robô decidiu" in pagina
+
+
+def test_historico_de_antes_das_fichas_diferentes_nao_mostra_essa_linha(cliente, caminho):
+    _salvar(cliente, _pedir(cliente))
+    c = conectar(caminho)
+    c.execute("UPDATE treino_ia SET fichas_pedidas = NULL")  # como ficaram os treinos feitos antes da versão 17
+    c.commit()
+    c.close()
+
+    pagina = _ficha(cliente)
+
+    assert "Ver por que este treino foi montado assim" in pagina
+    assert "Fichas diferentes" not in pagina and "O robô decidiu" not in pagina
+
+
+@pytest.mark.parametrize("estranho", [99, -1, True, "3", 2.5, None])
+def test_fichas_pedidas_estranhas_no_pedido_guardado_viram_vazio_e_nao_estragam_o_salvar(cliente, caminho, estranho):
+    pedido_id = _pedir(cliente)
+    c = conectar(caminho)
+    resultado = json.loads(c.execute("SELECT resultado FROM ia_pedido WHERE id = ?", (pedido_id,)).fetchone()["resultado"])
+    resultado["_historico"]["fichas_pedidas"] = estranho
+    c.execute("UPDATE ia_pedido SET resultado = ? WHERE id = ?", (json.dumps(resultado), pedido_id))
+    c.commit()
+    c.close()
+
+    assert _salvar(cliente, pedido_id).status_code == 201
+
+    [linha] = _linhas(caminho)
+    assert linha["fichas_pedidas"] is None
+    assert "Fichas diferentes" not in _ficha(cliente)
 
 
 def test_treino_salvo_sem_mudar_nada_diz_que_foi_como_o_robo_montou(cliente):

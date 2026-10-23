@@ -83,10 +83,12 @@ def registrar(conn: sqlite3.Connection, aluno_id: int, pedido_id: int, treino_id
         resumo = resultado.get("resumo")
         justificativa = _lista_de_textos(resultado.get("justificativa")) or ([resumo] if isinstance(resumo, str) and resumo.strip() else [])
         conversa = _conversa_limpa(historico.get("conversa"))
+        fichas_pedidas = historico.get("fichas_pedidas")
+        fichas_pedidas = fichas_pedidas if isinstance(fichas_pedidas, int) and not isinstance(fichas_pedidas, bool) and 0 <= fichas_pedidas <= 6 else None
         observacoes = historico.get("observacoes") if isinstance(historico.get("observacoes"), str) else ""
         conn.execute(
             "INSERT INTO treino_ia (treino_id, objetivo, nivel, dias, minutos, fila, observacoes, conversa, justificativa, alertas, ajustes,"
-            " regras, modelo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " regras, modelo, fichas_pedidas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 treino_id,
                 retorno["objetivo"],
@@ -101,6 +103,7 @@ def registrar(conn: sqlite3.Connection, aluno_id: int, pedido_id: int, treino_id
                 json.dumps(comparar(resultado["treino"].get("fichas"), treino["fichas"]), ensure_ascii=False),
                 retorno["regras"],
                 retorno["modelo"],
+                fichas_pedidas,
             ),
         )
         historico["gravado"] = True
@@ -187,6 +190,8 @@ def _para_a_tela(linha: sqlite3.Row) -> dict:
         ("Dias de treino por semana", str(linha["dias"])),
         ("Tempo de cada treino", f"{linha['minutos']} minutos"),
     ]
+    if linha["fichas_pedidas"] is not None:  # NULL = treino de antes da versão 17 (o número de fichas era sempre igual aos dias): sem linha
+        pedido.append(("Fichas diferentes", f"{linha['fichas_pedidas']} (escolha do professor)" if linha["fichas_pedidas"] else "O robô decidiu"))
     if linha["fila"]:
         pedido.append(("Fila do aluno", linha["fila"]))
     return {

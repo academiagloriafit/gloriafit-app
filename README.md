@@ -81,7 +81,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 
 | Arquivo | Para quê |
 |---|---|
-| `app/schema.sql` | Desenho das tabelas (versão 16): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha, com a nota de esforço `esforco` quando o aluno escolheu uma), `execucao` (o que o aluno marcou como feito e a carga que anotou em cada exercício, por dia), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) o retorno dos professores sobre o rascunho da IA (`ia_retorno`, sem aluno nem professor), o histórico do treino feito com a IA (`treino_ia`, LIGADO ao treino: o que o professor escreveu para o robô e a justificativa do robô) `importacao` (de quando é a última cópia do Data4U aplicada) o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`) e os comentários do aluno (`comentario`). Não há tabela de professores: o nome é digitado a cada treino |
+| `app/schema.sql` | Desenho das tabelas (versão 17): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha, com a nota de esforço `esforco` quando o aluno escolheu uma), `execucao` (o que o aluno marcou como feito e a carga que anotou em cada exercício, por dia), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) o retorno dos professores sobre o rascunho da IA (`ia_retorno`, sem aluno nem professor), o histórico do treino feito com a IA (`treino_ia`, LIGADO ao treino: o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô) `importacao` (de quando é a última cópia do Data4U aplicada) o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`) e os comentários do aluno (`comentario`). Não há tabela de professores: o nome é digitado a cada treino |
 | `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco de qualquer versão de 4 a 14 até a 15 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
 | `app/importar_exercicios.py` | Lê a planilha `dados/quadro_exercicios_v2.xlsx` e grava no banco |
 | `app/texto.py` | `normalizar`: minúsculas e sem acento ("Bíceps" → "biceps") |
@@ -433,7 +433,7 @@ conferido pelo professor) está na seção "Treino sob medida pelo Claude: como 
 ## Treino sob medida pelo Claude: como funciona
 
 Fase 3 do "Importar treino" (pedido do Thiago de 09/10/2026; no ar desde 14/10/2026, banco versão 10). Na tela **Lançar treino** há o cartão
-**"Treino sob medida"**: o professor responde objetivo, nível, dias por semana e tempo por treino, pode escrever observações (idade, altura,
+**"Treino sob medida"**: o professor responde objetivo, nível, dias por semana, tempo por treino e (opcional) quantas fichas diferentes, pode escrever observações (idade, altura,
 peso, rotina, lesão, preferência...) e clica em **Gerar rascunho**. O app pede ao Claude (API da Anthropic) um **rascunho** feito só com exercícios da academia e o
 coloca na tela de montar, como um treino importado. **Nada é salvo para o aluno:** o professor confere, ajusta e clica em **Salvar treino**,
 como sempre.
@@ -576,6 +576,35 @@ comorbidades, o que o aluno quer) sumia depois de o rascunho ser montado. Agora 
   errada ou genérica, é uma ajuda para o professor ler, não uma garantia.
 - **Voltar atrás:** a imagem anterior (`d167881`, que conhece até a versão 15): app parado, `PRAGMA user_version = 15` (a tabela `treino_ia` extra fica
   parada e não atrapalha), ou restaurar a cópia feita antes da migração (`/dados/antes-da-migracao`).
+
+### Fichas diferentes dos dias por semana (23/10/2026)
+
+Pedido do Thiago (23/10, 19h11): "se o aluno treina 5 vezes na semana, por que montar 5 treinos diferentes?" Antes, o robô recebia "5 dias (então 5 fichas)" e
+entregava A a E. Na academia o normal é **repetir** as fichas (5 dias com 3 fichas = A-B-C-A-B): o aluno grava os exercícios e compara a carga de um dia com a do
+outro. Dados da cópia do Data4U (07/10): 2 fichas em 53% dos treinos, 3 fichas em 36%, 4 em 7% e 5 em 1%.
+
+- **Regra 3 de `REGRAS_DA_CASA` ("NÚMERO DE FICHAS")**, nesta ordem: (a) se o pedido traz "Fichas diferentes: N", exatamente N; (b) se o aluno tem **treino anterior**,
+  o MESMO número de fichas e a mesma lógica de divisão (quem fazia ABC continua em ABC, evoluindo os exercícios pela regra 12), mesmo que o pedido tenha mais dias;
+  só muda se as observações ou as respostas do professor pedirem; (c) sem treino anterior: 2 dias = 2 fichas, 3 dias = 3 fichas, de 4 a 6 dias iniciante 2 ou 3
+  fichas, intermediário 3 ou 4 e avançado 4 ou 5, repetindo as fichas nos dias que sobram. **Nunca mais fichas do que dias.**
+  A regra 16 (justificativa) manda dizer quantas fichas e **como a semana roda** (ex.: "A-B-C-A-B").
+- **Campo novo no cartão: "Fichas diferentes (opcional)"** (`#ia-fichas`, logo depois de "Tempo de cada treino"): "O robô decide" (padrão) ou 2 a 6 fichas. O navegador
+  não deixa escolher mais fichas do que dias, e o servidor confere de novo (`conferir_pedido`: o campo `fichas_diferentes` é opcional; `null`/ausente = o robô
+  decide; número de 2 até os dias, senão 400 com o motivo). Quem não conhece a função continua funcionando: um navegador antigo não manda o campo.
+- **Avisos ao professor** (`conferir_rascunho`): pediu N fichas e veio outro número; veio com mais fichas do que dias; veio com **uma ficha só** (rede de
+  segurança: com o robô decidindo, menos fichas do que dias é normal, mas uma só quase sempre é treino cortado); fichas descartadas na conferência.
+  O alerta antigo "pediu 4 dias e veio 1 ficha" não existe mais, porque dias e fichas deixaram de ser a mesma coisa.
+- **Como o app gira as fichas não mudou:** o aluno faz a "próxima" ficha da sequência (`aluno_treino.ficha_do_dia`), não a do dia da semana; então 5 dias com 3 fichas
+  funciona sem mudança nenhuma na tela do aluno.
+- **Histórico (banco versão 17, `_de_16_para_17`, com cópia de segurança antes):** `treino_ia` ganhou a coluna `fichas_pedidas` (0 = o professor deixou o robô decidir;
+  2 a 6 = ele escolheu; vazio = treino feito antes desta função). A ficha mostra a linha "Fichas diferentes: O robô decidiu / N (escolha do professor)"; para treinos
+  antigos a linha não aparece. A migração só acrescenta uma coluna vazia (confere `PRAGMA table_info` antes, como a 13 → 14).
+- **`VERSAO_DAS_REGRAS` mudou** (`633f4ba4`): o relatório mensal do retorno separa antes e depois sozinho.
+- **Comando de teste:** `python -m app.ia_treino diagnosticar --dias 5 --nivel intermediario --fichas 3` (e `--aluno N` para mandar o treino anterior dele).
+- **Limite honesto:** o robô pode não obedecer à regra 3 em algum caso (é texto, não código). O app avisa só os casos que dá para medir (quantidade de fichas
+  diferente da pedida, mais fichas que dias, uma ficha só). Se um professor achar que o robô errou a divisão, a avaliação do rascunho ("Serviu com ajustes" ou "Não serviu", com o motivo) já registra isso.
+- **Voltar atrás:** imagem anterior `d5c940f4127069d9588a9b05355c0aabacb3b417` (conhece até a versão 16): trocar o SHA no YAML e, com o app parado, `PRAGMA user_version = 16`
+  (a coluna extra fica parada e não atrapalha), ou restaurar a cópia de `/dados/antes-da-migracao`.
 
 ## Editar treino: como funciona
 

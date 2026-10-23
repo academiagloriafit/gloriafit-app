@@ -142,6 +142,52 @@ def test_campo_fora_da_lista_e_recusado_com_o_motivo_em_portugues(conn, mudanca)
     assert erro.value.problemas and all(isinstance(p, str) and p.endswith(".") for p in erro.value.problemas)
 
 
+def test_pedido_sem_fichas_diferentes_deixa_o_robo_decidir(conn):
+    assert ia_treino.conferir_pedido(conn, 1, _dados()).fichas is None
+    assert ia_treino.conferir_pedido(conn, 1, _dados(fichas_diferentes=None)).fichas is None  # a tela manda null quando o professor não escolhe
+
+
+@pytest.mark.parametrize("dias, fichas", [(3, 3), (5, 3), (6, 2), (6, 6), (2, 2)])
+def test_fichas_diferentes_escolhidas_entram_no_pedido(conn, dias, fichas):
+    assert ia_treino.conferir_pedido(conn, 1, _dados(dias=dias, fichas_diferentes=fichas)).fichas == fichas
+
+
+@pytest.mark.parametrize("fichas", [1, 0, -2, 7, "3", 3.0, True, [3]])
+def test_fichas_diferentes_fora_da_regra_sao_recusadas_com_o_motivo(conn, fichas):
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(dias=6, fichas_diferentes=fichas))
+
+    assert any(p.startswith("Fichas diferentes:") for p in erro.value.problemas)
+
+
+def test_fichas_diferentes_nao_podem_passar_dos_dias(conn):
+    with pytest.raises(PedidoInvalido) as erro:
+        ia_treino.conferir_pedido(conn, 1, _dados(dias=3, fichas_diferentes=4))
+
+    assert erro.value.problemas == ["As fichas diferentes não podem ser mais do que os dias por semana."]
+
+
+def test_conversa_diz_ao_robo_quantas_fichas_o_professor_escolheu(base):
+    mais_dias_que_fichas = ia_treino.montar_conversa(base, _pedido(dias=5, fichas=3)).usuario
+    uma_por_dia = ia_treino.montar_conversa(base, _pedido(dias=4, fichas=4)).usuario
+
+    assert "Dias de treino por semana: 5" in mais_dias_que_fichas
+    assert "Fichas diferentes: 3 (escolha do professor: entregue exatamente 3 fichas; com 5 dias por semana elas se repetem)" in mais_dias_que_fichas
+    assert "Fichas diferentes: 4 (escolha do professor: uma ficha por dia, sem repetir)" in uma_por_dia
+
+
+def test_regra_3_manda_manter_o_numero_de_fichas_do_treino_anterior_e_decidir_pelo_nivel(base):
+    regras = ia_treino.REGRAS_DA_CASA
+
+    assert "NÚMERO DE FICHAS" in regras
+    assert "iniciante" in regras.split("NÚMERO DE FICHAS", 1)[1].split("\n4.", 1)[0]  # a regra do nível está dentro da regra 3
+    assert "Nunca entregue mais fichas do que dias por semana" in regras
+
+
+def test_ferramenta_montar_treino_explica_que_as_fichas_podem_ser_menos_que_os_dias():
+    assert "se repetem" in ia_treino.FERRAMENTA["input_schema"]["properties"]["fichas"]["description"]
+
+
 def test_pedido_que_nao_e_um_objeto_e_recusado(conn):
     for corpo in (None, [], "texto", 3):
         with pytest.raises(PedidoInvalido):
@@ -296,7 +342,8 @@ def test_conversa_leva_regras_exercicios_padroes_e_o_pedido(base):
     assert "EXERCICIO RARO" not in conversa.sistema
     assert 'Mulher · Treino 1 (TREINO MULHER 1): ficha "A - PEITO": 1:3x12 6:4x10 4:-' in conversa.sistema  # o 7 (desativado) não aparece
     assert conversa.permitidos == {1, 2, 3, 4, 6}
-    assert "por semana: 4 (então 4 fichas)" in conversa.usuario
+    assert "Dias de treino por semana: 4" in conversa.usuario
+    assert "Fichas diferentes: o professor deixou para você decidir" in conversa.usuario
     assert "45 minutos" in conversa.usuario and "de 5 a 7 exercícios" in conversa.usuario
     assert "Fila do aluno na academia: Mulher" in conversa.usuario
     assert "evitar agachamento" in conversa.usuario
@@ -764,19 +811,49 @@ def test_ficha_sem_exercicio_valido_some_mas_as_outras_ficam(base):
     resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=2))
 
     assert [f["nome"] for f in resultado["treino"]["fichas"]] == ["B"]
-    assert any("2 dias" in a and "1 fichas" in a for a in resultado["alertas"])  # quem pediu 2 dias vê que veio 1 ficha
+    assert any("1 ficha(s)" in a and "descartadas" in a for a in resultado["alertas"])  # quem pediu vê que uma ficha sumiu
 
 
-def test_quantidade_de_fichas_diferente_do_pedido_vira_alerta(base):
+def test_robo_decidindo_uma_ficha_so_para_varios_dias_vira_alerta(base):
+    # Rede de segurança: com o robô decidindo, menos fichas do que dias é normal, mas UMA ficha só quase sempre é treino cortado.
     resultado = ia_treino.conferir_rascunho(base, _rascunho(("A", [_item(1)])), PERMITIDOS, _pedido(dias=4))
 
-    assert resultado["alertas"] == ["Você pediu 4 dias por semana e o rascunho veio com 1 fichas: confira."]
+    assert resultado["alertas"] == ["O rascunho veio com só 1 ficha para 4 dias por semana: confira."]
+
+
+def test_robo_decidindo_menos_fichas_do_que_dias_nao_e_problema(base):
+    # 5 dias com 3 fichas (A-B-C-A-B) é o caso que o professor pediu: nenhum alerta.
+    entrada = _rascunho(("A", [_item(1)]), ("B", [_item(2)]), ("C", [_item(3)]))
+
+    assert ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=5))["alertas"] == []
+
+
+def test_robo_decidindo_mais_fichas_do_que_dias_vira_alerta(base):
+    entrada = _rascunho(("A", [_item(1)]), ("B", [_item(2)]), ("C", [_item(3)]))
+
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=2))
+
+    assert resultado["alertas"] == ["O rascunho veio com 3 fichas, mais do que os 2 dias por semana: confira."]
+
+
+def test_professor_pediu_3_fichas_e_veio_3_sem_alerta_mesmo_com_5_dias(base):
+    entrada = _rascunho(("A", [_item(1)]), ("B", [_item(2)]), ("C", [_item(3)]))
+
+    assert ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=5, fichas=3))["alertas"] == []
+
+
+def test_professor_pediu_3_fichas_e_veio_outro_numero_vira_alerta(base):
+    entrada = _rascunho(("A", [_item(1)]), ("B", [_item(2)]))
+
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=5, fichas=3))
+
+    assert resultado["alertas"] == ["Você pediu 3 fichas diferentes e o rascunho veio com 2: confira."]
 
 
 def test_alertas_viram_no_maximo_5_textos_curtos(base):
-    entrada = _rascunho(("A", [_item(1)]), alertas=["a" * 300, "", 5, None, "b", "c", "d", "e", "f"])
+    entrada = _rascunho(("A", [_item(1)]), ("B", [_item(2)]), ("C", [_item(3)]), alertas=["a" * 300, "", 5, None, "b", "c", "d", "e", "f"])
 
-    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=1))
+    resultado = ia_treino.conferir_rascunho(base, entrada, PERMITIDOS, _pedido(dias=3))  # 3 fichas para 3 dias: o app não acrescenta alerta
 
     assert len(resultado["alertas"]) == 5 and len(resultado["alertas"][0]) == 200
 

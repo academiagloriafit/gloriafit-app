@@ -708,6 +708,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             ia_niveis=ia_treino.ROTULOS_DOS_NIVEIS,
             ia_dias=range(ia_treino.MINIMO_DE_DIAS, ia_treino.MAXIMO_DE_DIAS + 1),
             ia_minutos=list(ia_treino.EXERCICIOS_POR_FICHA),
+            ia_fichas=range(ia_treino.MINIMO_DE_FICHAS, ia_treino.MAXIMO_DE_DIAS + 1),
             ia_limite_das_observacoes=ia_treino.LIMITE_DAS_OBSERVACOES,
             ia_limite_do_motivo=ia_retorno.LIMITE_DO_MOTIVO,
         )
