@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as M from "../app/static/treino_modelo.js";
 import {
   LIMITE_CAMPO,
   LIMITE_NOME_FICHA,
@@ -882,5 +883,55 @@ describe("treino padrão a partir da tela", () => {
 
     expect(problema.campo).toBe("nome-padrao");
     expect(problema.mensagem).toContain("caracteres inválidos");
+  });
+});
+
+describe("duplicarFicha", () => {
+  function comBiSet() {
+    let e = M.criarEstado();
+    e = M.adicionarItem(e, 0, { id: 1, nome: "SUPINO" });
+    e = M.adicionarItem(e, 0, { id: 2, nome: "CRUCIFIXO" });
+    e = M.adicionarItem(e, 0, { id: 3, nome: "TRICEPS" });
+    e = M.atualizarItem(e, 0, e.fichas[0].itens[0].uid, "series", "4");
+    e = M.unirEmBloco(e, 0, [e.fichas[0].itens[1].uid, e.fichas[0].itens[2].uid]).estado;
+    return M.renomearFicha(e, 0, "A - PEITO");
+  }
+
+  it("copia os exercícios para uma ficha nova no fim, com uid e bi-set novos", () => {
+    const antes = comBiSet();
+    const depois = M.duplicarFicha(antes, 0);
+
+    expect(depois.fichas).toHaveLength(2);
+    const [original, copia] = depois.fichas;
+    expect(copia.nome).toBe("FICHA A");
+    expect(copia.itens.map((i) => [i.exercicioId, i.series])).toEqual(original.itens.map((i) => [i.exercicioId, i.series]));
+    const uids = new Set([...original.itens, ...copia.itens].map((i) => i.uid));
+    expect(uids.size).toBe(6);
+    expect(copia.itens[0].bloco).toBeNull();
+    expect(copia.itens[1].bloco).not.toBeNull();
+    expect(copia.itens[1].bloco).toBe(copia.itens[2].bloco);
+    expect(copia.itens[1].bloco).not.toBe(original.itens[1].bloco);
+    expect(antes.fichas).toHaveLength(1); // o estado antigo não muda
+  });
+
+  it("mexer na cópia não mexe na original", () => {
+    const depois = M.duplicarFicha(comBiSet(), 0);
+    const mudado = M.atualizarItem(depois, 1, depois.fichas[1].itens[0].uid, "series", "5");
+
+    expect(mudado.fichas[0].itens[0].series).toBe("4");
+    expect(mudado.fichas[1].itens[0].series).toBe("5");
+  });
+
+  it("o estado duplicado passa na validação e no rascunho guardado", () => {
+    const depois = M.duplicarFicha(comBiSet(), 0);
+
+    expect(M.lerRascunho(M.serializar(depois))).toEqual(depois);
+  });
+
+  it("com 26 fichas ou ficha que não existe, nada muda", () => {
+    let e = M.criarEstado();
+    for (let i = 1; i < M.MAXIMO_FICHAS; i += 1) e = M.adicionarFicha(e);
+    expect(M.duplicarFicha(e, 0)).toBe(e);
+    expect(M.duplicarFicha(M.criarEstado(), 5).fichas).toHaveLength(1);
   });
 });

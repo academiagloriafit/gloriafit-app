@@ -12,6 +12,8 @@ import { iniciarSalvar } from "./salvar.js";
 import { iniciarTreinoIa } from "./treino_ia.js";
 import { avisoDoRascunho } from "./treino_ia_modelo.js";
 import * as M from "./treino_modelo.js";
+import * as R from "./resumo_semana.js";
+import * as Local from "./rascunho_local.js";
 
 const raiz = document.querySelector("[data-aluno]");
 // Editar treino (botão da ficha do aluno): "?editar=ID" muda no lugar o treino ativo criado no app; "?copiar=ID" abre uma
@@ -21,8 +23,10 @@ const raiz = document.querySelector("[data-aluno]");
 const modo = M.modoDaTela(window.location.search);
 const editandoNoLugar = modo?.tipo === "editar";
 const abrindoDaFila = modo?.tipo === "fila";
-const CHAVE_RASCUNHO = "rascunho-treino-" + raiz.dataset.aluno;
-const CHAVE_DADOS = "rascunho-dados-" + raiz.dataset.aluno;
+// O rascunho do treino novo fica no localStorage deste computador por 3 dias (rascunho_local.js).
+const CHAVES_DO_RASCUNHO = Local.chavesDoAluno(raiz.dataset.aluno);
+const armazenamento = Local.armazenamentoDoNavegador();
+const guardadoAoAbrir = modo ? { rascunho: null, dados: null, guardadoEm: null } : Local.ler(armazenamento, CHAVES_DO_RASCUNHO);
 
 const elAbas = document.getElementById("abas");
 const elMontagem = document.getElementById("montagem");
@@ -49,6 +53,31 @@ const campoSenhaPadrao = document.getElementById("senha-admin-padrao");
 const botaoConfirmarPadrao = document.getElementById("confirmar-padrao");
 const elAvisoPadrao = document.getElementById("aviso-padrao");
 const elErroEdicao = document.getElementById("erro-edicao");
+// A última carga que o aluno anotou no celular em cada exercício: {"<id do exercício>": {carga, dia: "20 kg em 12/10"}}.
+const cargasDoAluno = (() => {
+  try {
+    const dados = JSON.parse(raiz.dataset.cargas || "{}");
+    return dados && typeof dados === "object" ? dados : {};
+  } catch {
+    return {};
+  }
+})();
+
+// Os grupos de cada exercício (para o resumo da semana): id -> ["Peito", ...].
+const gruposDe = R.lerGrupos((() => {
+  try {
+    return JSON.parse(raiz.dataset.grupos || "{}");
+  } catch {
+    return {};
+  }
+})());
+const elResumoDias = document.getElementById("resumo-dias");
+const elResumoRotacao = document.getElementById("resumo-rotacao");
+const elTabelaResumo = document.getElementById("tabela-resumo");
+const elResumoVazio = document.getElementById("resumo-vazio");
+const elResumoSemGrupo = document.getElementById("resumo-sem-grupo");
+const campoDiasDaIa = document.getElementById("ia-dias");
+let diasEscolhidosNoResumo = false; // o professor mexeu nos dias do resumo: não seguimos mais o número de fichas
 
 // ------------------------------------------------------------------ estado da tela
 
@@ -73,36 +102,32 @@ let refs = {}; // pedaços da tela que atualizamos sem redesenhar tudo
 
 // ------------------------------------------------------------------ rascunho
 
-// O rascunho fica no sessionStorage do navegador: sobrevive a recarregar a página,
-// mas some quando a aba é fechada. Se o navegador não deixar usar, a tela funciona igual.
+// O rascunho (treino novo) fica no localStorage deste computador por 3 dias: sobrevive a recarregar a página e a fechar a aba.
+// Se o navegador não deixar usar, a tela funciona igual, sem rascunho.
 function lerRascunhoGuardado() {
-  try {
-    const texto = sessionStorage.getItem(CHAVE_RASCUNHO);
-    return texto ? M.lerRascunho(texto) : null;
-  } catch {
-    return null;
-  }
+  return guardadoAoAbrir.rascunho ? M.lerRascunho(guardadoAoAbrir.rascunho) : null;
 }
 
+let houveMudanca = false; // o professor mexeu em algo desde que abriu a tela (para o aviso ao sair)
+let podeSairSemAviso = false; // salvou ou descartou: sair da página não pergunta nada
+
 function guardarRascunho() {
+  houveMudanca = true;
   if (modo) return;
-  try {
-    sessionStorage.setItem(CHAVE_RASCUNHO, M.serializar(estado));
-    sessionStorage.setItem(
-      CHAVE_DADOS,
-      JSON.stringify({
-        nome: campoNome.value,
-        editado: nomeEditadoPeloProfessor,
-        professor: campoQuem.value,
-        // o início só é guardado se o professor mudou: senão, num rascunho de ontem, "hoje" ficaria velho
-        inicio: campoInicio.value !== campoInicio.defaultValue ? campoInicio.value : null,
-        fim: campoFim.value,
-        sessoes: campoSessoes.value,
-      }),
-    );
-  } catch {
-    /* sem armazenamento: segue sem rascunho */
-  }
+  Local.gravar(
+    armazenamento,
+    CHAVES_DO_RASCUNHO,
+    M.serializar(estado),
+    JSON.stringify({
+      nome: campoNome.value,
+      editado: nomeEditadoPeloProfessor,
+      professor: campoQuem.value,
+      // o início só é guardado se o professor mudou: senão, num rascunho de ontem, "hoje" ficaria velho
+      inicio: campoInicio.value !== campoInicio.defaultValue ? campoInicio.value : null,
+      fim: campoFim.value,
+      sessoes: campoSessoes.value,
+    }),
+  );
 }
 
 // Nome do treino e professor guardados junto com o rascunho (qualquer coisa fora do
@@ -110,7 +135,7 @@ function guardarRascunho() {
 function lerDadosGuardados() {
   if (modo) return;
   try {
-    const dados = JSON.parse(sessionStorage.getItem(CHAVE_DADOS) || "null");
+    const dados = JSON.parse(guardadoAoAbrir.dados || "null");
     if (!dados || typeof dados !== "object") return;
     if (typeof dados.professor === "string") campoQuem.value = dados.professor.slice(0, 60);
     if (dados.editado === true && typeof dados.nome === "string") {
@@ -129,14 +154,27 @@ function lerDadosGuardados() {
 // Depois que o servidor confirmou o treino (ou o professor descartou), o rascunho não
 // serve mais: o próximo treino começa em branco.
 function apagarRascunho() {
+  podeSairSemAviso = true;
   if (modo) return;
-  try {
-    sessionStorage.removeItem(CHAVE_RASCUNHO);
-    sessionStorage.removeItem(CHAVE_DADOS);
-  } catch {
-    /* sem armazenamento: nada a apagar */
-  }
+  Local.apagar(armazenamento, CHAVES_DO_RASCUNHO);
 }
+
+// Rascunho recuperado de outra vez: avisa de quando é, para ninguém achar que o treino já está salvo.
+function avisarRascunhoRecuperado() {
+  const aviso = document.getElementById("aviso-rascunho");
+  if (!aviso || !guardadoAoAbrir.guardadoEm || !estado.fichas.some((f) => f.itens.length > 0)) return;
+  aviso.textContent =
+    `Rascunho recuperado: guardado neste computador em ${Local.textoDoQuando(guardadoAoAbrir.guardadoEm)}. ` +
+    "Ainda NÃO foi salvo para o aluno. Para começar do zero, clique em Cancelar e descarte.";
+  aviso.hidden = false;
+}
+
+// Sair da página (fechar a aba, voltar, clicar no menu) com mudança não salva: o navegador pergunta antes.
+window.addEventListener("beforeunload", (evento) => {
+  if (!houveMudanca || podeSairSemAviso || !temAlgoParaPerder()) return;
+  evento.preventDefault();
+  evento.returnValue = ""; // navegadores antigos só perguntam com isto
+});
 
 // ------------------------------------------------------------------ ajudantes de tela
 
@@ -304,9 +342,34 @@ function desenharNomeDaFicha() {
     el("div", { classe: "campo campo-nome" }, el("label", { for: "nome-ficha", texto: "Nome da ficha" }), campo),
     contador,
     desenharSelecao(),
-    el("div", { classe: "nome-lateral" }, botaoExcluir),
+    el("div", { classe: "nome-lateral" }, botaoDuplicar(), botaoExcluir),
     refs.erroDeBloco,
   );
+}
+
+// "Duplicar ficha": copia a ficha da tela para uma ficha nova no fim, para o professor só ajustar (pedido de 26/10/2026).
+function botaoDuplicar() {
+  const ficha = fichaDaTela();
+  const cheio = estado.fichas.length >= M.MAXIMO_FICHAS;
+  return el("button", {
+    type: "button",
+    id: "duplicar-ficha",
+    classe: "botao-discreto",
+    texto: "Duplicar ficha",
+    title: cheio ? `O treino já tem ${M.MAXIMO_FICHAS} fichas.` : "Cria uma ficha nova no fim com os mesmos exercícios",
+    disabled: ficha.itens.length === 0 || cheio,
+    aoClicar: () => {
+      const nomeDaOriginal = ficha.nome.trim() || "ficha";
+      mudar(M.duplicarFicha(estado, fichaAtual));
+      fichaAtual = estado.fichas.length - 1;
+      selecionados.clear();
+      confirmandoExclusao = false;
+      erroDeBloco = "";
+      desenhar();
+      anunciar(`Criada: ${fichaDaTela().nome}, cópia de ${nomeDaOriginal}. Troque o nome e ajuste os exercícios.`);
+      elMontagem.querySelector("#nome-ficha")?.focus(); // o campo é desenhado pelo JavaScript (não está no HTML do servidor)
+    },
+  });
 }
 
 function excluirFicha() {
@@ -349,6 +412,7 @@ function campoDePrescricao(item, campo, rotulo) {
       estado = M.atualizarItem(estado, fichaAtual, item.uid, campo, evento.target.value);
       guardarRascunho();
       atualizarProblemas();
+      if (campo === "series") desenharResumo();
     },
   });
 }
@@ -433,6 +497,8 @@ function desenharLinha(item, etiqueta, dentroDeBloco) {
       item.nome,
       // exercício que saiu da lista (veio de "Importar treino"): o professor precisa trocá-lo
       item.indisponivel && el("span", { classe: "selo", texto: "Fora da lista" }),
+      // o que o aluno anotou da última vez neste exercício (ajuda a decidir o peso do treino novo)
+      cargasDoAluno[item.exercicioId]?.dia && el("span", { classe: "linha-carga-anotada", texto: "Aluno anotou: " + cargasDoAluno[item.exercicioId].dia }),
     ),
     campoDePrescricao(item, "series", "Séries"),
     campoDePrescricao(item, "repeticoes", "Repetições"),
@@ -751,8 +817,58 @@ function desenhar() {
   atualizarNomeSugerido();
   atualizarProblemas();
   atualizarAvisoImportado();
+  desenharResumo();
   devolverFoco();
 }
+
+// ------------------------------------------------------------------ resumo da semana
+
+// Os dias do resumo: o que o professor escolheu nele; se não mexeu, os "Dias por semana" do cartão da IA; se não há, o número
+// de fichas (uma por dia), entre 2 e 6.
+function diasDoResumo(quantasFichas) {
+  if (!diasEscolhidosNoResumo) {
+    const daIa = Number(campoDiasDaIa?.value);
+    const dias = Number.isInteger(daIa) && daIa >= 2 ? daIa : Math.min(Math.max(quantasFichas, 2), 6);
+    elResumoDias.value = String(dias);
+  }
+  return Number(elResumoDias.value);
+}
+
+function desenharResumo() {
+  if (!elTabelaResumo) return;
+  const comExercicio = estado.fichas.filter((f) => f.itens.length > 0).length;
+  const r = R.resumoDaSemana(estado.fichas, gruposDe, diasDoResumo(comExercicio));
+  elResumoVazio.hidden = r.linhas.length > 0;
+  elTabelaResumo.hidden = r.linhas.length === 0;
+  elResumoRotacao.textContent = r.rotacao
+    ? `Semana: ${r.rotacao}. Cada ficha roda ${R.numeroCurto(r.vezesPorFicha)} ${r.vezesPorFicha === 1 ? "vez" : "vezes"} por semana, em média.`
+    : "";
+  elResumoSemGrupo.hidden = r.semGrupo === 0;
+  elResumoSemGrupo.textContent = r.semGrupo
+    ? `${r.semGrupo} ${r.semGrupo === 1 ? "exercício ainda não tem" : "exercícios ainda não têm"} grupo muscular no quadro e ${r.semGrupo === 1 ? "ficou" : "ficaram"} de fora.`
+    : "";
+  elTabelaResumo.replaceChildren();
+  if (!r.linhas.length) return;
+  elTabelaResumo.append(
+    el("caption", { classe: "so-leitor", texto: "Séries por grupo muscular em cada ficha e na semana" }),
+    el("thead", {}, el("tr", {}, [
+      el("th", { scope: "col", texto: "Grupo" }),
+      ...r.fichas.map((nome) => el("th", { scope: "col", texto: nome })),
+      el("th", { scope: "col", texto: "Semana" }),
+    ])),
+    el("tbody", {}, r.linhas.map((linha) => el("tr", {}, [
+      el("th", { scope: "row", texto: linha.grupo }),
+      ...linha.porFicha.map((n) => el("td", { texto: n ? String(n) : "–" })),
+      el("td", { classe: "resumo-total", texto: String(linha.semana) }),
+    ]))),
+  );
+}
+
+elResumoDias?.addEventListener("change", () => {
+  diasEscolhidosNoResumo = true;
+  desenharResumo();
+});
+campoDiasDaIa?.addEventListener("change", desenharResumo);
 
 // ------------------------------------------------------------------ importar treino
 
@@ -1103,5 +1219,6 @@ async function abrirTreinoDaFila() {
 
 lerDadosGuardados();
 desenhar();
+avisarRascunhoRecuperado();
 if (abrindoDaFila) abrirTreinoDaFila();
 else if (modo) abrirTreinoParaEditar();

@@ -9,7 +9,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
-from app import ciclo, filas, treinos
+from app import ciclo, execucao, filas, treinos
 from app.datas import FUSO_DA_ACADEMIA, formatar_dia, hoje  # noqa: F401 - outros módulos importam FUSO_DA_ACADEMIA daqui
 from app.exercicios import _escapar_like
 from app.texto import normalizar
@@ -256,6 +256,7 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
     ]
     lista_de_treinos = []
     sessoes_do_aluno = ciclo.sessoes_feitas_do_aluno(conn, aluno_id)
+    cargas = execucao.cargas_por_exercicio(conn, aluno_id)  # o que o aluno anotou no celular (só o treino ativo mostra)
     hoje_texto = hoje()
     aviso_de_troca = ""
     for treino_id in ids:
@@ -287,6 +288,7 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
                             "etiqueta": etiquetas[i],
                             "dose": dose_do_item(item),
                             "pausa_texto": texto_da_pausa(item["pausa"]),
+                            "carga_do_aluno": execucao.texto_da_carga(cargas.get(item["exercicio_id"])) if treino["ativo"] else "",
                         }
                         for i, item in enumerate(itens)
                     ],

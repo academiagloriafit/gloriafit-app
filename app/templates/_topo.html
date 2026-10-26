@@ -5,6 +5,7 @@
       <div class="marca"><img src="{{ url_for('static', filename='marca/logo-gloria-fit.png') }}" alt="" width="36" height="36"><span>Glória Fit</span></div>
       <nav class="topo-menu" aria-label="Principal">
         <a href="{{ url_for('pagina_alunos') }}"{% if menu_ativo == "alunos" %} class="ativo" aria-current="page"{% endif %}>Alunos</a>
+        <a href="{{ url_for('pagina_pendencias') }}"{% if menu_ativo == "pendencias" %} class="ativo" aria-current="page"{% endif %}>Pendências</a>
         <a href="{{ url_for('pagina_ausentes') }}"{% if menu_ativo == "ausentes" %} class="ativo" aria-current="page"{% endif %}>Quem sumiu</a>
         <a href="{{ url_for('pagina_atualizar_alunos') }}"{% if menu_ativo == "atualizar" %} class="ativo" aria-current="page"{% endif %}>Atualizar alunos</a>
         {% set novos = comentarios_novos() %}

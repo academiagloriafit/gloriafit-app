@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR" class="tema-largo">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pendências · Glória Fit</title>
+  <link rel="preload" href="{{ url_for('static', filename='fontes/archivo-latin-wdth-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+  {% include "_icones.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% set menu_ativo = "pendencias" %}
+  {% include "_topo.html" %}
+
+  <main class="pagina pagina-larga" id="tela-pendencias">
+    <h1 class="titulo-grande">Pendências</h1>
+    <p class="texto-apoio">O que precisa da atenção de um professor. Conta só quem está ativo no Data4U ou é aluno provisório. A tela só mostra: nada muda até você abrir o aluno.</p>
+
+    <section class="cartao-lista" aria-labelledby="titulo-trocar">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-trocar">Hora de trocar o treino</h2>
+        <p class="resumo">{{ p.trocar.total }} {{ "aluno" if p.trocar.total == 1 else "alunos" }}{% if p.trocar.total > p.trocar.alunos|length %} (mostrando {{ p.limite }}){% endif %}</p>
+      </div>
+      {% if p.trocar.alunos %}
+      <ul class="linhas" id="lista-trocar">
+        {% for a in p.trocar.alunos %}
+        <li class="linha-pendencia">
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}</a>
+          <span class="pendencia-detalhe">{{ a.motivo }}<span class="pendencia-treino"> · {{ a.treino }}</span></span>
+          <a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="lista-vazia">Nenhum treino ativo cumpriu a meta ou passou do fim.</p>
+      {% endif %}
+    </section>
+
+    <section class="cartao-lista" aria-labelledby="titulo-comentarios-pendentes">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-comentarios-pendentes">Comentários sem ler</h2>
+        <p class="resumo">{{ p.comentarios.total }} {{ "comentário" if p.comentarios.total == 1 else "comentários" }}</p>
+      </div>
+      {% if p.comentarios.comentarios %}
+      <ul class="linhas" id="lista-comentarios-pendentes">
+        {% for c in p.comentarios.comentarios %}
+        <li class="linha-pendencia">
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">{{ c.aluno }}</a>
+          <span class="pendencia-detalhe">“{{ c.texto | truncate(120, True, "…") }}”<span class="pendencia-treino"> · {{ c.quando }}</span></span>
+          <a class="botao-link" href="{{ url_for('pagina_comentarios') }}">Ler e responder</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="lista-vazia">Nenhum comentário esperando leitura.</p>
+      {% endif %}
+    </section>
+
+    <section class="cartao-lista" aria-labelledby="titulo-sem-treino">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-sem-treino">Ativos sem treino</h2>
+        <p class="resumo">{{ p.sem_treino.total }} {{ "aluno" if p.sem_treino.total == 1 else "alunos" }}{% if p.sem_treino.total > p.sem_treino.alunos|length %} (mostrando {{ p.limite }}){% endif %}</p>
+      </div>
+      {% if p.sem_treino.alunos %}
+      <ul class="linhas" id="lista-sem-treino">
+        {% for a in p.sem_treino.alunos %}
+        <li class="linha-pendencia">
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
+          <span class="pendencia-detalhe">Nenhum treino ativo</span>
+          <a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="lista-vazia">Todo aluno ativo tem treino.</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

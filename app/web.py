@@ -36,6 +36,7 @@ from app import (
     importar_alunos,
     importar_treinos,
     modelos,
+    pendencias,
     provisorios,
     treinos,
     whatsapp,
@@ -709,6 +710,11 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             ia_dias=range(ia_treino.MINIMO_DE_DIAS, ia_treino.MAXIMO_DE_DIAS + 1),
             ia_minutos=list(ia_treino.EXERCICIOS_POR_FICHA),
             ia_fichas=range(ia_treino.MINIMO_DE_FICHAS, ia_treino.MAXIMO_DE_DIAS + 1),
+            grupos_dos_exercicios=exercicios.grupos_compactos(conn),  # o resumo da semana por grupo muscular
+            cargas_do_aluno={
+                str(exercicio_id): {"carga": carga, "dia": execucao.texto_da_carga((carga, dia))}
+                for exercicio_id, (carga, dia) in execucao.cargas_por_exercicio(conn, aluno_id).items()
+            },
             ia_limite_das_observacoes=ia_treino.LIMITE_DAS_OBSERVACOES,
             ia_limite_do_motivo=ia_retorno.LIMITE_DO_MOTIVO,
         )
@@ -806,6 +812,11 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         """"Quem sumiu": alunos com treino ativo que não treinam há 7, 14 ou 30 dias (?dias=). Só leitura."""
         lista = ausentes.listar(conexao(), ausentes.prazo_pedido(request.args.get("dias")))
         return render_template("ausentes.html", lista=lista, prazos=ausentes.PRAZOS, limite=ausentes.LIMITE_DA_LISTA)
+
+    @app.get("/pendencias")
+    def pagina_pendencias():
+        """Pendências: treino na hora de trocar, comentários sem ler e alunos ativos sem treino. Só leitura."""
+        return render_template("pendencias.html", p=pendencias.listar(conexao()))
 
     @app.get("/comentarios")
     def pagina_comentarios():

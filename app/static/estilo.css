@@ -353,7 +353,7 @@ button { font-family: inherit; }
 .bloco-nome { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 16px; padding: 14px 16px; border-bottom: 1px solid var(--linha); }
 .campo-nome { flex: 0 1 220px; }
 .bloco-nome > .dica { padding-bottom: 12px; }
-.nome-lateral { display: flex; align-items: center; }
+.nome-lateral { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .bloco-nome .selecao { margin-left: auto; }
 .so-leitor { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .dica { margin: 0; font-size: 14px; color: var(--texto-suave); }
@@ -876,6 +876,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .item-ficha-nome { font-weight: 650; text-transform: uppercase; letter-spacing: 0.01em; overflow-wrap: anywhere; }
 .item-ficha-dose { font-size: 14.5px; color: var(--texto-suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .item-ficha-obs { grid-column: 2 / -1; font-size: 14.5px; color: var(--texto-suave); font-style: italic; overflow-wrap: anywhere; }
+.item-ficha-anotada { grid-column: 2 / -1; font-size: 14.5px; font-weight: 600; color: var(--texto); overflow-wrap: anywhere; }
 .selo-origem {
   display: inline-block;
   margin-left: 0;
@@ -1620,3 +1621,50 @@ a.comentario-aluno:hover { text-decoration: underline; text-underline-offset: 4p
 .meu-descanso-acabou .meu-descanso-rotulo { color: var(--verde); font-size: 16px; font-weight: 700; }
 .meu-descanso-acabou .meu-descanso-tempo { color: var(--verde); }
 body.com-descanso .pagina-aluno { padding-bottom: 130px; }
+
+/* a última carga que o aluno anotou no celular, embaixo do nome do exercício na montagem */
+.linha-carga-anotada { display: block; margin-top: 2px; font-size: 13.5px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--texto-suave); }
+
+/* ---- pendências (tela do professor) ---- */
+#tela-pendencias { display: flex; flex-direction: column; gap: 20px; }
+.linha-pendencia {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px 20px;
+  border-top: 1px solid var(--linha);
+  font-size: 15px;
+}
+.linhas > .linha-pendencia:first-child { border-top: 0; }
+.pendencia-detalhe { overflow-wrap: anywhere; }
+.pendencia-treino { color: var(--texto-suave); }
+@media (max-width: 900px) {
+  .linha-pendencia { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .linha-pendencia .botao-link { justify-self: start; }
+}
+
+/* ---- resumo da semana por grupo muscular (tela "Lançar treino") ---- */
+.resumo-semana { margin-top: 16px; padding: 0; }
+.resumo-semana > summary { padding: 16px 20px; font-size: 17px; font-weight: 700; cursor: pointer; }
+.resumo-semana > summary:focus-visible { outline: 2px solid var(--foco); outline-offset: -2px; }
+.resumo-semana-corpo { display: flex; flex-direction: column; gap: 10px; padding: 0 20px 18px; }
+.resumo-semana-topo { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 20px; }
+.resumo-semana-topo .campo { width: 160px; }
+.resumo-semana-topo .dica { margin: 0 0 10px; }
+.tabela-rolavel { overflow-x: auto; }
+.tabela-resumo { border-collapse: collapse; min-width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+.tabela-resumo th, .tabela-resumo td { padding: 8px 12px; border-bottom: 1px solid var(--linha); text-align: right; white-space: nowrap; }
+.tabela-resumo thead th { font-size: 13px; font-weight: 600; color: var(--texto-suave); }
+.tabela-resumo th:first-child { text-align: left; }
+.tabela-resumo tbody th { font-weight: 650; }
+.tabela-resumo .resumo-total { font-weight: 800; }
+
+/* ---- cartão do robô mais enxuto (26/10/2026): ajuda recolhida e caixa de observações que cresce quando é usada ---- */
+#ia-observacoes { min-height: 96px; transition: min-height 0.15s ease; }
+#ia-observacoes:focus, #ia-observacoes:not(:placeholder-shown) { min-height: 210px; }
+@media (prefers-reduced-motion: reduce) { #ia-observacoes { transition: none; } }
+.ajuda-ia > summary { width: fit-content; font-size: 14.5px; font-weight: 650; color: var(--texto); cursor: pointer; }
+.ajuda-ia > summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.lista-ajuda { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--texto-suave); }

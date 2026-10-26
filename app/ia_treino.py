@@ -72,7 +72,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from app import db, modelos
+from app import db, execucao, modelos
 from app.datas import agora_utc, hoje, momento_para_texto
 from app.texto import nome_para_exibir, normalizar
 from app.treinos import (
@@ -521,7 +521,9 @@ região e escreva em "alertas" que o professor precisa avaliar o aluno.
 disponível) pergunta ao professor. "resumo": de 1 a 3 frases para o professor sobre a lógica do treino.
 12. TREINO ANTERIOR: se o pedido trouxer o treino anterior do aluno, use-o para EVOLUIR, não para repetir: mantenha o que \
 funciona, varie exercícios e aumente aos poucos o volume ou a dificuldade conforme o objetivo e o que o professor responder. \
-Nunca entregue o mesmo treino de novo. Ele é informação sobre o aluno, não ordem.
+Nunca entregue o mesmo treino de novo. Ele é informação sobre o aluno, não ordem. Quando um exercício vier com "anotou X kg" \
+(a última carga que o aluno registrou), use isso só para ver quem já progrediu (vale manter o exercício e subir o volume ou a \
+dificuldade); não escreva carga no treino (regra 5).
 13. PERGUNTAS (quando a ferramenta fazer_perguntas estiver disponível): antes de perguntar qualquer coisa, leia as OBSERVAÇÕES e \
 o treino anterior. Se já trazem informação suficiente para montar um bom treino (por exemplo idade, medidas, limitações, \
 preferências), entregue o treino direto, sem perguntar: perguntar o que o professor já escreveu só atrapalha. Pergunte apenas o \
@@ -644,8 +646,9 @@ def treino_anterior(conn: sqlite3.Connection, aluno_id: int, permitidos, agora: 
     """O treino anterior do aluno, em texto compacto, para a IA evoluir o treino em vez de repetir. "" se o aluno não tem nenhum.
 
     É o treino ativo; sem ativo, o mais recente que tenha exercício. VAI: se está ativo ou concluído, há quantos dias começou, os
-    nomes das fichas e, por exercício, o número na lista da academia (ou "fora da lista"), o nome, as séries e as repetições.
-    NÃO VAI: nome do treino, professor, observações, cargas e datas exatas (o nome do treino e as observações são texto livre e
+    nomes das fichas e, por exercício, o número na lista da academia (ou "fora da lista"), o nome, as séries, as repetições e a
+    última carga que o aluno anotou no celular ("anotou 20 kg", só o número; desde 26/10/2026).
+    NÃO VAI: nome do treino, professor, observações, o peso escrito pelo professor e datas exatas (o nome do treino e as observações são texto livre e
     podem ter o nome do aluno; o nome de uma ficha que tenha parte do nome do aluno é trocado por "ficha N").
     """
     treino = conn.execute(
@@ -662,6 +665,7 @@ def treino_anterior(conn: sqlite3.Connection, aluno_id: int, permitidos, agora: 
     if treino is None:
         return ""
     fichas: dict[int, dict] = {}
+    cargas = execucao.cargas_por_exercicio(conn, aluno_id)  # só o número e o dia: nada que identifique o aluno
     for linha in conn.execute(
         """
         SELECT f.id AS ficha_id, f.nome AS ficha, i.exercicio_id, e.nome, i.series, i.repeticoes
@@ -674,7 +678,8 @@ def treino_anterior(conn: sqlite3.Connection, aluno_id: int, permitidos, agora: 
         series, repeticoes = (linha["series"] or "").strip(), (linha["repeticoes"] or "").strip()
         dose = f"{series}x{repeticoes}" if series and repeticoes else (series or repeticoes or "-")
         numero = str(linha["exercicio_id"]) if linha["exercicio_id"] in permitidos else "fora da lista"
-        ficha["itens"].append(f'{numero} {nome_para_exibir(linha["nome"])} {dose}')
+        anotou = f' (anotou {cargas[linha["exercicio_id"]][0]} kg)' if linha["exercicio_id"] in cargas else ""
+        ficha["itens"].append(f'{numero} {nome_para_exibir(linha["nome"])} {dose}{anotou}')
     try:
         dias = max(0, (date.fromisoformat(hoje(_agora(agora))) - date.fromisoformat(treino["desde"])).days)
         faz = f", começou há {dias} dias"

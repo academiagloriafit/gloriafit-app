@@ -93,6 +93,34 @@ def ultimas_cargas(conn: sqlite3.Connection, aluno_id: int, nomes: set[str], ant
     return resultado
 
 
+
+def cargas_por_exercicio(conn: sqlite3.Connection, aluno_id: int) -> dict[int, tuple[str, str]]:
+    """{id do exercício: (carga, dia 'AAAA-MM-DD')} da carga MAIS RECENTE que o aluno anotou em cada exercício, contando hoje.
+
+    É o que o PROFESSOR vê (ficha do aluno e tela de montar) e o que o robô recebe no treino anterior. A carga é guardada pelo nome do
+    exercício (ver o começo deste arquivo); aqui o nome vira o id da lista atual. Exercício renomeado depois perde a ligação (a carga
+    antiga continua no banco, só não aparece). Uma consulta só, pelo índice (aluno, nome, dia).
+    """
+    resultado: dict[int, tuple[str, str]] = {}
+    for linha in conn.execute(
+        """
+        SELECT e.id, x.carga, x.dia FROM execucao x JOIN exercicio e ON e.nome = x.exercicio_nome
+        WHERE x.aluno_id = ? AND x.carga IS NOT NULL
+        ORDER BY x.dia, x.atualizado_em, x.id
+        """,
+        (aluno_id,),
+    ):
+        resultado[linha["id"]] = (linha["carga"], linha["dia"])  # a ordem crescente deixa a mais recente por último
+    return resultado
+
+
+def texto_da_carga(carga: tuple[str, str] | None) -> str:
+    """("20", "2026-10-12") -> "20 kg em 12/10"; None -> ""."""
+    if not carga:
+        return ""
+    ano, mes, dia = carga[1].split("-")
+    return f"{carga[0]} kg em {dia}/{mes}"
+
 # ------------------------------------------------------------------ gravar
 
 

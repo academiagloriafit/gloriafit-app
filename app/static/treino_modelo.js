@@ -64,6 +64,25 @@ export function adicionarFicha(estado) {
   return novo;
 }
 
+// Copia a ficha f para uma ficha NOVA no fim (pedido do Thiago, 26/10/2026): mesmos exercícios, séries, repetições, peso,
+// intervalo, observação e bi-sets. Os itens ganham uid novos e os bi-sets ganham números novos (não se misturam com os da
+// original). O nome é o próximo livre, como em "+ Nova ficha" ("FICHA D"). Com 26 fichas, nada muda.
+export function duplicarFicha(estado, f) {
+  const origem = estado.fichas[f];
+  if (!origem || estado.fichas.length >= MAXIMO_FICHAS) return estado;
+  const novo = adicionarFicha(estado);
+  const blocosNovos = new Map();
+  novo.fichas[novo.fichas.length - 1].itens = origem.itens.map((item) => {
+    let bloco = null;
+    if (item.bloco !== null) {
+      if (!blocosNovos.has(item.bloco)) blocosNovos.set(item.bloco, novo.proximoBloco++);
+      bloco = blocosNovos.get(item.bloco);
+    }
+    return { ...structuredClone(item), uid: novo.proximoUid++, bloco };
+  });
+  return novo;
+}
+
 export function renomearFicha(estado, f, nome) {
   if (!estado.fichas[f]) return estado;
   const novo = copiar(estado);

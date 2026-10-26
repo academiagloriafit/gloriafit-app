@@ -209,6 +209,7 @@
                   <span class="item-ficha-nome">{{ item.exercicio }}</span>
                   <span class="item-ficha-dose">{{ [item.dose, item.carga, ("pausa " ~ item.pausa_texto) if item.pausa_texto else ""] | select | join(" · ") }}</span>
                   {% if item.observacao %}<span class="item-ficha-obs">{{ item.observacao }}</span>{% endif %}
+                  {% if item.carga_do_aluno %}<span class="item-ficha-anotada">Aluno anotou: {{ item.carga_do_aluno }}</span>{% endif %}
                 </li>
                 {% endfor %}
               </ol>

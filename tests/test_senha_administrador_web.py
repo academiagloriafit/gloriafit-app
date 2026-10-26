@@ -348,7 +348,7 @@ def test_o_rascunho_do_navegador_nunca_leva_a_senha():
     codigo = (PASTA_ESTATICA / "montar.js").read_text(encoding="utf-8")
     trecho = codigo[codigo.index("function guardarRascunho") : codigo.index("function lerDadosGuardados")]
 
-    assert "sessionStorage" in trecho  # (o trecho certo foi encontrado)
+    assert "Local.gravar" in trecho  # (o trecho certo foi encontrado: desde 26/10/2026 o rascunho vai para o localStorage)
     assert "enha" not in trecho
 
 

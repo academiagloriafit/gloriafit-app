@@ -118,3 +118,19 @@ def _grupos_dos_exercicios(conn: sqlite3.Connection, ids: list[int]) -> dict[int
     for linha in linhas:
         resultado.setdefault(linha["exercicio_id"], []).append(linha["nome"])
     return resultado
+
+
+def grupos_compactos(conn: sqlite3.Connection) -> dict:
+    """Os grupos de TODOS os exercícios, num formato curto para ir dentro da página de montar (resumo da semana):
+    {"nomes": ["Peito", ...] (na ordem do quadro), "ex": {"12": [0, 3]}} (índices em "nomes"). Exercício sem grupo não aparece.
+    Inclui os desativados: um treino copiado pode ter um."""
+    nomes: list[str] = []
+    indice: dict[int, int] = {}
+    for linha in conn.execute("SELECT id, nome FROM grupo_muscular ORDER BY ordem, id"):
+        indice[linha["id"]] = len(nomes)
+        nomes.append(linha["nome"])
+    ex: dict[str, list[int]] = {}
+    for linha in conn.execute("SELECT exercicio_id, grupo_id FROM exercicio_grupo ORDER BY exercicio_id, grupo_id"):
+        if linha["grupo_id"] in indice:
+            ex.setdefault(str(linha["exercicio_id"]), []).append(indice[linha["grupo_id"]])
+    return {"nomes": nomes, "ex": ex}

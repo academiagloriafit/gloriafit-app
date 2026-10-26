@@ -606,6 +606,34 @@ outro. Dados da cópia do Data4U (07/10): 2 fichas em 53% dos treinos, 3 fichas 
 - **Voltar atrás:** imagem anterior `d5c940f4127069d9588a9b05355c0aabacb3b417` (conhece até a versão 16): trocar o SHA no YAML e, com o app parado, `PRAGMA user_version = 16`
   (a coluna extra fica parada e não atrapalha), ou restaurar a cópia de `/dados/antes-da-migracao`.
 
+### Melhorias da área do professor (26/10/2026)
+
+Thiago pediu uma análise da área de montar treinos e aprovou as 6 sugestões ("gostei de todas"). Nenhuma mexe no banco (continua na versão 17).
+
+1. **O professor vê a carga que o aluno anotou no celular.** `execucao.cargas_por_exercicio` (a mais recente de cada exercício, contando hoje;
+   a carga é guardada pelo NOME do exercício e aqui vira o id da lista; exercício renomeado depois perde a ligação). Aparece na **ficha do aluno**
+   ("Aluno anotou: 22,5 kg em 24/10", só no treino ativo), **embaixo de cada exercício na tela de montar** (atributo `data-cargas` da página;
+   a página não aceita script embutido) e no **treino anterior que vai para o robô** ("(anotou 22,5 kg)", só o número, sem data). A regra 12
+   diz para usar isso só para ver quem progrediu, nunca para escrever carga (regra 5). `VERSAO_DAS_REGRAS` mudou para `4088ed9c`.
+2. **Tela "Pendências"** (`/pendencias`, `app/pendencias.py`, item novo no menu): treino na hora de trocar (mesma conta do aviso da ficha:
+   meta de sessões cumprida em todas as fichas ou passou do fim; no dia do fim ainda vale), comentários sem ler (os mesmos do número do menu)
+   e alunos ativos sem treino ativo. Como em "Quem sumiu", só contam alunos ativos no Data4U ou provisórios. Só leitura.
+3. **Resumo da semana por grupo muscular** na tela de montar (quadro "Resumo da semana", começa fechado): séries por grupo em cada ficha e na
+   semana, com as fichas repetindo na ordem (média: com D dias e F fichas cada ficha roda D/F vezes). Os dias vêm do cartão do robô, ou do
+   número de fichas, e o professor pode trocar. Exercício combinado conta para os dois grupos; cardio sem séries não soma. A conta está em
+   `app/static/resumo_semana.js` (Vitest); os grupos vão no atributo `data-grupos` (`exercicios.grupos_compactos`).
+4. **Cartão do robô mais enxuto:** a ajuda longa foi para "Como o robô funciona" (recolhido); ficaram visíveis o aviso de privacidade (não escrever
+   nome, CPF...; o texto vai para a Anthropic) e o de responsabilidade. A caixa de observações começa com 4 linhas e cresce quando o professor
+   clica ou escreve. (Na análise eu disse que dava para salvar um treino vazio: **não dá**, a validação já impede; e a barra "Salvar" por cima do
+   cartão só aparecia na foto da página inteira. Nada mudou nisso.)
+5. **Duplicar ficha** (botão ao lado de "Excluir ficha"): `treino_modelo.duplicarFicha` cria uma ficha nova no fim com os mesmos exercícios, séries,
+   peso, intervalo, observações e bi-sets (uid e bi-sets novos; nome "FICHA D", como "+ Nova ficha").
+6. **Rascunho que sobrevive a fechar a aba e aviso ao sair:** o rascunho do treino novo passou do sessionStorage para o **localStorage** deste
+   computador e vale **3 dias** (`app/static/rascunho_local.js`; vencido ou sem data, é apagado ao abrir). Ao recuperar um rascunho, a tela avisa
+   de quando ele é e que ainda não foi salvo. Ao sair da página com mudança não salva (inclusive em "Editar treino"), o navegador pergunta antes.
+   Guarda só o que está na tela (exercícios, nome do treino, nome do professor, datas). **Risco aceito:** no computador da recepção, quem abrir o
+   mesmo aluno em até 3 dias vê o rascunho de outro professor (com o aviso).
+
 ## Editar treino: como funciona
 
 Pedido do Thiago (09/10/2026): o professor precisa poder abrir o treino do aluno e corrigi-lo (e, no futuro, agir sobre os comentários

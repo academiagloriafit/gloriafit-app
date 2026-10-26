@@ -397,7 +397,8 @@ def test_cartao_tem_as_opcoes_certas_e_o_limite_das_observacoes(cliente):
 
     assert re.search(rf'<textarea[^>]*id="ia-observacoes"[^>]*maxlength="{ia_treino.LIMITE_DAS_OBSERVACOES}"', html)
     assert ia_treino.LIMITE_DAS_OBSERVACOES == 1000
-    assert re.search(r'<textarea[^>]*id="ia-observacoes"[^>]*rows="8"', html)  # o campo é alto: cabe a descrição do aluno
+    # o campo começa com 4 linhas e cresce (CSS) quando o professor clica ou escreve: cabe a descrição do aluno sem ocupar a tela
+    assert re.search(r'<textarea[^>]*id="ia-observacoes"[^>]*rows="4"', html)
     assert "até 1000 letras" in html and "idade, altura, peso" in html
     for chave in ia_treino.OBJETIVOS:
         assert f'<option value="{chave}">' in html
@@ -501,3 +502,16 @@ def test_os_rotulos_da_tela_combinam_com_os_valores_que_o_servidor_aceita():
     assert set(ia_treino.ROTULOS_DOS_OBJETIVOS) == set(ia_treino.OBJETIVOS)
     assert set(ia_treino.ROTULOS_DOS_NIVEIS) == set(ia_treino.NIVEIS)
     json.dumps(ia_treino.FERRAMENTA)  # a ferramenta enviada à API precisa virar JSON
+
+
+def test_cartao_enxuto_mostra_o_aviso_de_privacidade_e_recolhe_a_ajuda(cliente):
+    html = _html(cliente)
+
+    # o aviso de privacidade e o de responsabilidade continuam visíveis
+    visivel = re.search(r'<p id="dica-ia-observacoes" class="dica">(.*?)</p>', html, re.S).group(1)
+    assert "Não escreva o nome, CPF, telefone, endereço nem datas completas" in visivel and "Anthropic, nos EUA" in visivel
+    assert "Quem confere e responde pelo treino é você" in html
+    # o resto fica num "Como o robô funciona" que começa fechado
+    ajuda = re.search(r'<details class="ajuda-ia">(.*?)</details>', html, re.S).group(1)
+    assert "<summary>Como o robô funciona</summary>" in ajuda and "Montar direto:" in ajuda and "a última carga que ele anotou" in ajuda
+    assert "<details class=\"ajuda-ia\" open" not in html

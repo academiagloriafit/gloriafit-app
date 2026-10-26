@@ -12,7 +12,9 @@
   {% set menu_ativo = "alunos" %}
   {% include "_topo.html" %}
 
-  <main class="pagina pagina-larga tela-treino" data-aluno="{{ aluno.id }}">
+  {# data-grupos: os grupos de cada exercício (resumo da semana). data-cargas: a última carga que o aluno anotou no celular em cada exercício ({id: {carga, dia}}); aparece embaixo do exercício
+     na montagem. Vai num atributo (e não num <script>) porque a página não aceita script embutido. O tojson escapa as aspas. #}
+  <main class="pagina pagina-larga tela-treino" data-aluno="{{ aluno.id }}" data-cargas='{{ cargas_do_aluno | tojson }}' data-grupos='{{ grupos_dos_exercicios | tojson }}'>
     <div class="titulo-tela">
       <h1 class="titulo-pagina">Lançar treino</h1>
       <p class="aluno-nome">Aluno: <strong>{{ aluno.nome }}</strong></p>
@@ -32,6 +34,7 @@
           <p class="dica">Copie um treino padrão ou o treino de outro aluno e ajuste antes de salvar.</p>
         </div>
         <p id="aviso-importado" class="aviso-importado" role="status" hidden></p>
+        <p id="aviso-rascunho" class="aviso-troca" role="status" hidden></p>
 
         <div id="painel-importar" class="painel-importar" hidden>
           <div class="abas abas-importar" role="tablist" aria-label="De onde importar">
@@ -120,16 +123,25 @@
                 <option value="">O robô decide</option>
                 {% for n in ia_fichas %}<option value="{{ n }}">{{ n }} fichas diferentes</option>{% endfor %}
               </select>
-              <p id="dica-ia-fichas" class="dica">Quantos treinos diferentes (A, B, C…) o aluno terá. Com 5 dias e 3 fichas, a semana roda A-B-C-A-B. Em "O robô decide", ele mantém a divisão do treino anterior do aluno; sem treino anterior, escolhe pelo nível, nunca mais fichas do que dias.</p>
+              <p id="dica-ia-fichas" class="dica">Com 5 dias e 3 fichas, a semana roda A-B-C-A-B.</p>
             </div>
             <div class="campo campo-largo">
               <label for="ia-observacoes">Observações sobre o aluno <span class="opcional">(opcional)</span></label>
-              <textarea id="ia-observacoes" rows="8" maxlength="{{ ia_limite_das_observacoes }}" aria-describedby="dica-ia-observacoes" placeholder="Ex.: 35 anos, 1,75 m, 82 kg. Trabalha sentado o dia todo. Dor no joelho direito ao agachar. Treinou por 2 anos e parou há 1 ano. Não gosta de esteira; prefere máquinas."></textarea>
-              <p id="dica-ia-observacoes" class="dica">Escreva à vontade, até {{ ia_limite_das_observacoes }} letras: idade, altura, peso, rotina, lesões ou dores, cirurgias, há quanto tempo treina, o que o aluno gosta ou evita. Quanto mais você descrever, menos a IA precisa perguntar. <strong>Não escreva o nome, CPF, telefone, endereço nem datas completas (como 15/03/2024) do aluno:</strong> a IA recebe só o que está neste cartão, as suas respostas e o treino anterior do aluno (só os exercícios), nunca quem é o aluno. O que você escrever vai para o serviço da IA (Anthropic, nos EUA).</p>
+              <textarea id="ia-observacoes" rows="4" maxlength="{{ ia_limite_das_observacoes }}" aria-describedby="dica-ia-observacoes" placeholder="Ex.: 35 anos, 1,75 m, 82 kg. Trabalha sentado o dia todo. Dor no joelho direito ao agachar. Treinou por 2 anos e parou há 1 ano. Não gosta de esteira; prefere máquinas."></textarea>
+              <p id="dica-ia-observacoes" class="dica">Idade, altura, peso, rotina, lesões, cirurgias, preferências (até {{ ia_limite_das_observacoes }} letras). <strong>Não escreva o nome, CPF, telefone, endereço nem datas completas (como 15/03/2024) do aluno.</strong> O texto vai para o serviço da IA (Anthropic, nos EUA).</p>
             </div>
           </div>
           <p class="dica">O rascunho pode ter erro. Quem confere e responde pelo treino é você. Para gestante e grupos de risco, monte à mão.</p>
-          <p id="dica-botoes-ia" class="dica"><strong>Gerar rascunho:</strong> a IA lê o treino anterior do aluno e pode te fazer até 2 rodadas de perguntas antes de montar (o que mudar, idade, altura e peso se você não escreveu, lesões, comorbidades). Se as observações já bastam, ela monta sem perguntar. <strong>Montar direto:</strong> sem perguntas.</p>
+          {# Ajuda completa, recolhida para o cartão não ocupar a tela inteira (pedido do Thiago, 26/10/2026). #}
+          <details class="ajuda-ia">
+            <summary>Como o robô funciona</summary>
+            <ul id="dica-botoes-ia" class="lista-ajuda">
+              <li><strong>Gerar rascunho:</strong> a IA lê o treino anterior do aluno e pode te fazer até 2 rodadas de perguntas antes de montar (o que mudar, idade, altura e peso se você não escreveu, lesões, comorbidades). Se as observações já bastam, ela monta sem perguntar. <strong>Montar direto:</strong> sem perguntas.</li>
+              <li><strong>Observações:</strong> escreva à vontade, até {{ ia_limite_das_observacoes }} letras: idade, altura, peso, rotina, lesões ou dores, cirurgias, há quanto tempo treina, o que o aluno gosta ou evita. Quanto mais você descrever, menos a IA precisa perguntar.</li>
+              <li><strong>O que a IA recebe:</strong> só o que está neste cartão, as suas respostas e o treino anterior do aluno (os exercícios e a última carga que ele anotou), nunca quem é o aluno.</li>
+              <li><strong>Fichas diferentes:</strong> quantos treinos diferentes (A, B, C…) o aluno terá. Em "O robô decide", ele mantém a divisão do treino anterior do aluno; sem treino anterior, escolhe pelo nível (iniciante até 3, intermediário até 4, avançado até 5), nunca mais fichas do que dias.</li>
+            </ul>
+          </details>
 
           {# A conversa: as perguntas da IA aparecem aqui, o professor responde e a IA monta (ou pergunta mais uma vez). Os textos das
              perguntas vêm da IA e entram na tela só como texto (nunca como HTML). Nada disto é gravado no banco. #}
@@ -211,6 +223,24 @@
           {% include "_biblioteca.html" %}
         </aside>
       </div>
+
+      {# Resumo da semana: séries por grupo muscular em cada ficha e na semana, com as fichas repetindo na ordem. Começa fechado. #}
+      <details class="cartao resumo-semana" id="resumo-semana">
+        <summary>Resumo da semana por grupo muscular</summary>
+        <div class="resumo-semana-corpo">
+          <div class="resumo-semana-topo">
+            <div class="campo">
+              <label for="resumo-dias">Dias por semana</label>
+              <select id="resumo-dias">{% for n in range(2, 7) %}<option value="{{ n }}">{{ n }} dias</option>{% endfor %}</select>
+            </div>
+            <p id="resumo-rotacao" class="dica" aria-live="polite"></p>
+          </div>
+          <div class="tabela-rolavel"><table class="tabela-resumo" id="tabela-resumo"></table></div>
+          <p id="resumo-vazio" class="dica" hidden>Adicione exercícios para ver o resumo.</p>
+          <p id="resumo-sem-grupo" class="dica" hidden></p>
+          <p class="dica">Séries somadas pelo número de séries de cada exercício. A semana é a média: com 5 dias e 3 fichas, cada ficha roda 1,7 vez por semana. Exercício com dois grupos (os combinados) conta para os dois; cardio sem séries não soma.</p>
+        </div>
+      </details>
 
       <div class="rodape-treino">
         <ul id="problemas" class="problemas" role="alert" hidden></ul>
