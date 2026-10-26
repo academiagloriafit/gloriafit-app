@@ -131,3 +131,28 @@ def test_o_robo_recebe_a_carga_anotada_no_treino_anterior_so_o_numero(conn):
 
 def test_regra_12_diz_para_usar_a_carga_so_para_ver_o_progresso():
     assert '"anotou X kg"' in ia_treino.REGRAS_DA_CASA and "não escreva carga no treino" in ia_treino.REGRAS_DA_CASA
+
+
+def test_o_nome_guardado_e_o_que_o_aluno_ve_sem_numero_da_maquina_nem_apagado(conn):
+    # Bug achado em 26/10/2026: o celular guarda "SUPINO MAQUINA" (como aparece na tela), mas o exercício na lista é "(6) SUPINO MAQUINA".
+    conn.execute("INSERT INTO exercicio (id, nome, origem) VALUES (6, '(6) SUPINO MAQUINA', 'app'), (7, 'CADEIRA EXTENSORA APAGADO', 'app')")
+    conn.execute("INSERT INTO exercicio (id, nome, origem) VALUES (8, 'SUPINO MAQUINA', 'app')")  # mesmo nome na tela
+    _anotar(conn, 1, "2026-10-20", "SUPINO MAQUINA", "30")
+    _anotar(conn, 1, "2026-10-21", "CADEIRA EXTENSORA", "45")
+
+    cargas = execucao.cargas_por_exercicio(conn, 1)
+
+    assert cargas[6] == ("30", "2026-10-20") and cargas[8] == ("30", "2026-10-20")
+    assert cargas[7] == ("45", "2026-10-21")
+
+
+def test_o_nome_que_o_celular_grava_e_o_mesmo_que_a_consulta_procura(conn):
+    # Amarra as duas pontas: o nome que o aluno recebe no celular é a chave que a consulta do professor usa.
+    from app.aluno_treino import treino_do_aluno
+
+    conn.execute("UPDATE exercicio SET nome = '(9) SUPINO RETO' WHERE id = 1")
+    nome_no_celular = treino_do_aluno(conn, 1)["fichas"][0]["grupos"][0]["exercicios"][0]["exercicio"]
+    _anotar(conn, 1, "2026-10-25", nome_no_celular, "27,5")
+
+    assert nome_no_celular == "SUPINO RETO"
+    assert execucao.cargas_por_exercicio(conn, 1)[1] == ("27,5", "2026-10-25")

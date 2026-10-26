@@ -22,6 +22,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.datas import agora_utc, hoje, momento_para_texto
+from app.texto import nome_para_exibir, tirar_apagado
 
 MAIOR_CARGA = Decimal("999.99")
 _NUMERO_DA_CARGA = re.compile(r"[0-9]{1,3}(?:[.,][0-9]{1,2})?")
@@ -97,20 +98,24 @@ def ultimas_cargas(conn: sqlite3.Connection, aluno_id: int, nomes: set[str], ant
 def cargas_por_exercicio(conn: sqlite3.Connection, aluno_id: int) -> dict[int, tuple[str, str]]:
     """{id do exercício: (carga, dia 'AAAA-MM-DD')} da carga MAIS RECENTE que o aluno anotou em cada exercício, contando hoje.
 
-    É o que o PROFESSOR vê (ficha do aluno e tela de montar) e o que o robô recebe no treino anterior. A carga é guardada pelo nome do
-    exercício (ver o começo deste arquivo); aqui o nome vira o id da lista atual. Exercício renomeado depois perde a ligação (a carga
-    antiga continua no banco, só não aparece). Uma consulta só, pelo índice (aluno, nome, dia).
+    É o que o PROFESSOR vê (ficha do aluno e tela de montar) e o que o robô recebe no treino anterior. A carga é guardada pelo nome
+    do exercício COMO O ALUNO VÊ (sem o número da máquina e sem o "APAGADO": `treinos._item_para_exibir`); aqui esse nome vira o id
+    da lista. Dois exercícios com o mesmo nome na tela ("(6) SUPINO MAQUINA" e "SUPINO MAQUINA") recebem a mesma carga, como no
+    celular. Exercício renomeado depois perde a ligação (a carga antiga continua no banco, só não aparece).
     """
-    resultado: dict[int, tuple[str, str]] = {}
+    ultimas: dict[str, tuple[str, str]] = {}
     for linha in conn.execute(
-        """
-        SELECT e.id, x.carga, x.dia FROM execucao x JOIN exercicio e ON e.nome = x.exercicio_nome
-        WHERE x.aluno_id = ? AND x.carga IS NOT NULL
-        ORDER BY x.dia, x.atualizado_em, x.id
-        """,
+        "SELECT exercicio_nome, carga, dia FROM execucao WHERE aluno_id = ? AND carga IS NOT NULL ORDER BY dia, atualizado_em, id",
         (aluno_id,),
     ):
-        resultado[linha["id"]] = (linha["carga"], linha["dia"])  # a ordem crescente deixa a mais recente por último
+        ultimas[linha["exercicio_nome"]] = (linha["carga"], linha["dia"])  # a ordem crescente deixa a mais recente por último
+    if not ultimas:
+        return {}
+    resultado: dict[int, tuple[str, str]] = {}
+    for linha in conn.execute("SELECT id, nome FROM exercicio"):
+        carga = ultimas.get(tirar_apagado(nome_para_exibir(linha["nome"])))
+        if carga is not None:
+            resultado[linha["id"]] = carga
     return resultado
 
 
