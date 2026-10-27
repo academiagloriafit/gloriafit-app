@@ -20,11 +20,11 @@ mais o próprio andamento (quantas vezes fez cada ficha e a meta).
 """
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 from app import ciclo, execucao, treinos
 from app.alunos import dose_do_item, etiquetas_dos_itens, texto_da_pausa
-from app.datas import agora_utc, formatar_dia, hoje, limites_do_dia
+from app.datas import FUSO_DA_ACADEMIA, agora_utc, dia_local, formatar_dia, hoje, ler_dia, limites_do_dia, momento_para_texto
 
 _NOME_DO_BLOCO = {2: "Bi-set", 3: "Tri-set"}
 
@@ -211,6 +211,20 @@ def _juntar_execucao(conn: sqlite3.Connection, aluno_id: int, treino: dict, agor
             e["cargas_recentes"] = recentes.get(e["exercicio"], [])  # "Últimas: 20 → 22,5 → 25 kg" (da mais antiga para a mais nova)
 
 
+def treinos_na_semana(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None) -> int:
+    """Em quantos DIAS desta semana (segunda a domingo, em Brasília) o aluno treinou: dias com alguma sessão registrada ("Treino
+    concluído" no celular ou ficha impressa na recepção), de qualquer treino dele. Duas fichas no mesmo dia contam como um treino.
+    É a linha "Esta semana: N treinos" da tela inicial (pedido do Thiago, 26/10/2026)."""
+    agora = agora or agora_utc()
+    dia = ler_dia(hoje(agora))
+    segunda = datetime.combine(dia - timedelta(days=dia.weekday()), time(0, 0), tzinfo=FUSO_DA_ACADEMIA)
+    linhas = conn.execute(
+        "SELECT s.feita_em FROM sessao s JOIN treino t ON t.id = s.treino_id WHERE t.aluno_id = ? AND s.feita_em >= ?",
+        (aluno_id, momento_para_texto(segunda)),
+    )
+    return len({dia_local(linha["feita_em"]) for linha in linhas if dia_local(linha["feita_em"]) <= dia.isoformat()})
+
+
 def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None) -> dict | None:
     """O treino ativo do aluno pronto para mostrar, ou None se ele não tem treino ativo.
 
@@ -227,6 +241,7 @@ def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | N
     if treino is None:
         return None
     _juntar_execucao(conn, aluno_id, treino, agora)
+    treino["treinos_na_semana"] = treinos_na_semana(conn, aluno_id, agora)
     del treino["_treino_id"]  # interno: o aluno não recebe ids
     return treino
 

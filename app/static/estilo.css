@@ -1120,6 +1120,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 #titulo-inicio { font-size: 44px; }
 .meu-treino-nome { margin: 0; font-size: 28px; line-height: 1.05; overflow-wrap: anywhere; }
 .meu-treino-datas { margin: 6px 0 0; font-size: 14px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+.meu-treino-semana { margin: 6px 0 0; font-size: 15px; font-weight: 700; color: inherit; }
 .meu-treino-dica { margin: 8px 0 0; }
 /* tela 1: um botão grande por ficha; a do dia vem circulada em laranja, com a etiqueta "Treino de hoje" */
 .meu-fichas-botoes { display: flex; flex-direction: column; gap: 12px; }

@@ -820,3 +820,33 @@ def test_do_dia_vem_no_json_da_rota_e_acompanha_o_que_o_aluno_marca(caminho, cli
     assert feito_na_b.get_json()["ficha_do_dia"] == 2  # o círculo vai para a que ele concluiu hoje
     assert depois["ficha_do_dia"] == 2
     assert desfeito.get_json()["ficha_do_dia"] == 1
+
+
+
+# ------------------------------------------------------------------ "Esta semana: N treinos" (26/10/2026)
+
+
+def test_treinos_na_semana_conta_dias_de_segunda_ate_hoje_em_brasilia():
+    from datetime import datetime, timezone
+
+    from app.aluno_treino import treinos_na_semana
+    from app.db import conectar, criar_tabelas
+
+    c = conectar()
+    criar_tabelas(c)
+    c.execute("INSERT INTO aluno (id, nome) VALUES (1, 'ANA'), (2, 'BIA')")
+    c.execute("INSERT INTO treino (id, aluno_id, nome, montado_por, ativo) VALUES (1, 1, 'VELHO', 'P', 0), (2, 1, 'ATUAL', 'P', 1), (3, 2, 'DA BIA', 'P', 1)")
+    sessoes = [
+        (1, 1, "2026-10-26 12:00:00"),  # segunda 26/10 (treino antigo também conta)
+        (2, 1, "2026-10-26 20:00:00"),  # mesma segunda: o mesmo dia não conta duas vezes
+        (2, 2, "2026-10-28 02:30:00"),  # 27/10 às 23h30 em Brasília (já é 28 em UTC): conta como terça
+        (2, 1, "2026-10-26 02:00:00"),  # domingo 25/10 às 23h em Brasília: semana passada
+        (3, 1, "2026-10-27 12:00:00"),  # outra aluna
+    ]
+    c.executemany("INSERT INTO sessao (treino_id, ficha_ordem, feita_em) VALUES (?, ?, ?)", sessoes)
+    quarta = datetime(2026, 10, 28, 15, 0, tzinfo=timezone.utc)
+
+    assert treinos_na_semana(c, 1, quarta) == 2
+    assert treinos_na_semana(c, 2, quarta) == 1
+    assert treinos_na_semana(c, 1, datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)) == 0  # segunda seguinte: semana nova
+    c.close()

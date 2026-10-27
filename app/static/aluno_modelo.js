@@ -103,6 +103,13 @@ export function decidirAtualizacaoDoTreino(naTela, status, corpo, escrevendo) {
 }
 
 // "Início 06/10/2026 · Fim 06/11/2026" (só o que existe; sem nenhuma das duas datas, vazio).
+// "Esta semana: 2 treinos" (dias com treino registrado, de segunda a domingo). Sem treino na semana, nada (tela limpa).
+export function textoDaSemana(treino) {
+  const n = treino?.treinos_na_semana;
+  if (!Number.isInteger(n) || n < 1) return "";
+  return `Esta semana: ${n} ${n === 1 ? "treino" : "treinos"}`;
+}
+
 export function textoDasDatas(treino) {
   const partes = [];
   if (treino.inicio) partes.push(`Início ${treino.inicio}`);

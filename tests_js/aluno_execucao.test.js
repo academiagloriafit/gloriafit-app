@@ -1,3 +1,4 @@
+import { textoDaSemana } from "../app/static/aluno_modelo.js";
 import { describe, expect, it } from "vitest";
 import {
   ESFORCOS,
@@ -414,5 +415,16 @@ describe("linha das últimas cargas (26/10/2026: uma linha só)", () => {
     expect(textoDaUltimaCarga(exercicio({ ultima_carga: "30", ultima_data: "20/10/2026", cargas_recentes: "x" }))).toBe("Última vez: 30 kg · 20/10");
     expect(textoDaUltimaCarga(exercicio({ ultima_carga: "30", ultima_data: "20/10/2026", cargas_recentes: [null, ""] }))).toBe("Última vez: 30 kg · 20/10");
     expect(textoDaUltimaCarga(exercicio({ ultima_carga: "", cargas_recentes: ["20", "25"] }))).toBe("");
+  });
+});
+
+describe("textoDaSemana (26/10/2026)", () => {
+  it("mostra os treinos da semana e some quando não há nenhum", () => {
+    expect(textoDaSemana({ treinos_na_semana: 1 })).toBe("Esta semana: 1 treino");
+    expect(textoDaSemana({ treinos_na_semana: 3 })).toBe("Esta semana: 3 treinos");
+    expect(textoDaSemana({ treinos_na_semana: 0 })).toBe("");
+    expect(textoDaSemana({})).toBe("");
+    expect(textoDaSemana({ treinos_na_semana: "2" })).toBe("");
+    expect(textoDaSemana(null)).toBe("");
   });
 });
