@@ -398,3 +398,21 @@ describe("tela de cada exercício: ir de um para outro", () => {
     expect(textoDeTodosFeitos({ feita_hoje: true })).toBe("Todos os exercícios feitos!");
   });
 });
+
+describe("linha das últimas cargas (26/10/2026: uma linha só)", () => {
+  it("com duas ou mais cargas mostra a evolução, da mais antiga para a mais nova", () => {
+    expect(textoDaUltimaCarga(exercicio({ ultima_carga: "25", ultima_data: "20/10/2026", cargas_recentes: ["20", "22,5", "25"] }))).toBe(
+      "Últimas: 20 → 22,5 → 25 kg",
+    );
+    expect(textoDaUltimaCarga(exercicio({ ultima_carga: "25", ultima_data: "20/10/2026", cargas_recentes: ["22,5", "25"] }))).toBe(
+      "Últimas: 22,5 → 25 kg",
+    );
+  });
+
+  it("com uma só, ou com dado estranho, continua como era", () => {
+    expect(textoDaUltimaCarga(exercicio({ ultima_carga: "30", ultima_data: "20/10/2026", cargas_recentes: ["30"] }))).toBe("Última vez: 30 kg · 20/10");
+    expect(textoDaUltimaCarga(exercicio({ ultima_carga: "30", ultima_data: "20/10/2026", cargas_recentes: "x" }))).toBe("Última vez: 30 kg · 20/10");
+    expect(textoDaUltimaCarga(exercicio({ ultima_carga: "30", ultima_data: "20/10/2026", cargas_recentes: [null, ""] }))).toBe("Última vez: 30 kg · 20/10");
+    expect(textoDaUltimaCarga(exercicio({ ultima_carga: "", cargas_recentes: ["20", "25"] }))).toBe("");
+  });
+});

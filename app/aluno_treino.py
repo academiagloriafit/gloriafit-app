@@ -197,6 +197,7 @@ def _juntar_execucao(conn: sqlite3.Connection, aluno_id: int, treino: dict, agor
     marcas = execucao.marcas_do_dia(conn, aluno_id, dia)
     nomes = {e["exercicio"] for ficha in treino["fichas"] for grupo in ficha["grupos"] for e in grupo["exercicios"]}
     ultimas = execucao.ultimas_cargas(conn, aluno_id, nomes, dia)
+    recentes = execucao.cargas_recentes(conn, aluno_id, nomes, dia)
     esforcos = _esforcos_de_hoje(conn, treino["_treino_id"], agora)
     for ficha in treino["fichas"]:
         ficha["esforco_hoje"] = esforcos.get(ficha["ordem"])
@@ -207,6 +208,7 @@ def _juntar_execucao(conn: sqlite3.Connection, aluno_id: int, treino: dict, agor
             e["carga_hoje"] = (marca["carga"] or "") if marca else ""
             e["ultima_carga"] = ultima[0] if ultima else ""
             e["ultima_data"] = (formatar_dia(ultima[1]) or "") if ultima else ""
+            e["cargas_recentes"] = recentes.get(e["exercicio"], [])  # "Últimas: 20 → 22,5 → 25 kg" (da mais antiga para a mais nova)
 
 
 def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None) -> dict | None:

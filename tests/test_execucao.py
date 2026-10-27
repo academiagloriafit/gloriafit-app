@@ -751,3 +751,26 @@ def test_a_resposta_do_treino_continua_sem_ids_nem_dados_do_professor(caminho, c
 
     for proibido in ("aluno_id", "exercicio_id", "montado_por", "PROFESSORA", "atualizado_em", '"id"'):
         assert proibido not in texto, proibido
+
+
+
+# ------------------------------------------------------------------ "Últimas: 20 → 22,5 → 25 kg" (26/10/2026)
+
+
+def test_cargas_recentes_sao_as_tres_ultimas_uma_por_dia_da_mais_antiga_para_a_nova(conn):
+    for dia, carga, hora, ficha in [
+        ("2026-10-01", "15", "10:00:00", 1),
+        ("2026-10-05", "20", "10:00:00", 1),
+        ("2026-10-08", "21", "10:00:00", 1),
+        ("2026-10-08", "22,5", "11:00:00", 2),  # mesmo dia (outra ficha), anotada depois: vale esta
+        ("2026-10-12", "25", "10:00:00", 1),
+        ("2026-10-26", "27,5", "10:00:00", 1),  # hoje: não entra (é a carga de hoje, não a de antes)
+    ]:
+        conn.execute(
+            "INSERT INTO execucao (aluno_id, dia, ficha_ordem, exercicio_ordem, exercicio_nome, feito, carga, atualizado_em)"
+            " VALUES (1, ?, ?, 1, 'SUPINO RETO', 1, ?, ?)",
+            (dia, ficha, carga, f"{dia} {hora}"),
+        )
+
+    assert execucao.cargas_recentes(conn, 1, {"SUPINO RETO", "NUNCA ANOTOU"}, "2026-10-26") == {"SUPINO RETO": ["20", "22,5", "25"]}
+    assert execucao.cargas_recentes(conn, 2, {"SUPINO RETO"}, "2026-10-26") == {}

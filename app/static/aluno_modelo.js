@@ -285,9 +285,15 @@ export function conferirCarga(texto) {
   return { ok: true, valor: parteDecimal ? `${parteInteira},${parteDecimal}` : parteInteira };
 }
 
-// "Última vez: 30 kg · 20/10" (vazio se o aluno nunca anotou carga neste exercício).
+// Uma linha só (pedido do Thiago, 26/10/2026: pouca informação na tela):
+// com duas ou mais cargas em dias diferentes, "Últimas: 20 → 22,5 → 25 kg" (da mais antiga para a mais nova);
+// com uma, "Última vez: 30 kg · 20/10"; sem nenhuma, vazio.
 export function textoDaUltimaCarga(exercicio) {
   if (!exercicio?.ultima_carga) return "";
+  const recentes = Array.isArray(exercicio.cargas_recentes)
+    ? exercicio.cargas_recentes.filter((c) => typeof c === "string" && c.trim() !== "")
+    : [];
+  if (recentes.length >= 2) return `Últimas: ${recentes.join(" → ")} kg`;
   const dia = typeof exercicio.ultima_data === "string" ? exercicio.ultima_data.slice(0, 5) : "";
   return dia ? `Última vez: ${exercicio.ultima_carga} kg · ${dia}` : `Última vez: ${exercicio.ultima_carga} kg`;
 }

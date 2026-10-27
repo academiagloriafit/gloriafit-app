@@ -130,6 +130,7 @@ def test_o_exercicio_sai_em_texto_pronto(conn):
         "carga_hoje": "",
         "ultima_carga": "",
         "ultima_data": "",
+        "cargas_recentes": [],  # a linha "Últimas: 20 → 22,5 → 25 kg" (26/10/2026)
     }
     assert "foto" not in primeiro  # a foto de "Como fazer" saiu da tela do aluno (22/10/2026)
     assert segundo["ordem"] == 2 and segundo["etiqueta"] == "2" and segundo["carga"] == "" and segundo["intervalo"] == "" and segundo["observacao"] == ""

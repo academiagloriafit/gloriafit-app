@@ -95,6 +95,34 @@ def ultimas_cargas(conn: sqlite3.Connection, aluno_id: int, nomes: set[str], ant
 
 
 
+
+CARGAS_NA_EVOLUCAO = 3  # quantas cargas a linha "Últimas" mostra ao aluno (pedido do Thiago: pouca informação na tela)
+
+
+def cargas_recentes(conn: sqlite3.Connection, aluno_id: int, nomes: set[str], antes_de: str) -> dict[str, list[str]]:
+    """{nome do exercício: [carga, ...]} das últimas `CARGAS_NA_EVOLUCAO` cargas anotadas em dias ANTES de `antes_de`, da mais antiga
+    para a mais nova, UMA por dia (a última anotada no dia). Serve a linha "Últimas: 20 → 22,5 → 25 kg" da tela do exercício.
+    Quem tem menos de duas não precisa de evolução: o celular mostra só a "Última vez"."""
+    resultado: dict[str, list[str]] = {}
+    for nome in sorted(nomes):
+        por_dia: dict[str, str] = {}
+        for linha in conn.execute(
+            """
+            SELECT carga, dia FROM execucao
+            WHERE aluno_id = ? AND exercicio_nome = ? AND carga IS NOT NULL AND dia < ?
+            ORDER BY dia DESC, atualizado_em DESC, id DESC
+            LIMIT 50
+            """,
+            (aluno_id, nome, antes_de),
+        ):
+            if linha["dia"] not in por_dia:
+                por_dia[linha["dia"]] = linha["carga"]
+            if len(por_dia) == CARGAS_NA_EVOLUCAO:
+                break
+        if por_dia:
+            resultado[nome] = list(reversed(list(por_dia.values())))
+    return resultado
+
 def cargas_por_exercicio(conn: sqlite3.Connection, aluno_id: int) -> dict[int, tuple[str, str]]:
     """{id do exercício: (carga, dia 'AAAA-MM-DD')} da carga MAIS RECENTE que o aluno anotou em cada exercício, contando hoje.
 
