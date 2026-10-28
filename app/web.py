@@ -878,6 +878,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             hoje=datas.hoje(),
             comentarios_do_aluno=comentarios.listar(conexao(), so_nao_lidos=False, aluno_id=aluno_id, limite=30),
             ultimos_treinos=ciclo.ultimas_sessoes_do_aluno(conexao(), aluno_id),
+            dias_sem_treinar=ciclo.dias_desde_o_ultimo_treino(conexao(), aluno_id),  # o resumo no topo da ficha
             historicos_ia=ia_historico.do_aluno(conexao(), aluno_id),  # "Por que este treino foi montado assim" (só o professor vê)
         )
 

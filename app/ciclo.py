@@ -19,7 +19,7 @@ Regras (decisões do Thiago, 08/10/2026):
 import sqlite3
 from datetime import datetime
 
-from app.datas import agora_utc, dia_local, formatar_dia, limites_do_dia, momento_para_texto
+from app.datas import agora_utc, dia_local, formatar_dia, hoje, ler_dia, limites_do_dia, momento_para_texto
 
 # A nota que o aluno dá ao concluir a ficha pelo celular (decisão do Thiago, 22/10/2026): opcional, três opções.
 ESFORCOS = {1: "Leve", 2: "Ideal", 3: "Pesado"}
@@ -224,6 +224,17 @@ def ultimas_sessoes_do_aluno(conn: sqlite3.Connection, aluno_id: int, limite: in
         }
         for linha in linhas
     ]
+
+
+def dias_desde_o_ultimo_treino(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None) -> int | None:
+    """Há quantos dias (em Brasília) foi o último treino registrado do aluno, de qualquer treino dele: 0 = hoje.
+    None = nunca registrou. É o "há N dias" do resumo no topo da ficha (pedido do Thiago, 28/10/2026)."""
+    ultima = conn.execute(
+        "SELECT MAX(s.feita_em) FROM sessao s JOIN treino t ON t.id = s.treino_id WHERE t.aluno_id = ?", (aluno_id,)
+    ).fetchone()[0]
+    if not ultima:
+        return None
+    return max(0, (ler_dia(hoje(agora)) - ler_dia(dia_local(ultima))).days)
 
 
 def sessoes_feitas_do_aluno(conn: sqlite3.Connection, aluno_id: int) -> dict[int, dict[int, int]]:

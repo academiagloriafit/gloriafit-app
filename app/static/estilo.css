@@ -1669,3 +1669,16 @@ body.com-descanso .pagina-aluno { padding-bottom: 130px; }
 .ajuda-ia > summary { width: fit-content; font-size: 14.5px; font-weight: 650; color: var(--texto); cursor: pointer; }
 .ajuda-ia > summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
 .lista-ajuda { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--texto-suave); }
+
+/* ---- resumo do aluno no topo da ficha (28/10/2026) ---- */
+.resumo-aluno { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
+.resumo-item {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  padding: 14px 16px; border: 1px solid var(--linha); border-radius: 10px; background: var(--papel);
+}
+.resumo-alerta { border-color: var(--laranja); box-shadow: inset 4px 0 0 var(--laranja); }
+.resumo-rotulo { font-size: 13px; font-weight: 600; color: var(--texto-suave); }
+.resumo-valor { font-size: 18px; font-weight: 800; color: var(--texto); overflow-wrap: anywhere; }
+.resumo-detalhe { font-size: 13.5px; color: var(--texto-suave); overflow-wrap: anywhere; }
+@media (max-width: 900px) { .resumo-aluno { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .resumo-aluno { grid-template-columns: minmax(0, 1fr); } }
