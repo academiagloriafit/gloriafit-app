@@ -132,10 +132,10 @@ def test_a_tela_mostra_as_tres_listas_com_links(app, caminho):
     html = _autorizado(app, caminho).get("/pendencias").get_data(as_text=True)
 
     assert "Hora de trocar o treino" in html and "Comentários sem ler" in html and "Ativos sem treino" in html
-    assert "ANA META CUMPRIDA" in html and "DANI SEM TREINO" in html and "Dor no ombro no supino" in html
+    assert "Ana Meta Cumprida" in html and "Dani Sem Treino" in html and "Dor no ombro no supino" in html
     assert 'href="/alunos/4/montar"' in html and 'href="/alunos/1"' in html
     assert "EDU TRANCADO" not in html and "Já lido" not in html
-    assert 'aria-current="page">Pendências</a>' in html  # o menu marca a tela
+    assert 'aria-current="page">Pendências' in html  # o menu marca a tela
 
 
 def test_comentario_com_html_sai_escapado(app, caminho):
@@ -159,4 +159,4 @@ def test_computador_nao_autorizado_nao_ve_as_pendencias(app):
 def test_o_menu_de_todas_as_telas_do_professor_tem_pendencias(app, caminho):
     navegador = _autorizado(app, caminho)
     for url in ("/alunos", "/ausentes", "/comentarios", "/alunos/1"):
-        assert "Pendências</a>" in navegador.get(url).get_data(as_text=True), url
+        assert ">Pendências" in navegador.get(url).get_data(as_text=True), url

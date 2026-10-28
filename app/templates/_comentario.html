@@ -3,7 +3,7 @@
 {% macro comentario(c, com_aluno=False) %}
 <li class="comentario{{ '' if c.lido else ' comentario-novo' }}" data-comentario="{{ c.id }}"{% if not c.lido %} data-comentario-novo="1"{% endif %}>
   <p class="comentario-cabecalho">
-    {% if com_aluno %}<a class="comentario-aluno" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">{{ c.aluno }}</a>{% endif %}
+    {% if com_aluno %}<a class="comentario-aluno" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">{{ c.aluno | nome_de_pessoa }}</a>{% endif %}
     <span class="comentario-quando">{{ c.quando }}</span>
   </p>
   <p class="comentario-lugar">

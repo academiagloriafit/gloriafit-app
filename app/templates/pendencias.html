@@ -16,6 +16,14 @@
     <h1 class="titulo-grande">Pendências</h1>
     <p class="texto-apoio">O que precisa da atenção de um professor. Conta só quem está ativo no Data4U ou é aluno provisório. A tela só mostra: nada muda até você abrir o aluno.</p>
 
+    {# Faixa grafite com os números (visual novo, 28/10/2026): cada número leva à sua lista, mais abaixo. #}
+    <nav class="faixa-resumo" aria-label="Resumo das pendências">
+      <a class="faixa-item{% if p.trocar.total %} faixa-alerta{% endif %}" href="#titulo-trocar"><span class="faixa-numero">{{ p.trocar.total }}</span><span class="faixa-rotulo">Hora de trocar o treino</span></a>
+      <a class="faixa-item{% if p.comentarios.total %} faixa-alerta{% endif %}" href="#titulo-comentarios-pendentes"><span class="faixa-numero">{{ p.comentarios.total }}</span><span class="faixa-rotulo">Comentários sem ler</span></a>
+      <a class="faixa-item{% if p.sem_treino.total %} faixa-alerta{% endif %}" href="#titulo-sem-treino"><span class="faixa-numero">{{ p.sem_treino.total }}</span><span class="faixa-rotulo">Ativos sem treino</span></a>
+      <a class="faixa-item faixa-agendada" href="#titulo-agendados"><span class="faixa-numero">{{ p.agendados.total }}</span><span class="faixa-rotulo">Trocas agendadas</span></a>
+    </nav>
+
     <section class="cartao-lista" aria-labelledby="titulo-trocar">
       <div class="cabecalho-lista">
         <h2 id="titulo-trocar">Hora de trocar o treino</h2>
@@ -25,7 +33,7 @@
       <ul class="linhas" id="lista-trocar">
         {% for a in p.trocar.alunos %}
         <li class="linha-pendencia">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}</a>
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}</a>
           <span class="pendencia-detalhe">{{ a.motivo }}<span class="pendencia-treino"> · {{ a.treino }}</span>{% if a.agendado %}<span class="pendencia-agendado"> · Troca agendada para {{ a.agendado }}</span>{% endif %}</span>
           {% if a.agendado %}<a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>{% else %}<a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>{% endif %}
         </li>
@@ -45,7 +53,7 @@
       <ul class="linhas" id="lista-comentarios-pendentes">
         {% for c in p.comentarios.comentarios %}
         <li class="linha-pendencia">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">{{ c.aluno }}</a>
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">{{ c.aluno | nome_de_pessoa }}</a>
           <span class="pendencia-detalhe">“{{ c.texto | truncate(120, True, "…") }}”<span class="pendencia-treino"> · {{ c.quando }}</span></span>
           <a class="botao-link" href="{{ url_for('pagina_comentarios') }}">Ler e responder</a>
         </li>
@@ -65,7 +73,7 @@
       <ul class="linhas" id="lista-sem-treino">
         {% for a in p.sem_treino.alunos %}
         <li class="linha-pendencia">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
           <span class="pendencia-detalhe">Nenhum treino ativo{% if a.agendado %}<span class="pendencia-agendado"> · Treino agendado para {{ a.agendado }}</span>{% endif %}</span>
           {% if a.agendado %}<a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>{% else %}<a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>{% endif %}
         </li>
@@ -85,7 +93,7 @@
       <ul class="linhas" id="lista-agendados">
         {% for a in p.agendados.alunos %}
         <li class="linha-pendencia">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}</a>
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}</a>
           <span class="pendencia-detalhe">Entra em {{ a.dia }}<span class="pendencia-treino"> · {{ a.treino }}</span></span>
           <a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>
         </li>

@@ -286,10 +286,10 @@ def test_a_tela_lista_os_sumidos_com_link_para_a_ficha(caminho, professor):
 
     html = professor.get("/ausentes").get_data(as_text=True)
 
-    assert "Quem sumiu" in html and "ANA SOUZA" in html and "BRUNO LIMA" in html
+    assert "Quem sumiu" in html and "Ana Souza" in html and "Bruno Lima" in html
     assert 'href="/alunos/1"' in html and 'href="/alunos/2"' in html
     assert "9 dias" in html and "20 dias" in html
-    assert html.index("BRUNO LIMA") < html.index("ANA SOUZA")  # o mais sumido primeiro
+    assert html.index("Bruno Lima") < html.index("Ana Souza")  # o mais sumido primeiro
     assert 'href="https://wa.me/5527988887766"' in html and 'rel="noopener noreferrer"' in html
 
 
@@ -299,7 +299,7 @@ def test_o_prazo_da_tela_vem_da_busca_e_lixo_cai_no_padrao(caminho, professor):
     catorze = professor.get("/ausentes?dias=14").get_data(as_text=True)
     lixo = professor.get("/ausentes?dias=abc%27%3E%3Cscript%3E")
 
-    assert "BRUNO LIMA" in catorze and "ANA SOUZA" not in catorze
+    assert "Bruno Lima" in catorze and "Ana Souza" not in catorze
     assert lixo.status_code == 200 and "<script>" not in lixo.get_data(as_text=True)
 
 
@@ -312,7 +312,7 @@ def test_nome_do_aluno_nunca_vira_html(caminho, professor):
 
     html = professor.get("/ausentes").get_data(as_text=True)
 
-    assert "<b>ANA</b>" not in html and "&lt;b&gt;ANA&lt;/b&gt; &amp; CIA" in html
+    assert "<b>ANA</b>" not in html and "<B>Ana</B>" not in html and "&lt;B&gt;Ana&lt;/B&gt; &amp; Cia" in html
 
 
 def test_tela_vazia_explica_em_vez_de_mostrar_tabela_sem_linhas(caminho, professor):
@@ -349,7 +349,7 @@ def test_a_tela_separa_quem_nunca_registrou_treino(caminho, professor):
 
     assert 'id="lista-ausentes"' in html and 'id="lista-sem-registro"' in html
     assert "Ainda sem nenhum treino registrado no app" in html
-    assert html.index("BRUNO LIMA") < html.index("lista-sem-registro") < html.index("ANA SOUZA")  # cada um na sua seção
+    assert html.index("Bruno Lima") < html.index("lista-sem-registro") < html.index("Ana Souza")  # cada um na sua seção
 
 
 def test_sem_ninguem_sem_registro_a_secao_nem_aparece(caminho, professor):

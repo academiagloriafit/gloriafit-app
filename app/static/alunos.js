@@ -1,6 +1,7 @@
 // Tela "Buscar aluno": pede a lista ao servidor (/api/alunos) a cada pausa na
 // digitação e desenha as linhas. Cada linha é um link para a ficha do aluno.
 import { MENSAGEM_NAO_AUTORIZADO } from "./api.js";
+import { iniciais, nomeDePessoa } from "./nomes.js";
 
 const campo = document.getElementById("busca-aluno");
 const lista = document.getElementById("lista-alunos");
@@ -36,6 +37,15 @@ function celulaDaSituacao(aluno) {
   return caixa;
 }
 
+// O nome com o círculo das iniciais na frente (visual novo, 28/10/2026). O nome aparece "Mariana de Souza".
+function celulaDoNome(nome) {
+  const caixa = celula("aluno-nome-lista", "");
+  const circulo = celula("avatar-aluno", iniciais(nome));
+  circulo.setAttribute("aria-hidden", "true");
+  caixa.append(circulo, document.createTextNode(nomeDePessoa(nome)));
+  return caixa;
+}
+
 function desenharLinha(aluno) {
   if (!Number.isInteger(aluno.id)) return null; // não monta link com id estranho
 
@@ -45,7 +55,7 @@ function desenharLinha(aluno) {
   link.href = "/alunos/" + aluno.id;
 
   link.append(
-    celula("aluno-nome-lista", aluno.nome),
+    celulaDoNome(aluno.nome),
     Number.isInteger(aluno.matricula)
       ? celula("aluno-matricula", String(aluno.matricula))
       : celula("aluno-matricula", "—", true),

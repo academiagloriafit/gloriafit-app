@@ -24,7 +24,7 @@
 
     {% macro linha(a) %}
         <li class="linha-ausente">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
           <span class="ausente-ultimo">{% if a.nunca %}Nenhum registrado<span class="ausente-desde"> · treino desde {{ a.desde }}</span>{% else %}{{ a.ultima }}{% endif %}</span>
           <span class="ausente-dias">{{ a.dias }} {{ "dia" if a.dias == 1 else "dias" }}</span>
           <span class="ausente-treino">{{ a.treino }}</span>

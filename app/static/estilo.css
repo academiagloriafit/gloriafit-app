@@ -1936,3 +1936,46 @@ body.com-descanso .pagina-aluno { padding-bottom: 130px; }
 .tema-grafite .coluna-lateral .dica { font-size: 13px; line-height: 1.45; }
 .tema-grafite .coluna-lateral .campo input, .tema-grafite .coluna-lateral .campo select { height: 44px; font-size: 16px; }
 .tema-grafite .coluna-lateral .botao-escuro { min-height: 44px; }
+
+/* ---- nomes nas listas (visual novo): "Mariana de Souza" em vez de tudo maiúsculo, com o círculo das iniciais na busca ---- */
+.avatar-aluno { display: none; }
+.tema-grafite .aluno-nome-lista, .tema-grafite .ausente-nome, .tema-grafite .comentario-aluno { text-transform: none; letter-spacing: 0; }
+.tema-grafite .aluno-nome-lista { display: flex; align-items: center; gap: 12px; }
+.tema-grafite .avatar-aluno {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--cinza-leve);
+  color: var(--texto);
+  font-size: 13px;
+  font-weight: 800;
+}
+.tema-grafite .linha-aluno:hover .avatar-aluno { background: var(--laranja); color: var(--sobre-laranja); }
+
+/* ---- pendências: faixa grafite com os números no alto ---- */
+.faixa-resumo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.faixa-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: var(--papel);
+  color: var(--texto);
+  text-decoration: none;
+}
+.faixa-numero { font-size: 30px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.faixa-rotulo { font-size: 14px; color: var(--texto-suave); }
+.faixa-item:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.tema-grafite .faixa-resumo { padding: 18px; border-radius: 18px; background: var(--grafite-fundo); }
+.tema-grafite .faixa-item { border: 0; border-radius: 14px; background: var(--grafite-bloco); color: #ffffff; transition: background-color 0.12s; }
+.tema-grafite .faixa-item:hover { background: var(--grafite-item); }
+.tema-grafite .faixa-rotulo { color: var(--grafite-suave); }
+.tema-grafite .faixa-alerta .faixa-numero { color: #ff8a5c; }
+.tema-grafite .faixa-agendada .faixa-numero { color: #a5b4fc; }
+@media (max-width: 900px) { .faixa-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

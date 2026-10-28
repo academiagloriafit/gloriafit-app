@@ -313,6 +313,12 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         # O número do menu "Comentários". É uma função (e não um número) para a conta só rodar nas telas que a usam (o topo do professor).
         return {"comentarios_novos": lambda: comentarios.contar_nao_lidos(conexao())}
 
+    @app.context_processor
+    def contador_de_pendencias():
+        # O número no ícone "Pendências" do menu (trocar treino + comentários sem ler + ativos sem treino).
+        # Função, como o de comentários: a conta só roda nas telas que mostram o menu.
+        return {"pendencias_total": lambda: pendencias.listar(conexao())["total"]}
+
     @app.errorhandler(ErroDeEntrada)
     def entrada_invalida(erro):
         return jsonify(erro=str(erro)), erro.status

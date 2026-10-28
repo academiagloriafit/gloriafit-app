@@ -815,7 +815,7 @@ def test_a_tela_lista_os_comentarios_novos_com_quem_onde_e_quando(caminho, profe
     html = professor.get("/comentarios").get_data(as_text=True)
 
     assert "Está leve demais" in html and "Dói o ombro" in html
-    assert "ANA SOUZA" in html and "BRUNO LIMA" in html
+    assert "Ana Souza" in html and "Bruno Lima" in html
     assert "SUPINO RETO" in html and "A PEITO" in html and "TREINO ABC" in html
     assert "15/10/2026 08:00" in html
     assert 'href="/alunos/1"' in html and 'href="/alunos/2"' in html
