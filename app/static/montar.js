@@ -812,6 +812,9 @@ function devolverFoco() {
 }
 
 function desenhar() {
+  // Com exercício na tela, os cartões "Começar de um treino pronto" e "Treino sob medida" encolhem (sem o texto de ajuda):
+  // a montagem fica mais perto do topo (pedido do Thiago, 28/10/2026). Os botões continuam lá.
+  raiz.classList.toggle("com-exercicios", M.contarExercicios(estado) > 0);
   desenharAbas();
   desenharMontagem();
   atualizarNomeSugerido();

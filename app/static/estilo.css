@@ -1682,3 +1682,14 @@ body.com-descanso .pagina-aluno { padding-bottom: 130px; }
 .resumo-detalhe { font-size: 13.5px; color: var(--texto-suave); overflow-wrap: anywhere; }
 @media (max-width: 900px) { .resumo-aluno { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .resumo-aluno { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- "Lançar treino" com exercícios na tela (28/10/2026): os cartões de começar encolhem para a montagem subir ---- */
+.com-exercicios .cartao-importar > .barra-importar > .dica,
+.com-exercicios .cartao-ia > .barra-importar > .dica { display: none; }
+.com-exercicios .cartao-importar, .com-exercicios .cartao-ia { padding-top: 10px; padding-bottom: 10px; }
+.com-exercicios .barra-importar h2 { font-size: 16px; }
+.com-exercicios .barra-importar { justify-content: space-between; }
+@media (max-width: 520px) {
+  .com-exercicios .barra-importar { flex-wrap: nowrap; }
+  .com-exercicios .barra-importar .botao-escuro { padding-inline: 12px; font-size: 14.5px; white-space: nowrap; }
+}
