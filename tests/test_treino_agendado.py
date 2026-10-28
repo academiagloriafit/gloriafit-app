@@ -216,6 +216,8 @@ def test_salvar_pela_api_responde_agendado_e_a_ficha_mostra_e_deixa_cancelar(cam
     html = navegador.get("/alunos/1").get_data(as_text=True)
     assert "Agendado 15/01<" in html and "Entra sozinho em 15/01/2099" in html
     assert "Cancelar agendamento" in html and "Troca agendada: 15/01/2099" in html
+    # o aviso antes de cancelar deixa claro que o treino montado se perde
+    assert "o treino que você montou será APAGADO e não dá para recuperar" in html and "Sim, apagar o treino agendado" in html
     assert navegador.post(f"/api/treinos/{corpo['id']}/cancelar-agendamento", json={}).status_code == 200
     assert "Agendado 15/01<" not in navegador.get("/alunos/1").get_data(as_text=True)
     assert navegador.post(f"/api/treinos/{corpo['id']}/cancelar-agendamento", json={}).status_code == 404

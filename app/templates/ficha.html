@@ -176,11 +176,11 @@
               <span class="aviso-padrao" role="status"></span>
               {% if treino.agendado_para %}
               {# Treino agendado (28/10/2026): entra sozinho no dia; aqui só dá para cancelar (o treino é apagado: o aluno nunca o viu). #}
-              <button type="button" class="botao-link botao-cancelar-agendamento" data-treino="{{ treino.id }}">Cancelar agendamento</button>
+              <button type="button" class="botao-link botao-cancelar-agendamento" data-treino="{{ treino.id }}" title="Apaga o treino agendado (pede confirmação)">Cancelar agendamento</button>
               <span class="confirmacao confirmar-cancelar-agendamento" hidden>
-                <span>Cancelar o agendamento? Este treino é apagado e o aluno continua no treino atual.</span>
-                <button type="button" class="botao-perigo sim-cancelar-agendamento" data-treino="{{ treino.id }}">Sim, cancelar</button>
-                <button type="button" class="botao-discreto nao-cancelar-agendamento">Não</button>
+                <span><strong>Atenção: o treino que você montou será APAGADO e não dá para recuperar.</strong> O aluno continua no treino atual. Para só mudar a data ou os exercícios, use "Editar treino". Cancelar mesmo assim?</span>
+                <button type="button" class="botao-perigo sim-cancelar-agendamento" data-treino="{{ treino.id }}">Sim, apagar o treino agendado</button>
+                <button type="button" class="botao-discreto nao-cancelar-agendamento">Não, manter</button>
               </span>
               {% elif treino.ativo %}
               <button type="button" class="botao-link botao-concluir" data-treino="{{ treino.id }}">Concluído</button>
