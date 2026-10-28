@@ -655,7 +655,7 @@ def treino_anterior(conn: sqlite3.Connection, aluno_id: int, permitidos, agora: 
         """
         SELECT t.id, t.ativo, COALESCE(t.inicio, substr(t.criado_em, 1, 10)) AS desde, a.nome AS aluno
         FROM treino t JOIN aluno a ON a.id = t.aluno_id
-        WHERE t.aluno_id = ?
+        WHERE t.aluno_id = ? AND t.agendado_para IS NULL  -- treino agendado ainda não foi feito: não é "anterior"
           AND EXISTS (SELECT 1 FROM ficha f JOIN ficha_item i ON i.ficha_id = f.id WHERE f.treino_id = t.id)
         ORDER BY t.ativo DESC, desde DESC, t.id DESC
         LIMIT 1

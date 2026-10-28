@@ -81,7 +81,7 @@ App de treinos da Academia Glória Fit. Hoje tem estas camadas prontas:
 
 | Arquivo | Para quê |
 |---|---|
-| `app/schema.sql` | Desenho das tabelas (versão 17): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha, com a nota de esforço `esforco` quando o aluno escolheu uma), `execucao` (o que o aluno marcou como feito e a carga que anotou em cada exercício, por dia), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) o retorno dos professores sobre o rascunho da IA (`ia_retorno`, sem aluno nem professor), o histórico do treino feito com a IA (`treino_ia`, LIGADO ao treino: o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô) `importacao` (de quando é a última cópia do Data4U aplicada) o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`) e os comentários do aluno (`comentario`). Não há tabela de professores: o nome é digitado a cada treino |
+| `app/schema.sql` | Desenho das tabelas (versão 18): exercícios, grupos musculares, alunos (CPF pode ficar vazio; `situacao`; `data4u_id` = matrícula), treinos (com `montado_por`, `origem` app/data4u, `data4u_id`, `ativo`, `inicio`, `fim`, `concluido_em` e `sessoes_por_ficha`), fichas e itens (com pausa e observação), `sessao` (cada vez que o aluno treinou uma ficha, com a nota de esforço `esforco` quando o aluno escolheu uma), `execucao` (o que o aluno marcou como feito e a carga que anotou em cada exercício, por dia), `modelo_treino` (treinos padrão, com `fila_id` e `numero` quando fazem parte de uma fila), `fila` (as 5 filas) e `aluno_fila` (em que fila cada aluno está, em que número, quem o colocou e a liberação) os computadores autorizados (`codigo_de_autorizacao`, `dispositivo`, `autorizacao_falha`), a senha de administrador, os pedidos de treino sob medida (`ia_pedido`) o retorno dos professores sobre o rascunho da IA (`ia_retorno`, sem aluno nem professor), o histórico do treino feito com a IA (`treino_ia`, LIGADO ao treino: o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô) `importacao` (de quando é a última cópia do Data4U aplicada) o login do aluno (`aluno_senha`, `aluno_codigo`, `aluno_sessao`, `aluno_evento`) e os comentários do aluno (`comentario`). Não há tabela de professores: o nome é digitado a cada treino |
 | `app/db.py` | Abre o banco (liga as chaves estrangeiras, ensina o SQL a comparar sem acento), cria as tabelas, **atualiza banco de qualquer versão de 4 a 14 até a 15 sozinho** (`migrar`, com cópia de segurança antes) e recusa arquivo de versão que não conhece |
 | `app/importar_exercicios.py` | Lê a planilha `dados/quadro_exercicios_v2.xlsx` e grava no banco |
 | `app/texto.py` | `normalizar`: minúsculas e sem acento ("Bíceps" → "biceps") |
@@ -633,6 +633,31 @@ Thiago pediu uma análise da área de montar treinos e aprovou as 6 sugestões (
    de quando ele é e que ainda não foi salvo. Ao sair da página com mudança não salva (inclusive em "Editar treino"), o navegador pergunta antes.
    Guarda só o que está na tela (exercícios, nome do treino, nome do professor, datas). **Risco aceito:** no computador da recepção, quem abrir o
    mesmo aluno em até 3 dias vê o rascunho de outro professor (com o aviso).
+
+### Treino agendado (28/10/2026)
+
+Pedido do Thiago: montar hoje o próximo treino do aluno e deixá-lo entrar sozinho numa data futura (ex.: daqui a 15 dias).
+
+- **Como se agenda:** na tela "Lançar treino", o campo **Início** com data DEPOIS de hoje. O botão vira "Agendar treino" e a tela avisa
+  ("Este treino fica AGENDADO para 12/11/2026..."). Atalho: **"Começar quando o atual terminar (12/11)"** põe o início no dia seguinte ao
+  fim do treino atual (`ciclo.inicio_sugerido`; só aparece se o atual tem fim e ele ainda não passou). Início hoje ou antes: entra na hora, como sempre.
+- **Banco versão 18** (`_de_17_para_18`, com cópia de segurança antes): `treino.agendado_para` ('AAAA-MM-DD'; vazio = treino comum). O banco só
+  aceita agendado INATIVO e no máximo **um agendado por aluno** (`ux_treino_agendado_por_aluno`, que também serve à troca automática).
+- **A troca automática:** `treinos.ativar_agendados` roda antes de cada pedido (`troca_os_treinos_agendados` em `web.py`, depois da guarda de
+  acesso; não roda para arquivos estáticos nem `/saude`). No primeiro pedido do dia (aluno no celular, recepção ou professor), todo agendado com
+  data hoje ou antes vira o ativo e o ativo de antes é concluído (`concluido_em` = o momento da troca). Sem relógio no servidor: se ninguém abrir
+  o app no dia, a troca acontece no primeiro acesso depois. Dois pedidos ao mesmo tempo: `BEGIN IMMEDIATE` deixa um só trocar. Se falhar, vai
+  para o log e o pedido segue.
+- **Regras:** com um agendado marcado, nada mais se salva para o aluno (nem treino para hoje, que o agendado trocaria no dia) até **editar** ou
+  **cancelar** o agendamento na ficha. Editar o agendado: continua agendado na data nova; com início hoje, entra na hora. Cancelar: o treino
+  agendado é apagado (o aluno nunca o viu) e o ativo não muda. Agendado não pode ser "reativado" e não é "treino anterior" para o robô.
+- **Telas:** ficha (selo "Agendado 12/11", "Entra sozinho em ...", botões Editar e Cancelar agendamento; no resumo do topo "Troca agendada: 12/11"),
+  "Pendências" (lista nova **Trocas agendadas**; em "Hora de trocar" e "Ativos sem treino", quem já tem agendado aparece com a data e "Ver ficha"),
+  celular do aluno (no dia em que o treino começa: **"Treino novo a partir de hoje"**, `novo_hoje`).
+- **Limite conhecido:** treino agendado aberto pela fila (`?fila=ID`) muda o número do aluno na fila ao SALVAR (não no dia da troca); se o
+  agendamento for cancelado, o número não volta sozinho.
+- **Voltar atrás:** imagem anterior `bc6f95b` (conhece até a v17): app parado, `PRAGMA user_version = 17` (a coluna extra fica parada; um
+  agendado que existir fica como treino inativo) ou restaurar a cópia de `/dados/antes-da-migracao`.
 
 ## Editar treino: como funciona
 

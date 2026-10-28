@@ -686,13 +686,13 @@ def test_inicio_de_hoje_usa_o_dia_de_brasilia_e_nao_o_de_utc(conn, aluno_id, exe
 
 
 def test_grava_inicio_fim_e_treinos_por_ficha(conn, aluno_id, exercicios):
-    dados = _com(exercicios["a"], inicio="2026-10-10", fim="2026-12-31", sessoes_por_ficha=15)
+    dados = _com(exercicios["a"], inicio="2026-10-01", fim="2026-12-31", sessoes_por_ficha=15)  # início no passado: entra hoje
 
     treino_id = salvar_treino(conn, aluno_id, dados, agora=AGORA)
 
-    assert _ciclo(conn, treino_id) == ("2026-10-10", "2026-12-31", 15, 1, None)
+    assert _ciclo(conn, treino_id) == ("2026-10-01", "2026-12-31", 15, 1, None)
     treino = obter_treino(conn, treino_id)
-    assert (treino["inicio"], treino["fim"], treino["sessoes_por_ficha"], treino["ativo"]) == ("2026-10-10", "2026-12-31", 15, 1)
+    assert (treino["inicio"], treino["fim"], treino["sessoes_por_ficha"], treino["ativo"]) == ("2026-10-01", "2026-12-31", 15, 1)
 
 
 @pytest.mark.parametrize("vazio", [None, ""])

@@ -60,6 +60,23 @@ for (const barra of document.querySelectorAll(".acoes-treino")) {
     const sim = confirmacao.querySelector(".sim-concluir");
     sim.addEventListener("click", () => executar(sim, sim.dataset.treino, "concluir"));
   }
+  // Treino agendado (28/10/2026): "Cancelar agendamento" também pede confirmação (o treino agendado é apagado).
+  const botaoCancelarAgendamento = barra.querySelector(".botao-cancelar-agendamento");
+  if (botaoCancelarAgendamento) {
+    const confirmar = barra.querySelector(".confirmar-cancelar-agendamento");
+    botaoCancelarAgendamento.addEventListener("click", () => {
+      botaoCancelarAgendamento.hidden = true;
+      confirmar.hidden = false;
+      confirmar.querySelector(".nao-cancelar-agendamento").focus();
+    });
+    confirmar.querySelector(".nao-cancelar-agendamento").addEventListener("click", () => {
+      confirmar.hidden = true;
+      botaoCancelarAgendamento.hidden = false;
+      botaoCancelarAgendamento.focus();
+    });
+    const sim = confirmar.querySelector(".sim-cancelar-agendamento");
+    sim.addEventListener("click", () => executar(sim, sim.dataset.treino, "cancelar-agendamento"));
+  }
   if (botaoReativar) {
     botaoReativar.addEventListener("click", () => executar(botaoReativar, botaoReativar.dataset.treino, "reativar"));
   }

@@ -17,7 +17,7 @@ Regras (decisões do Thiago, 08/10/2026):
 """
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.datas import agora_utc, dia_local, formatar_dia, hoje, ler_dia, limites_do_dia, momento_para_texto
 
@@ -38,7 +38,7 @@ class CicloInvalido(Exception):
 
 
 def _treino(conn: sqlite3.Connection, treino_id: int) -> sqlite3.Row:
-    treino = conn.execute("SELECT id, aluno_id, nome, ativo FROM treino WHERE id = ?", (treino_id,)).fetchone()
+    treino = conn.execute("SELECT id, aluno_id, nome, ativo, agendado_para FROM treino WHERE id = ?", (treino_id,)).fetchone()
     if treino is None:
         raise TreinoNaoEncontrado(treino_id)
     return treino
@@ -51,6 +51,17 @@ def treino_ativo(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
 
 
 # ------------------------------------------------------------------ concluir e reativar
+
+
+def inicio_sugerido(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None) -> str | None:
+    """O dia seguinte ao fim do treino ativo ('AAAA-MM-DD'), se esse dia ainda não chegou: é a sugestão "Começar quando o atual
+    terminar" da tela de lançar treino (treino agendado, 28/10/2026). None = sem treino ativo, sem fim, ou o fim já passou."""
+    linha = conn.execute("SELECT fim FROM treino WHERE aluno_id = ? AND ativo = 1", (aluno_id,)).fetchone()
+    fim = ler_dia(linha["fim"]) if linha else None
+    if fim is None:
+        return None
+    dia = (fim + timedelta(days=1)).isoformat()
+    return dia if dia > hoje(agora) else None
 
 
 def concluir_treino(conn: sqlite3.Connection, treino_id: int, agora: datetime | None = None) -> None:
@@ -76,6 +87,8 @@ def reativar_treino(conn: sqlite3.Connection, treino_id: int) -> None:
             treino = _treino(conn, treino_id)
             if treino["ativo"]:
                 raise CicloInvalido("Este treino já está ativo.")
+            if treino["agendado_para"] is not None:  # agendado não é "concluído": ele entra sozinho no dia (ou é editado/cancelado)
+                raise CicloInvalido("Este treino está agendado: ele entra sozinho no dia marcado. Para mudar, edite ou cancele o agendamento.")
             outro = treino_ativo(conn, treino["aluno_id"])
             if outro is not None:
                 raise CicloInvalido(

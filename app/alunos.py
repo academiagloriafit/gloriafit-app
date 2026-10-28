@@ -307,6 +307,7 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
                 "fim": formatar_dia(treino["fim"]),
                 "concluido_em": data_local(treino["concluido_em"]),
                 "sessoes_por_ficha": meta,
+                "agendado_para": formatar_dia(treino["agendado_para"]),  # treino agendado: o dia em que entra (None = comum)
                 "sessoes_texto": texto_das_sessoes(avaliacao["feitas"], avaliacao["meta_total"]),
                 "trocar": avaliacao["trocar"],
                 "fichas": fichas,
@@ -326,6 +327,7 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
         "provisorio": bool(aluno["provisorio"]),
         "treinos": lista_de_treinos,
         "tem_treino_ativo": tem_treino_ativo,
+        "agendado": next((t for t in lista_de_treinos if t["agendado_para"]), None),  # o treino agendado (no máximo um)
         "aviso_de_troca": aviso_de_troca,
         # é hora de sugerir o próximo treino da fila: o aluno não tem treino ativo (ex.: o professor clicou em
         # "Concluído") ou o treino ativo chegou na hora de trocar

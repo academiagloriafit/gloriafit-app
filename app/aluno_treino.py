@@ -242,6 +242,9 @@ def treino_do_aluno(conn: sqlite3.Connection, aluno_id: int, agora: datetime | N
         return None
     _juntar_execucao(conn, aluno_id, treino, agora)
     treino["treinos_na_semana"] = treinos_na_semana(conn, aluno_id, agora)
+    # "Treino novo a partir de hoje" (28/10/2026): o treino ativo começou hoje (um agendado que entrou, ou um lançado hoje).
+    inicio = conn.execute("SELECT inicio FROM treino WHERE id = ?", (treino["_treino_id"],)).fetchone()["inicio"]
+    treino["novo_hoje"] = inicio == hoje(agora)
     del treino["_treino_id"]  # interno: o aluno não recebe ids
     return treino
 

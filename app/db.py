@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 17
+VERSAO_DO_BANCO = 18
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -459,11 +459,23 @@ def _de_16_para_17(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE treino_ia ADD COLUMN fichas_pedidas INTEGER CHECK (fichas_pedidas IS NULL OR fichas_pedidas BETWEEN 0 AND 6)")
 
 
+def _de_17_para_18(conn: sqlite3.Connection) -> None:
+    """Treino agendado: a `treino` ganha `agendado_para` (vazio em todos os treinos que já existem) e o índice de "um agendado por aluno".
+    Só acrescenta: nenhum dado que já existe é tocado. Confere antes de acrescentar (número da versão baixado à mão não quebra)."""
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(treino)")}
+    if "agendado_para" not in colunas:
+        conn.execute(
+            "ALTER TABLE treino ADD COLUMN agendado_para TEXT CHECK (agendado_para IS NULL OR "
+            "(agendado_para GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND ativo = 0))"
+        )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_agendado_por_aluno ON treino(aluno_id) WHERE agendado_para IS NOT NULL")
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
     10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13, 13: _de_13_para_14, 14: _de_14_para_15,
-    15: _de_15_para_16, 16: _de_16_para_17,
+    15: _de_15_para_16, 16: _de_16_para_17, 17: _de_17_para_18,
 }
 
 

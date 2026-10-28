@@ -589,7 +589,9 @@ export function modoDaTela(busca) {
 // ativo e deste aluno; copiar = treino deste aluno (qualquer origem).
 export function treinoServeParaOModo(modo, treino, alunoId) {
   if (!treino || typeof treino !== "object" || String(treino.aluno_id) !== String(alunoId)) return false;
-  return modo.tipo === "copiar" || (treino.origem === "app" && treino.ativo === true);
+  // editar no lugar: o treino ativo do app ou o treino agendado (28/10/2026: ainda não entrou, mas é do app e muda no lugar)
+  const agendado = typeof treino.agendado_para === "string" && treino.agendado_para !== "";
+  return modo.tipo === "copiar" || (treino.origem === "app" && (treino.ativo === true || agendado));
 }
 
 // Os campos do alto da tela (nome, datas, meta) de um treino que já existe, como texto para os campos.
@@ -759,4 +761,24 @@ export function lerRascunho(texto) {
     fichas.push(ficha);
   }
   return { proximoUid: maiorUid + 1, proximoBloco: maiorBloco + 1, fichas };
+}
+
+// Treino agendado (28/10/2026): o treino NOVO fica agendado quando o início é depois de hoje (os dois 'AAAA-MM-DD').
+export function ficaAgendado(inicio, hoje) {
+  const valido = (t) => typeof t === "string" && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(t);
+  return valido(inicio) && valido(hoje) && inicio > hoje;
+}
+
+// '2026-11-12' -> '12/11/2026' (texto qualquer volta como veio).
+export function diaParaTela(dia) {
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(dia ?? ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(dia ?? "");
+}
+
+// O aviso da tela quando o treino vai ficar agendado. `atual`: o nome do treino ativo do aluno (ou null).
+export function textoDoAgendamento(inicio, atual) {
+  const quando = diaParaTela(inicio);
+  return atual
+    ? `Este treino fica AGENDADO para ${quando}. Até lá o aluno continua no treino atual ("${atual}"); nesse dia o treino novo entra sozinho e o atual é concluído.`
+    : `Este treino fica AGENDADO para ${quando}: nesse dia ele entra sozinho como o treino do aluno.`;
 }

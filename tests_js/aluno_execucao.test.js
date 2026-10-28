@@ -428,3 +428,12 @@ describe("textoDaSemana (26/10/2026)", () => {
     expect(textoDaSemana(null)).toBe("");
   });
 });
+
+describe("textoDoTreinoNovo (28/10/2026)", () => {
+  it("só no dia em que o treino começou", async () => {
+    const { textoDoTreinoNovo } = await import("../app/static/aluno_modelo.js");
+    expect(textoDoTreinoNovo({ novo_hoje: true })).toBe("Treino novo a partir de hoje");
+    expect(textoDoTreinoNovo({ novo_hoje: false })).toBe("");
+    expect(textoDoTreinoNovo({})).toBe("");
+  });
+});

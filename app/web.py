@@ -285,6 +285,20 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             )
         return redirect(url_for("pagina_autorizar"))
 
+    @app.before_request
+    def troca_os_treinos_agendados():
+        # Roda DEPOIS da guarda: computador não autorizado não chega aqui (o aluno logado sim: as rotas dele são públicas para a guarda).
+        # Treino agendado (28/10/2026): no primeiro pedido do dia que chegar (aluno, recepção ou professor), os treinos agendados para
+        # hoje viram o ativo e o de antes é concluído (treinos.ativar_agendados). Uma consulta pelo índice quando não há nada a trocar.
+        # Nunca derruba o pedido: se der errado, fica no log e a troca é tentada de novo no pedido seguinte.
+        if request.endpoint in (None, "static", "saude"):
+            return None
+        try:
+            treinos.ativar_agendados(conexao())
+        except Exception:  # noqa: BLE001 - a troca é um extra deste pedido; o pedido segue
+            app.logger.exception("Falhou a troca automática dos treinos agendados")
+        return None
+
     @app.context_processor
     def nome_do_computador():
         # Aparece no topo das telas ("Computador dos professores").
@@ -700,6 +714,8 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             "montar.html",
             aluno=aluno,
             treino_ativo=ciclo.treino_ativo(conn, aluno_id),  # o aviso "será concluído ao salvar"
+            treino_agendado=treinos.treino_agendado(conn, aluno_id),  # já tem um agendado: a tela avisa (o servidor recusa outro)
+            sugestao_inicio=ciclo.inicio_sugerido(conn, aluno_id),  # "Começar quando o atual terminar" (dia seguinte ao fim do atual)
             hoje=datas.hoje(),
             grupos=exercicios.listar_grupos(conn),
             total_exercicios=exercicios.contar_exercicios(conn),
@@ -940,6 +956,10 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         if isinstance(pedido_da_ia, int) and not isinstance(pedido_da_ia, bool) and pedido_da_ia > 0:
             ia_retorno.registrar_correcao_sem_falhar(conn, aluno_id, pedido_da_ia, treino_id)
             ia_historico.registrar_sem_falhar(conn, aluno_id, pedido_da_ia, treino_id)
+        agendado = treinos.treino_agendado(conn, aluno_id)
+        if agendado is not None and agendado["id"] == treino_id:  # treino agendado: o ativo continua até o dia
+            return jsonify(id=treino_id, concluido_anterior=None, agendado_para=datas.formatar_dia(agendado["agendado_para"]),
+                           continua=anterior["nome"] if anterior else None), 201
         return jsonify(id=treino_id, concluido_anterior=anterior["nome"] if anterior else None), 201
 
     @app.post("/api/treinos/<int:treino_id>/concluir")
@@ -952,6 +972,18 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             return jsonify(erro="Treino não encontrado."), 404
         except ciclo.CicloInvalido as erro:
             return jsonify(erro=erro.mensagem), 409
+        return jsonify(ok=True)
+
+    @app.post("/api/treinos/<int:treino_id>/cancelar-agendamento")
+    def api_cancelar_agendamento(treino_id: int):
+        """Botão "Cancelar agendamento" da ficha: apaga o treino agendado (o aluno nunca o viu). O treino ativo não muda."""
+        corpo_json()
+        try:
+            treinos.cancelar_agendamento(conexao(), treino_id)
+        except treinos.TreinoNaoEncontrado:
+            return jsonify(erro="Treino não encontrado."), 404
+        except treinos.TreinoInvalido as erro:
+            return jsonify(erro=erro.problemas[0]), erro.status
         return jsonify(ok=True)
 
     @app.post("/api/treinos/<int:treino_id>/reativar")

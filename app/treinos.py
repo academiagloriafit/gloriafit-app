@@ -9,7 +9,7 @@ import sqlite3
 import unicodedata
 from datetime import datetime
 
-from app.datas import agora_utc, hoje, ler_dia, momento_para_texto
+from app.datas import agora_utc, formatar_dia, hoje, ler_dia, momento_para_texto
 from app.texto import nome_para_exibir, normalizar, tirar_apagado
 
 # Quando o Claude ou um robô montar treinos sozinhos (no futuro), este é o autor.
@@ -334,6 +334,11 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
 
     O treino novo nasce ATIVO. Só um treino por aluno pode ser ativo (regra do Thiago, 08/10/2026):
     se o aluno já tem um ativo, ele é concluído (vai para o histórico) na mesma gravação.
+
+    TREINO AGENDADO (pedido do Thiago, 28/10/2026): com "inicio" DEPOIS de hoje, o treino nasce agendado (`agendado_para` = o
+    início, inativo) e o ativo de hoje continua; no dia, `ativar_agendados` faz a troca. No máximo um agendado por aluno: com um
+    agendado já marcado, nada se salva para o aluno (nem treino para hoje, que seria trocado pelo agendado no dia) até o professor
+    editar ou cancelar o agendamento.
     `agora` existe para os testes.
     """
     if conn.execute("SELECT 1 FROM aluno WHERE id = ?", (aluno_id,)).fetchone() is None:
@@ -343,18 +348,26 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
     if _nome_ja_usado(conn, aluno_id, treino["nome"]):
         raise _erro_nome_repetido(treino["nome"])
     numero_na_fila = _conferir_treino_da_fila(conn, aluno_id, dados)
+    ja_agendado = treino_agendado(conn, aluno_id)
+    if ja_agendado is not None:
+        raise TreinoInvalido([_texto_do_agendado_que_impede(ja_agendado)])
+    agendar = treino["inicio"] > hoje(agora)  # 'AAAA-MM-DD' compara como texto
 
     try:
         with conn:  # uma transação: ou grava tudo, ou nada
-            # O ativo de hoje (se houver) é concluído ANTES de entrar o novo: o banco só aceita um ativo por aluno.
-            conn.execute(
-                "UPDATE treino SET ativo = 0, concluido_em = ? WHERE aluno_id = ? AND ativo = 1",
-                (momento_para_texto(agora), aluno_id),
-            )
+            if not agendar:
+                # O ativo de hoje (se houver) é concluído ANTES de entrar o novo: o banco só aceita um ativo por aluno.
+                conn.execute(
+                    "UPDATE treino SET ativo = 0, concluido_em = ? WHERE aluno_id = ? AND ativo = 1",
+                    (momento_para_texto(agora), aluno_id),
+                )
             treino_id = conn.execute(
-                "INSERT INTO treino (aluno_id, nome, montado_por, inicio, fim, sessoes_por_ficha)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (aluno_id, treino["nome"], treino["montado_por"], treino["inicio"], treino["fim"], treino["sessoes"]),
+                "INSERT INTO treino (aluno_id, nome, montado_por, inicio, fim, sessoes_por_ficha, ativo, agendado_para)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    aluno_id, treino["nome"], treino["montado_por"], treino["inicio"], treino["fim"], treino["sessoes"],
+                    0 if agendar else 1, treino["inicio"] if agendar else None,
+                ),
             ).lastrowid
             _gravar_fichas(conn, treino_id, treino["fichas"])
             if numero_na_fila is not None:
@@ -375,8 +388,80 @@ def salvar_treino(conn: sqlite3.Connection, aluno_id: int, dados, agora: datetim
         # mascarada como "nome repetido".
         if erro.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
             raise
+        agendado_agora = treino_agendado(conn, aluno_id)
+        if agendado_agora is not None:  # outro computador agendou no mesmo instante: o índice "um agendado por aluno" barrou
+            raise TreinoInvalido([_texto_do_agendado_que_impede(agendado_agora)]) from None
         raise _erro_nome_repetido(treino["nome"]) from None
     return treino_id
+
+
+# ------------------------------------------------------------------ treino agendado (28/10/2026)
+
+
+def treino_agendado(conn: sqlite3.Connection, aluno_id: int) -> sqlite3.Row | None:
+    """O treino agendado do aluno ({id, nome, agendado_para}) ou None. No máximo um (índice do banco)."""
+    return conn.execute(
+        "SELECT id, nome, agendado_para FROM treino WHERE aluno_id = ? AND agendado_para IS NOT NULL", (aluno_id,)
+    ).fetchone()
+
+
+def _texto_do_agendado_que_impede(agendado: sqlite3.Row) -> str:
+    return (
+        f'Este aluno já tem um treino agendado: "{agendado["nome"]}", para começar em {formatar_dia(agendado["agendado_para"])}. '
+        "Edite ou cancele esse agendamento na ficha do aluno antes de salvar outro treino."
+    )
+
+
+def _trocar_pelo_agendado(conn: sqlite3.Connection, treino_id: int, aluno_id: int, agora: datetime) -> None:
+    """Dentro de uma transação já aberta: conclui o ativo do aluno e põe o agendado `treino_id` no lugar."""
+    conn.execute(
+        "UPDATE treino SET ativo = 0, concluido_em = ? WHERE aluno_id = ? AND ativo = 1",
+        (momento_para_texto(agora), aluno_id),
+    )
+    conn.execute("UPDATE treino SET ativo = 1, agendado_para = NULL WHERE id = ?", (treino_id,))
+
+
+def ativar_agendados(conn: sqlite3.Connection, agora: datetime | None = None) -> int:
+    """A troca automática: todo treino agendado para hoje ou antes vira o ativo do aluno, e o ativo de antes é concluído.
+    Devolve quantos trocou.
+
+    Quem chama: o servidor, ANTES de cada pedido (app/web.py) e ao subir. Assim a troca acontece no primeiro acesso do dia,
+    seja do aluno no celular, da recepção ou do professor, e não depende de um relógio rodando no servidor (que pode ter
+    reiniciado). Com dois pedidos ao mesmo tempo, `BEGIN IMMEDIATE` deixa um só trocar; o outro encontra o treino já trocado.
+    """
+    agora = agora or agora_utc()
+    dia = hoje(agora)
+    if conn.in_transaction:  # nunca no meio da transação de quem chamou
+        return 0
+    pendentes = conn.execute(
+        "SELECT id FROM treino WHERE agendado_para IS NOT NULL AND agendado_para <= ?", (dia,)
+    ).fetchall()
+    trocados = 0
+    for (treino_id,) in pendentes:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            linha = conn.execute(
+                "SELECT aluno_id FROM treino WHERE id = ? AND agendado_para IS NOT NULL AND agendado_para <= ?", (treino_id, dia)
+            ).fetchone()
+            if linha is not None:
+                _trocar_pelo_agendado(conn, treino_id, linha["aluno_id"], agora)
+                trocados += 1
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    return trocados
+
+
+def cancelar_agendamento(conn: sqlite3.Connection, treino_id: int) -> None:
+    """Botão "Cancelar agendamento" da ficha: apaga o treino agendado (ele nunca foi usado pelo aluno). O ativo não muda.
+    Levanta TreinoNaoEncontrado, ou TreinoInvalido (409) se o treino não está mais agendado (já entrou, ou outro computador cancelou)."""
+    if conn.execute("SELECT 1 FROM treino WHERE id = ?", (treino_id,)).fetchone() is None:
+        raise TreinoNaoEncontrado(treino_id)
+    with conn:
+        apagados = conn.execute("DELETE FROM treino WHERE id = ? AND agendado_para IS NOT NULL", (treino_id,)).rowcount
+    if apagados == 0:
+        raise TreinoInvalido(["Este treino não está mais agendado (ele já entrou ou foi cancelado). Atualize a página."], status=409)
 
 
 def editar_treino(conn: sqlite3.Connection, treino_id: int, dados, agora: datetime | None = None) -> None:
@@ -392,7 +477,7 @@ def editar_treino(conn: sqlite3.Connection, treino_id: int, dados, agora: dateti
     - as sessões já feitas (tabela `sessao`) ficam: elas guardam o NÚMERO da ficha (A = 1, B = 2...) e não o id.
     Tudo ou nada.
     """
-    treino = conn.execute("SELECT aluno_id, ativo, origem FROM treino WHERE id = ?", (treino_id,)).fetchone()
+    treino = conn.execute("SELECT aluno_id, ativo, origem, agendado_para FROM treino WHERE id = ?", (treino_id,)).fetchone()
     if treino is None:
         raise TreinoNaoEncontrado(treino_id)
     if treino["origem"] != "app":
@@ -403,21 +488,28 @@ def editar_treino(conn: sqlite3.Connection, treino_id: int, dados, agora: dateti
             ],
             status=409,
         )
-    if not treino["ativo"]:
+    agendado = treino["agendado_para"] is not None
+    if not treino["ativo"] and not agendado:
         raise TreinoInvalido(["Este treino está concluído (inativo). Só dá para editar o treino ativo do aluno."], status=409)
 
-    novo = _conferir_dados_do_treino(conn, dados, agora or agora_utc())
+    agora = agora or agora_utc()
+    novo = _conferir_dados_do_treino(conn, dados, agora)
     if _nome_ja_usado(conn, treino["aluno_id"], novo["nome"], ignorar_treino_id=treino_id):
         raise _erro_nome_repetido(novo["nome"])
 
     try:
         with conn:  # uma transação: ou grava tudo, ou nada
             # "ativo = 1 AND origem = 'app'" de novo: se outro computador concluiu o treino neste meio-tempo, nada muda.
+            # Treino AGENDADO: continua agendado para o novo início; se o início passou a ser hoje (ou antes), entra agora.
+            situacao = "agendado_para IS NOT NULL" if agendado else "ativo = 1"
             alterados = conn.execute(
-                "UPDATE treino SET nome = ?, montado_por = ?, inicio = ?, fim = ?, sessoes_por_ficha = ?"
-                " WHERE id = ? AND ativo = 1 AND origem = 'app'",
-                (novo["nome"], novo["montado_por"], novo["inicio"], novo["fim"], novo["sessoes"], treino_id),
+                "UPDATE treino SET nome = ?, montado_por = ?, inicio = ?, fim = ?, sessoes_por_ficha = ?,"
+                " agendado_para = CASE WHEN agendado_para IS NULL THEN NULL ELSE ? END"
+                f" WHERE id = ? AND {situacao} AND origem = 'app'",
+                (novo["nome"], novo["montado_por"], novo["inicio"], novo["fim"], novo["sessoes"], novo["inicio"], treino_id),
             ).rowcount
+            if alterados and agendado and novo["inicio"] <= hoje(agora):
+                _trocar_pelo_agendado(conn, treino_id, treino["aluno_id"], agora)
             if alterados == 0:
                 raise TreinoInvalido(
                     ["Este treino acabou de ser concluído (ou mudou). Atualize a página e confira."], status=409
@@ -448,7 +540,7 @@ def obter_treino(conn: sqlite3.Connection, treino_id: int) -> dict | None:
     tem prescrições sem esses campos.
     """
     treino = conn.execute(
-        "SELECT id, aluno_id, nome, montado_por, ativo, origem, criado_em, inicio, fim, concluido_em, sessoes_por_ficha"
+        "SELECT id, aluno_id, nome, montado_por, ativo, origem, criado_em, inicio, fim, concluido_em, sessoes_por_ficha, agendado_para"
         " FROM treino WHERE id = ?",
         (treino_id,),
     ).fetchone()

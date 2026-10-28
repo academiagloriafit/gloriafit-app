@@ -49,6 +49,7 @@ import {
   textoDaUltimaCarga,
   textoDasDatas,
   textoDaSemana,
+  textoDoTreinoNovo,
   textoDeTodosFeitos,
   textoDoAndamento,
   textoDoContador,
@@ -66,6 +67,7 @@ const areaDoTreino = document.getElementById("treino");
 const tituloDoTreino = document.getElementById("titulo-treino");
 const datasDoTreino = document.getElementById("treino-datas");
 const semanaDoTreino = document.getElementById("treino-semana");
+const treinoNovo = document.getElementById("treino-novo");
 const botoesDasFichas = document.getElementById("fichas-botoes");
 const areaDaFicha = document.getElementById("ficha-atual");
 const areaDoExercicio = document.getElementById("exercicio-atual");
@@ -898,6 +900,8 @@ function mostrarTreino(treino, indiceDaFicha = null, exercicioAberto = null) {
   datasDoTreino.hidden = !datasDoTreino.textContent;
   semanaDoTreino.textContent = textoDaSemana(treino);
   semanaDoTreino.hidden = !semanaDoTreino.textContent;
+  treinoNovo.textContent = textoDoTreinoNovo(treino);
+  treinoNovo.hidden = !treinoNovo.textContent;
   dicaDoTreino.textContent = TEXTO_ESCOLHA_O_TREINO;
   desenharCartoes(treino);
   areaDoComentarioDoTreino.replaceChildren(desenharComentario(treino));

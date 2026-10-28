@@ -26,8 +26,8 @@
         {% for a in p.trocar.alunos %}
         <li class="linha-pendencia">
           <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}</a>
-          <span class="pendencia-detalhe">{{ a.motivo }}<span class="pendencia-treino"> · {{ a.treino }}</span></span>
-          <a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>
+          <span class="pendencia-detalhe">{{ a.motivo }}<span class="pendencia-treino"> · {{ a.treino }}</span>{% if a.agendado %}<span class="pendencia-agendado"> · Troca agendada para {{ a.agendado }}</span>{% endif %}</span>
+          {% if a.agendado %}<a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>{% else %}<a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>{% endif %}
         </li>
         {% endfor %}
       </ul>
@@ -66,13 +66,33 @@
         {% for a in p.sem_treino.alunos %}
         <li class="linha-pendencia">
           <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
-          <span class="pendencia-detalhe">Nenhum treino ativo</span>
-          <a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>
+          <span class="pendencia-detalhe">Nenhum treino ativo{% if a.agendado %}<span class="pendencia-agendado"> · Treino agendado para {{ a.agendado }}</span>{% endif %}</span>
+          {% if a.agendado %}<a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>{% else %}<a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>{% endif %}
         </li>
         {% endfor %}
       </ul>
       {% else %}
       <p class="lista-vazia">Todo aluno ativo tem treino.</p>
+      {% endif %}
+    </section>
+
+    <section class="cartao-lista" aria-labelledby="titulo-agendados">
+      <div class="cabecalho-lista">
+        <h2 id="titulo-agendados">Trocas agendadas</h2>
+        <p class="resumo">{{ p.agendados.total }} {{ "treino" if p.agendados.total == 1 else "treinos" }}</p>
+      </div>
+      {% if p.agendados.alunos %}
+      <ul class="linhas" id="lista-agendados">
+        {% for a in p.agendados.alunos %}
+        <li class="linha-pendencia">
+          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome }}</a>
+          <span class="pendencia-detalhe">Entra em {{ a.dia }}<span class="pendencia-treino"> · {{ a.treino }}</span></span>
+          <a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="lista-vazia">Nenhum treino agendado. Para agendar, monte o treino e coloque o Início numa data depois de hoje.</p>
       {% endif %}
     </section>
   </main>

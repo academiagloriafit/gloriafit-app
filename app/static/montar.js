@@ -703,7 +703,32 @@ function atualizarProblemas() {
 
 // ------------------------------------------------------------------ salvar e cancelar
 
-const textoDoBotaoSalvar = () => (editandoNoLugar ? "Salvar alterações" : "Salvar treino");
+// Treino agendado (28/10/2026): treino NOVO com início depois de hoje fica agendado (o servidor decide de novo ao salvar).
+const hojeDaPagina = raiz.dataset.hoje;
+const nomeDoTreinoAtivo = raiz.dataset.treinoAtivo || null;
+let editandoAgendado = false; // "Editar treino" de um treino agendado (ele continua agendado, ou entra na hora se o início virar hoje)
+const vaiFicarAgendado = () => (!editandoNoLugar || editandoAgendado) && M.ficaAgendado(campoInicio.value, hojeDaPagina);
+const textoDoBotaoSalvar = () => (editandoNoLugar ? "Salvar alterações" : vaiFicarAgendado() ? "Agendar treino" : "Salvar treino");
+
+function atualizarAgendamento() {
+  const agendar = vaiFicarAgendado();
+  const aviso = document.getElementById("aviso-agendar");
+  if (aviso) {
+    aviso.hidden = !agendar;
+    aviso.textContent = agendar ? M.textoDoAgendamento(campoInicio.value, editandoAgendado ? null : nomeDoTreinoAtivo) : "";
+  }
+  const avisoAtivo = document.getElementById("aviso-treino-ativo"); // "o atual será concluído ao salvar": não vale para agendado
+  if (avisoAtivo && !editandoNoLugar) avisoAtivo.hidden = agendar;
+  if (!botaoSalvar.disabled) botaoSalvar.textContent = textoDoBotaoSalvar();
+}
+campoInicio.addEventListener("input", atualizarAgendamento);
+campoInicio.addEventListener("change", atualizarAgendamento);
+// O botão só existe quando o treino atual tem fim (por isso querySelector e não getElementById).
+document.querySelector("#sugestao-inicio")?.addEventListener("click", (evento) => {
+  campoInicio.value = evento.currentTarget.dataset.dia;
+  campoInicio.dispatchEvent(new Event("input")); // guarda o rascunho e atualiza o aviso
+  campoInicio.focus();
+});
 
 const avaliacaoIa = iniciarAvaliacaoIa({ alunoId: raiz.dataset.aluno });
 
@@ -1138,14 +1163,18 @@ function carregarTreinoParaEditar(treino) {
     campoQuem.value = "";
     document.getElementById("dica-quem-montou").textContent =
       `Quem está editando. Passa a ser o professor deste treino (antes: ${campos.professorAnterior}).`;
-    textoDaEdicao =
-      `Editando o treino ATIVO "${campos.nome}" (${plural(estado.fichas.length, "ficha", "fichas")}, ` +
-      `${plural(M.contarExercicios(estado), "exercício", "exercícios")}). Ao salvar, as mudanças valem na hora para o aluno. ` +
-      "Escreva o seu nome em Professor.";
+    editandoAgendado = typeof treino.agendado_para === "string" && treino.agendado_para !== "";
+    textoDaEdicao = editandoAgendado
+      ? `Editando o treino AGENDADO "${campos.nome}" (começa em ${M.diaParaTela(treino.agendado_para)}). O aluno ainda não vê ` +
+        "este treino. Se mudar o Início para hoje, ele entra na hora e o atual é concluído. Escreva o seu nome em Professor."
+      : `Editando o treino ATIVO "${campos.nome}" (${plural(estado.fichas.length, "ficha", "fichas")}, ` +
+        `${plural(M.contarExercicios(estado), "exercício", "exercícios")}). Ao salvar, as mudanças valem na hora para o aluno. ` +
+        "Escreva o seu nome em Professor.";
+    document.querySelector("#aviso-ja-agendado")?.setAttribute("hidden", ""); // é este mesmo treino
     document.querySelector(".barra-importar").hidden = true; // "Importar treino" não faz sentido aqui
     document.getElementById("cartao-ia").hidden = true; // nem o rascunho da IA: o treino já existe
     document.getElementById("aviso-treino-ativo")?.setAttribute("hidden", ""); // o treino não será concluído
-    botaoSalvar.textContent = textoDoBotaoSalvar();
+    atualizarAgendamento(); // também escreve o botão
   } else {
     // cópia: nome sugerido novo, início hoje, sem fim; a meta vem junto, como em "Importar treino"
     origemImportada = campos.nome;
@@ -1221,6 +1250,7 @@ async function abrirTreinoDaFila() {
 }
 
 lerDadosGuardados();
+atualizarAgendamento(); // um rascunho guardado pode ter início no futuro
 desenhar();
 avisarRascunhoRecuperado();
 if (abrindoDaFila) abrirTreinoDaFila();

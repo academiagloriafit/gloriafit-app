@@ -14,7 +14,7 @@
 
   {# data-grupos: os grupos de cada exercício (resumo da semana). data-cargas: a última carga que o aluno anotou no celular em cada exercício ({id: {carga, dia}}); aparece embaixo do exercício
      na montagem. Vai num atributo (e não num <script>) porque a página não aceita script embutido. O tojson escapa as aspas. #}
-  <main class="pagina pagina-larga tela-treino" data-aluno="{{ aluno.id }}" data-cargas='{{ cargas_do_aluno | tojson }}' data-grupos='{{ grupos_dos_exercicios | tojson }}'>
+  <main class="pagina pagina-larga tela-treino" data-aluno="{{ aluno.id }}" data-hoje="{{ hoje }}"{% if treino_ativo %} data-treino-ativo="{{ treino_ativo.nome }}"{% endif %} data-cargas='{{ cargas_do_aluno | tojson }}' data-grupos='{{ grupos_dos_exercicios | tojson }}'>
     <div class="titulo-tela">
       <h1 class="titulo-pagina">Lançar treino</h1>
       <p class="aluno-nome">Aluno: <strong>{{ aluno.nome }}</strong></p>
@@ -190,7 +190,12 @@
         <div class="campos-do-ciclo">
           <div class="campo">
             <label for="data-inicio">Início <span class="obrigatorio">(obrigatório)</span></label>
-            <input id="data-inicio" type="date" value="{{ hoje }}" min="2020-01-01" max="2100-12-31" aria-required="true">
+            <input id="data-inicio" type="date" value="{{ hoje }}" min="2020-01-01" max="2100-12-31" aria-required="true" aria-describedby="dica-data-inicio">
+            <p id="dica-data-inicio" class="dica">Data depois de hoje: o treino fica agendado e entra sozinho nesse dia.</p>
+            {% if sugestao_inicio %}
+            {# Treino agendado (28/10/2026): um clique põe o início no dia seguinte ao fim do treino atual. #}
+            <button type="button" id="sugestao-inicio" class="botao-link" data-dia="{{ sugestao_inicio }}">Começar quando o atual terminar ({{ sugestao_inicio[8:10] }}/{{ sugestao_inicio[5:7] }})</button>
+            {% endif %}
           </div>
           <div class="campo">
             <label for="data-fim">Fim <span class="opcional">(opcional)</span></label>
@@ -203,6 +208,15 @@
             <p id="dica-sessoes" class="dica">Quantas vezes o aluno faz cada ficha (A, B, C...). Ao chegar lá, o app avisa para trocar o treino.</p>
           </div>
         </div>
+        {# Treino agendado (28/10/2026): o aviso de "vai ficar agendado" (montar.js escreve o texto) e o de "já tem um agendado". #}
+        <p class="aviso-troca aviso-agendar" id="aviso-agendar" role="status" hidden></p>
+        {% if treino_agendado %}
+        <p class="aviso-troca" id="aviso-ja-agendado" role="alert" data-treino="{{ treino_agendado.id }}">
+          Este aluno já tem um treino agendado: <strong>{{ treino_agendado.nome }}</strong>, para começar em
+          <strong>{{ treino_agendado.agendado_para[8:10] }}/{{ treino_agendado.agendado_para[5:7] }}/{{ treino_agendado.agendado_para[0:4] }}</strong>.
+          Para salvar outro treino, edite ou cancele esse agendamento na ficha do aluno.
+        </p>
+        {% endif %}
         {% if treino_ativo %}
         <p class="aviso-troca" id="aviso-treino-ativo" role="note">
           Este aluno já tem um treino ativo: <strong>{{ treino_ativo.nome }}</strong>.

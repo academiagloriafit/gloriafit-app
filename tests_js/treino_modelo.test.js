@@ -935,3 +935,28 @@ describe("duplicarFicha", () => {
     expect(M.duplicarFicha(M.criarEstado(), 5).fichas).toHaveLength(1);
   });
 });
+
+describe("treino agendado (28/10/2026)", () => {
+  it("fica agendado só com início depois de hoje", () => {
+    expect(M.ficaAgendado("2026-11-12", "2026-10-28")).toBe(true);
+    expect(M.ficaAgendado("2026-10-28", "2026-10-28")).toBe(false);
+    expect(M.ficaAgendado("2026-10-01", "2026-10-28")).toBe(false);
+    expect(M.ficaAgendado("", "2026-10-28")).toBe(false);
+    expect(M.ficaAgendado("12/11/2026", "2026-10-28")).toBe(false);
+  });
+
+  it("escreve a data e o aviso", () => {
+    expect(M.diaParaTela("2026-11-12")).toBe("12/11/2026");
+    expect(M.textoDoAgendamento("2026-11-12", "TREINO ABC")).toBe(
+      'Este treino fica AGENDADO para 12/11/2026. Até lá o aluno continua no treino atual ("TREINO ABC"); nesse dia o treino novo entra sozinho e o atual é concluído.',
+    );
+    expect(M.textoDoAgendamento("2026-11-12", null)).toBe("Este treino fica AGENDADO para 12/11/2026: nesse dia ele entra sozinho como o treino do aluno.");
+  });
+
+  it("o treino agendado do app também se edita no lugar", () => {
+    const modo = { tipo: "editar", treinoId: 5 };
+    expect(M.treinoServeParaOModo(modo, { aluno_id: 1, origem: "app", ativo: false, agendado_para: "2026-11-12" }, "1")).toBe(true);
+    expect(M.treinoServeParaOModo(modo, { aluno_id: 1, origem: "app", ativo: false, agendado_para: null }, "1")).toBe(false);
+    expect(M.treinoServeParaOModo(modo, { aluno_id: 1, origem: "data4u", ativo: false, agendado_para: "2026-11-12" }, "1")).toBe(false);
+  });
+});

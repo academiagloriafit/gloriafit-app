@@ -62,6 +62,7 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
         M.limparEspacos(dados.montadoPor),
         M.enderecoDeImpressao(resposta.corpo),
         resposta.corpo?.concluido_anterior,
+        resposta.corpo,
       );
       return [];
     }
@@ -81,17 +82,25 @@ export function iniciarSalvar({ alunoId, alunoNome, obterEstado, obterDados, aoT
   }
 
   // concluidoAnterior: o nome do treino que estava ativo e foi concluído junto (ou nada, se não havia).
-  function sucesso(nomeTreino, montadoPor, enderecoDeImpressao, concluidoAnterior) {
+  // corpo.agendado_para ('12/11/2026'): o treino ficou agendado (28/10/2026); corpo.continua: o treino que o aluno segue usando até lá.
+  function sucesso(nomeTreino, montadoPor, enderecoDeImpressao, concluidoAnterior, corpo = null) {
     const frase = textoDaFila(); // antes de aoSalvar, que limpa o que a tela sabe sobre a fila
     aoSalvar();
     areaMontagem.hidden = true;
     const linkImprimir = pegar("imprimir-treino");
     if (enderecoDeImpressao) linkImprimir.href = enderecoDeImpressao;
     linkImprimir.hidden = !enderecoDeImpressao;
-    pegar("titulo-salvo").textContent = edicao ? "Treino atualizado" : "Treino salvo";
+    const agendadoPara = !edicao && typeof corpo?.agendado_para === "string" ? corpo.agendado_para : null;
+    pegar("titulo-salvo").textContent = edicao ? "Treino atualizado" : agendadoPara ? "Treino agendado" : "Treino salvo";
     pegar("texto-salvo").textContent = edicao
       ? `O treino "${nomeTreino}" de ${alunoNome} foi atualizado. Professor: ${montadoPor}.`
-      : `O treino "${nomeTreino}" foi salvo para ${alunoNome}. Professor: ${montadoPor}.`;
+      : agendadoPara
+        ? `O treino "${nomeTreino}" de ${alunoNome} começa em ${agendadoPara}: nesse dia ele entra sozinho` +
+          (typeof corpo?.continua === "string" && corpo.continua
+            ? ` e o treino atual ("${corpo.continua}") é concluído. Até lá o aluno continua no atual.`
+            : ".") +
+          ` Professor: ${montadoPor}.`
+        : `O treino "${nomeTreino}" foi salvo para ${alunoNome}. Professor: ${montadoPor}.`;
     pegar("montar-outro").hidden = Boolean(edicao || frase); // recarregar abriria de novo a edição (ou o treino da fila)
     const textoFila = pegar("texto-fila");
     textoFila.textContent = frase ?? "";

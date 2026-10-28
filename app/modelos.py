@@ -367,7 +367,7 @@ def treino_para_editar(conn: sqlite3.Connection, treino_id: int) -> dict | None:
     Não grava nada.
     """
     treino = conn.execute(
-        "SELECT id, aluno_id, nome, montado_por, inicio, fim, ativo, origem, sessoes_por_ficha FROM treino WHERE id = ?",
+        "SELECT id, aluno_id, nome, montado_por, inicio, fim, ativo, origem, sessoes_por_ficha, agendado_para FROM treino WHERE id = ?",
         (treino_id,),
     ).fetchone()
     if treino is None:
@@ -381,5 +381,6 @@ def treino_para_editar(conn: sqlite3.Connection, treino_id: int) -> dict | None:
         fim=treino["fim"],
         ativo=bool(treino["ativo"]),
         origem=treino["origem"],
+        agendado_para=treino["agendado_para"],  # treino agendado (28/10/2026): 'AAAA-MM-DD' ou None; também dá para editar no lugar
     )
     return resultado

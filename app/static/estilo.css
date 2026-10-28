@@ -776,6 +776,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .selo-treino-ativo { background: var(--verde-fundo); color: var(--verde); }
 .selo-treino-inativo { background: var(--cinza-leve); color: var(--texto-suave); }
 .selo-treino-trocar { background: var(--laranja); color: var(--sobre-laranja); }
+.selo-treino-agendado { background: var(--laranja-leve-forte); color: var(--laranja-texto); border: 1px solid var(--laranja); }
 .aviso-troca-ficha { margin: 0; border-radius: 0; }
 .treino-conteudo { padding: 4px 16px 16px 40px; display: flex; flex-direction: column; gap: 8px; }
 .acoes-treino { margin: 0 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
@@ -1121,6 +1122,7 @@ a.botao-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px
 .meu-treino-nome { margin: 0; font-size: 28px; line-height: 1.05; overflow-wrap: anywhere; }
 .meu-treino-datas { margin: 6px 0 0; font-size: 14px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
 .meu-treino-semana { margin: 6px 0 0; font-size: 15px; font-weight: 700; color: inherit; }
+.meu-treino-novo { margin: 0 0 6px; font-size: 13px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--laranja); }
 .meu-treino-dica { margin: 8px 0 0; }
 /* tela 1: um botão grande por ficha; a do dia vem circulada em laranja, com a etiqueta "Treino de hoje" */
 .meu-fichas-botoes { display: flex; flex-direction: column; gap: 12px; }
@@ -1641,6 +1643,7 @@ body.com-descanso .pagina-aluno { padding-bottom: 130px; }
 .linhas > .linha-pendencia:first-child { border-top: 0; }
 .pendencia-detalhe { overflow-wrap: anywhere; }
 .pendencia-treino { color: var(--texto-suave); }
+.pendencia-agendado { color: var(--laranja-texto); font-weight: 650; }
 @media (max-width: 900px) {
   .linha-pendencia { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .linha-pendencia .botao-link { justify-self: start; }

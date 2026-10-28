@@ -5,6 +5,8 @@ Três listas:
    conta do aviso da ficha do aluno (`ciclo.avaliar_ciclo`), feita para todos de uma vez.
 2. COMENTÁRIOS SEM LER: os mesmos do número do menu "Comentários" (os mais novos primeiro).
 3. ATIVOS SEM TREINO: aluno ativo no Data4U (ou provisório) sem nenhum treino ativo (nem do app, nem copiado do Data4U).
+4. TROCAS AGENDADAS (28/10/2026): os treinos agendados, do mais próximo ao mais distante. Nas listas 1 e 3, quem já tem um
+   agendado aparece com a data da troca (a pendência já está resolvida, só falta o dia chegar).
 
 Como em "Quem sumiu", só entram alunos ativos no Data4U (situação 'A') ou provisórios: quem trancou ou saiu não é pendência.
 """
@@ -80,15 +82,32 @@ def _sem_treino(conn: sqlite3.Connection) -> list[dict]:
     ]
 
 
+def _agendados(conn: sqlite3.Connection) -> list[dict]:
+    return [
+        {"id": linha["id"], "nome": linha["nome"], "treino": linha["treino"], "dia": formatar_dia(linha["agendado_para"])}
+        for linha in conn.execute(
+            """
+            SELECT a.id, a.nome, t.nome AS treino, t.agendado_para FROM treino t JOIN aluno a ON a.id = t.aluno_id
+            WHERE t.agendado_para IS NOT NULL ORDER BY t.agendado_para, a.nome, a.id
+            """
+        )
+    ]
+
+
 def listar(conn: sqlite3.Connection, agora: datetime | None = None) -> dict:
     """{"trocar": {"total", "alunos"}, "sem_treino": {"total", "alunos"}, "comentarios": {"total", "comentarios"}, "total"}."""
     trocar = _hora_de_trocar(conn, hoje(agora))
     sem_treino = _sem_treino(conn)
+    agendados = _agendados(conn)
+    dia_agendado = {a["id"]: a["dia"] for a in agendados}
+    for aluno in trocar + sem_treino:
+        aluno["agendado"] = dia_agendado.get(aluno["id"])  # já tem a troca agendada: a tela mostra a data
     novos = comentarios.listar(conn, so_nao_lidos=True, limite=COMENTARIOS_NA_TELA)
     return {
         "trocar": {"total": len(trocar), "alunos": trocar[:LIMITE_DA_LISTA]},
         "sem_treino": {"total": len(sem_treino), "alunos": sem_treino[:LIMITE_DA_LISTA]},
         "comentarios": {"total": novos["total"], "comentarios": novos["comentarios"]},
+        "agendados": {"total": len(agendados), "alunos": agendados[:LIMITE_DA_LISTA]},
         "total": len(trocar) + len(sem_treino) + novos["total"],
         "limite": LIMITE_DA_LISTA,
     }

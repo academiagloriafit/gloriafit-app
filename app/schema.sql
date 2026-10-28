@@ -1,5 +1,7 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 17 (23/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô).
+-- Versão 18 (28/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô) e o treino agendado (montado hoje para entrar numa data futura).
+-- Mudança da versão 17 para a 18 (treino agendado): `treino` ganhou `agendado_para` (o dia em que um treino montado antes da hora vira o ativo
+-- do aluno; o atual é concluído nesse dia). Vazio = treino comum. Bancos da versão 17 são atualizados sozinhos na subida.
 -- Mudança da versão 16 para a 17 (fichas diferentes dos dias): `treino_ia` ganhou `fichas_pedidas` (quantas fichas DIFERENTES o professor pediu ao
 -- robô: 0 = deixou o robô decidir; 2 a 6 = escolheu; vazio = treino de antes desta função, quando o número de fichas era sempre igual aos dias).
 -- Bancos da versão 16 são atualizados sozinhos na subida.
@@ -51,7 +53,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 17;
+PRAGMA user_version = 18;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -156,12 +158,15 @@ CREATE TABLE IF NOT EXISTS treino (
     inicio       TEXT    CHECK (inicio IS NULL OR inicio GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     fim          TEXT    CHECK (fim IS NULL OR fim GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     concluido_em TEXT,
-    sessoes_por_ficha INTEGER CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999)
+    sessoes_por_ficha INTEGER CHECK (sessoes_por_ficha IS NULL OR sessoes_por_ficha BETWEEN 1 AND 999),
+    agendado_para TEXT CHECK (agendado_para IS NULL OR (agendado_para GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND ativo = 0))
 );
 CREATE INDEX IF NOT EXISTS ix_treino_aluno ON treino(aluno_id);
 -- Só um treino ativo por aluno: é a trava final da regra "um ativo por vez" (quem ativa um treino
 -- precisa inativar o outro ANTES; ver app/treinos.py e app/ciclo.py).
 CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_ativo_por_aluno ON treino(aluno_id) WHERE ativo = 1;
+-- Treino agendado (versão 18): no máximo UM por aluno. É também o índice que a troca automática usa para achar os que chegaram no dia.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_treino_agendado_por_aluno ON treino(aluno_id) WHERE agendado_para IS NOT NULL;
 -- Um aluno não pode ter dois treinos do app com o mesmo nome (o Data4U também recusa). O índice
 -- só vale para os treinos do app: no histórico do Data4U há nomes repetidos, e o app precisa
 -- guardá-los como estão. A conferência contra TODOS os treinos do aluno (inclusive os do
