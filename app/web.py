@@ -36,6 +36,7 @@ from app import (
     importar_alunos,
     importar_treinos,
     modelos,
+    nomes,
     pendencias,
     provisorios,
     treinos,
@@ -150,6 +151,8 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     app = Flask(__name__)
     app.config["CAMINHO_BANCO"] = str(caminho)
     app.config["MAX_CONTENT_LENGTH"] = TAMANHO_MAXIMO_DO_PEDIDO
+    # "MARIANA DE SOUZA" -> "Mariana de Souza" (só na tela; o nome gravado não muda)
+    app.jinja_env.filters["nome_de_pessoa"] = nomes.nome_de_pessoa
     # No servidor o app fica ATRÁS de um proxy (Traefik), que cuida do HTTPS e repassa o
     # pedido por http. GLORIAFIT_ATRAS_DE_PROXY=1 faz o app acreditar nos cabeçalhos
     # X-Forwarded-* (endereço e https de verdade). SÓ ligue se o app NÃO for acessível sem

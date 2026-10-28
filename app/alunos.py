@@ -233,6 +233,13 @@ def texto_das_sessoes(feitas: int, meta_total: int | None) -> str:
     return str(feitas) if feitas else "–"
 
 
+def progresso_das_sessoes(feitas: int, meta_total: int | None) -> int | None:
+    """A barra do topo da ficha: quanto da meta já foi feito, de 0 a 100. Sem meta, None (a barra não aparece)."""
+    if not meta_total:
+        return None
+    return max(0, min(100, round(feitas * 100 / meta_total)))
+
+
 def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
     """O aluno com seus treinos salvos (mais novo primeiro), ou None se não existe.
 
@@ -309,6 +316,7 @@ def obter_ficha(conn: sqlite3.Connection, aluno_id: int) -> dict | None:
                 "sessoes_por_ficha": meta,
                 "agendado_para": formatar_dia(treino["agendado_para"]),  # treino agendado: o dia em que entra (None = comum)
                 "sessoes_texto": texto_das_sessoes(avaliacao["feitas"], avaliacao["meta_total"]),
+                "progresso": progresso_das_sessoes(avaliacao["feitas"], avaliacao["meta_total"]),
                 "trocar": avaliacao["trocar"],
                 "fichas": fichas,
             }

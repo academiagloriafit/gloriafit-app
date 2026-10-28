@@ -1,6 +1,6 @@
 /* Estilo do app Glória Fit.
    Cores da marca (laranja #F25420, preto #0D0D0D, cinza do anel do logo #3C3E40).
-   A fonte (Archivo, licença OFL) e o logo vêm do próprio servidor: nada de arquivos de outros sites. */
+   As fontes (Archivo e Manrope, licença OFL) e o logo vêm do próprio servidor: nada de arquivos de outros sites. */
 
 @font-face {
   font-family: "Archivo Variable";
@@ -18,6 +18,23 @@
   font-weight: 100 900;
   font-stretch: 62% 125%;
   src: url("fontes/archivo-latin-wdth-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Manrope Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("fontes/manrope-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Manrope Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("fontes/manrope-latin-wght-normal.woff2") format("woff2-variations");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -1726,3 +1743,196 @@ body.com-descanso .pagina-aluno { padding-bottom: 130px; }
   .rodape-treino .aviso { flex-basis: 100%; font-size: 13px; }
   .rodape-treino .aviso:empty { display: none; }
 }
+
+
+/* =====================================================================================================
+   Grafite (28/10/2026, alternativa B escolhida pelo Thiago): o computador dos professores.
+   Menu numa coluna grafite na esquerda (ícone + nome), fundo cinza claro, quadros brancos de canto redondo,
+   fonte Manrope e títulos em letras normais (não mais tudo maiúsculo). No celular o menu volta a ser uma faixa no alto.
+   ===================================================================================================== */
+:root.tema-grafite {
+  --grafite-fundo: #15171b;   /* o menu e o topo da ficha */
+  --grafite-bloco: #20242a;   /* os números dentro do topo escuro */
+  --grafite-item: #262a31;    /* item do menu marcado */
+  --grafite-borda: #3a3f48;
+  --grafite-suave: #a9afb8;   /* texto apagado sobre o grafite (contraste 7:1) */
+  --fundo: #f2f3f5;
+  --papel: #ffffff;
+  --linha: #e4e6ea;
+  --campo: #f3f4f6;
+  --realce: #f6f7f8;
+  --texto: #15171b;
+  --texto-suave: #5d636e;
+  --topo-fundo: var(--grafite-fundo);
+  --topo-texto: #ffffff;
+  --topo-suave: #8d939c;
+  --topo-menu: #c9cdd4;
+  --topo-menu-ativo: #ffffff;
+  --topo-borda: 0;
+  --fonte: "Manrope Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fonte-titulo: var(--fonte);
+}
+.tema-grafite body { font-size: 15.5px; }
+.tema-grafite .titulo-pagina, .tema-grafite .titulo-grande, .tema-grafite .painel h1, .tema-grafite .passo-numero {
+  font-stretch: 100%;
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: -0.02em;
+}
+.tema-grafite .titulo-pagina { font-size: 30px; }
+.tema-grafite .titulo-grande { font-size: 34px; line-height: 1.1; }
+.tema-grafite .painel h1 { font-size: 24px; }
+
+/* quadros: brancos, sem contorno, cantos redondos */
+.tema-grafite .painel, .tema-grafite .cartao, .tema-grafite .cartao-lista, .tema-grafite .coluna-lateral {
+  border-color: transparent;
+  border-radius: 16px;
+}
+.tema-grafite .coluna-lateral .painel { border-radius: 0; }
+.tema-grafite .coluna-lateral .painel + .painel { border-top: 1px solid var(--linha); }
+.tema-grafite .botao-adicionar, .tema-grafite .botao-escuro, .tema-grafite .botao-principal, .tema-grafite .botao-perigo,
+.tema-grafite .botao-discreto, .tema-grafite .botao-icone, .tema-grafite .botao-link, .tema-grafite .campo input,
+.tema-grafite .campo select, .tema-grafite .campo textarea, .tema-grafite .campo-busca-aluno input {
+  border-radius: 10px;
+}
+.tema-grafite .botao-principal, .tema-grafite .botao-link-forte { border-radius: 12px; font-weight: 800; }
+
+/* ---- o menu: coluna grafite na esquerda (computador e tablet) ---- */
+.topo-menu a::before { content: none; }
+.menu-alunos { --icone: url("menu/alunos.svg"); }
+.menu-pendencias { --icone: url("menu/pendencias.svg"); }
+.menu-ausentes { --icone: url("menu/ausentes.svg"); }
+.menu-comentarios { --icone: url("menu/comentarios.svg"); }
+.menu-atualizar { --icone: url("menu/atualizar.svg"); }
+@media (min-width: 641px) {
+  .tema-grafite body:has(> .topo) { padding-left: 96px; }
+  .tema-grafite .topo { position: fixed; top: 0; bottom: 0; left: 0; z-index: 30; width: 96px; overflow-y: auto; }
+  .tema-grafite .topo-conteudo {
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 18px 10px 14px;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 16px;
+  }
+  .tema-grafite .topo-esquerda { width: 100%; flex-direction: column; flex-wrap: nowrap; align-items: center; gap: 22px; }
+  .tema-grafite .marca span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .tema-grafite .topo-menu { width: 100%; flex-direction: column; flex-wrap: nowrap; align-items: center; gap: 6px; }
+  .tema-grafite .topo-menu a {
+    position: relative;
+    width: 76px;
+    min-height: 0;
+    padding: 10px 2px 9px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    border: 0;
+    border-radius: 12px;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: center;
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .tema-grafite .topo-menu a::before {
+    content: "";
+    flex: none;
+    width: 22px;
+    height: 22px;
+    background: currentColor;
+    -webkit-mask: var(--icone) center / contain no-repeat;
+    mask: var(--icone) center / contain no-repeat;
+  }
+  .tema-grafite .topo-menu a:hover { background: #1d2026; color: #ffffff; }
+  .tema-grafite .topo-menu a.ativo { background: var(--grafite-item); color: #ffffff; font-weight: 700; }
+  .tema-grafite .topo-menu a.ativo::before { background: var(--laranja); }
+  .tema-grafite .topo-menu a:focus-visible { outline: 2px solid var(--laranja); outline-offset: 2px; }
+  .tema-grafite .topo-menu .contador-menu {
+    position: absolute;
+    top: 3px;
+    left: calc(50% + 6px);
+    min-width: 18px;
+    height: 18px;
+    margin: 0;
+    padding: 0 5px;
+    border-radius: 9px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .tema-grafite .topo-nota { margin-top: auto; font-size: 11px; line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
+}
+
+/* ---- topo da ficha do aluno: um bloco grafite com o nome, os botões e o resumo ---- */
+.heroi-ficha { display: flex; flex-direction: column; gap: 20px; }
+.heroi-topo { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px; }
+.heroi-identidade { flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.heroi-linha { margin: 0; color: var(--texto-suave); overflow-wrap: anywhere; }
+.heroi-acoes { display: flex; flex-wrap: wrap; gap: 10px; }
+.heroi-ficha .resumo-aluno { margin: 0; }
+.resumo-barra {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: 4px 0 2px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--cinza-leve);
+  overflow: hidden;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.resumo-barra::-webkit-progress-bar { background: var(--cinza-leve); border-radius: 99px; }
+.resumo-barra::-webkit-progress-value { background: var(--laranja); border-radius: 99px; }
+.resumo-barra::-moz-progress-bar { background: var(--laranja); border-radius: 99px; }
+
+.tema-grafite .heroi-ficha { padding: 22px 26px 24px; border-radius: 18px; background: var(--grafite-fundo); color: #ffffff; }
+.tema-grafite .heroi-ficha .voltar { min-height: 30px; color: var(--grafite-suave); font-size: 14px; }
+.tema-grafite .heroi-ficha .voltar:hover { color: #ffffff; }
+.tema-grafite .heroi-ficha .titulo-grande { color: #ffffff; }
+.tema-grafite .heroi-ficha .heroi-linha, .tema-grafite .heroi-ficha .matricula-ficha { color: var(--grafite-suave); font-size: 15px; }
+.tema-grafite .heroi-ficha .selo-situacao {
+  padding: 2px 11px;
+  border: 1px solid var(--grafite-borda);
+  border-radius: 999px;
+  color: #e3e6ea;
+  font-size: 13px;
+  font-weight: 700;
+}
+.tema-grafite .heroi-ficha .situacao-A { border-color: #2f5d3f; color: #86efac; }
+.tema-grafite .heroi-ficha .situacao-A::before { background: #4ade80; }
+.tema-grafite .botao-heroi { min-height: 48px; border-color: var(--grafite-borda); border-radius: 12px; background: transparent; color: #ffffff; }
+.tema-grafite .botao-heroi:hover:not(:disabled) { border-color: #6b717b; background: var(--grafite-item); }
+.tema-grafite .heroi-ficha .resumo-item { border: 0; border-radius: 14px; background: var(--grafite-bloco); }
+.tema-grafite .heroi-ficha .resumo-rotulo, .tema-grafite .heroi-ficha .resumo-detalhe { color: var(--grafite-suave); }
+.tema-grafite .heroi-ficha .resumo-valor { color: #ffffff; font-size: 19px; }
+.tema-grafite .heroi-ficha .resumo-detalhe a { color: #ff8a5c; }
+.tema-grafite .heroi-ficha .resumo-alerta { box-shadow: inset 0 0 0 2px var(--laranja); }
+.tema-grafite .heroi-ficha .resumo-barra { background: #343941; }
+.tema-grafite .heroi-ficha .resumo-barra::-webkit-progress-bar { background: #343941; }
+
+/* ---- lista de treinos: faixa de cor por situação (laranja = ativo, azul = agendado) ---- */
+.tema-grafite .linha-treino { border-left: 0; }
+.tema-grafite .treino-ativo { background: #fff3ec; box-shadow: inset 4px 0 0 var(--laranja); }
+.tema-grafite .treino-agendado { background: #eef2ff; box-shadow: inset 4px 0 0 #6366f1; }
+.tema-grafite .treino-agendado > .resumo-treino:hover { background: #e3e8ff; }
+.tema-grafite .selo-treino { border-radius: 999px; }
+.tema-grafite .selo-treino-agendado { border: 0; background: #e0e7ff; color: #3730a3; }
+
+/* ---- celular: o menu grafite vira uma faixa no alto (a regra de 640px lá de cima cuida da rolagem de lado) ---- */
+@media (max-width: 640px) {
+  .tema-grafite .marca { font-size: 17px; font-weight: 800; }
+  .tema-grafite .topo-menu a.ativo { border-bottom-color: var(--laranja); }
+  .tema-grafite .heroi-ficha { padding: 18px 16px; border-radius: 14px; }
+  .tema-grafite .titulo-grande { font-size: 28px; }
+  .tema-grafite .heroi-acoes > a { flex: 1 1 auto; justify-content: center; }
+}
+
+/* coluna da direita da ficha mais enxuta no grafite: menos espaço em volta, campos e textos de apoio menores */
+.tema-grafite .coluna-lateral .painel { padding: 18px 20px; gap: 10px; }
+.tema-grafite .coluna-lateral h2 { font-size: 16.5px; }
+.tema-grafite .coluna-lateral .dica { font-size: 13px; line-height: 1.45; }
+.tema-grafite .coluna-lateral .campo input, .tema-grafite .coluna-lateral .campo select { height: 44px; font-size: 16px; }
+.tema-grafite .coluna-lateral .botao-escuro { min-height: 44px; }

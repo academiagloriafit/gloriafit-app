@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="pt-BR" class="tema-largo">
+<html lang="pt-BR" class="tema-grafite">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ ficha.nome }} · Glória Fit</title>
-  <link rel="preload" href="{{ url_for('static', filename='fontes/archivo-latin-wdth-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ url_for('static', filename='fontes/manrope-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
   {% include "_icones.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
 </head>
@@ -13,51 +13,63 @@
   {% include "_topo.html" %}
 
   <main class="pagina pagina-larga" data-aluno="{{ ficha.id }}">
-    <a class="voltar" href="{{ url_for('pagina_alunos') }}">&larr; Voltar à busca</a>
-
-    <div class="cabecalho-ficha">
-      <h1 class="titulo-grande">{{ ficha.nome }}</h1>
-      {% if ficha.provisorio %}<span class="selo-situacao">Provisório</span>
-      {% elif ficha.situacao %}<span class="selo-situacao situacao-{{ ficha.situacao }}">{{ ficha.situacao_nome }}</span>{% endif %}
-      {% if ficha.matricula %}<span class="matricula-ficha">Matrícula {{ ficha.matricula }}</span>{% endif %}
-    </div>
-
     {# Resumo do aluno (pedido do Thiago, 28/10/2026): o essencial num olhar só. Só lê o que a página já tem; os detalhes
        continuam nos quadros de baixo. #}
     {% set ativo = ficha.treinos | selectattr("ativo") | first %}
     {% set ultimo = ultimos_treinos[0] if ultimos_treinos else none %}
     {% set sem_ler = comentarios_do_aluno.nao_lidos_do_aluno or 0 %}
-    <section class="resumo-aluno" id="resumo-aluno" aria-label="Resumo do aluno">
-      <div class="resumo-item{% if ativo and ativo.trocar and not ficha.agendado %} resumo-alerta{% endif %}">
-        <span class="resumo-rotulo">Treino atual</span>
-        {% if ativo %}
-        <span class="resumo-valor">{{ ativo.nome }}</span>
-        <span class="resumo-detalhe">{% if ficha.agendado %}Troca agendada: {{ ficha.agendado.agendado_para }}{% elif ativo.trocar %}Hora de trocar{% elif ativo.sessoes_texto != "–" %}Sessões: {{ ativo.sessoes_texto }}{% else %}Desde {{ ativo.inicio }}{% endif %}</span>
-        {% else %}
-        <span class="resumo-valor">Nenhum ativo</span>
-        <span class="resumo-detalhe">{% if ficha.agendado %}Treino agendado para {{ ficha.agendado.agendado_para }}{% else %}<a href="{{ url_for('pagina_montar', aluno_id=ficha.id) }}">Lançar treino</a>{% endif %}</span>
-        {% endif %}
+    {# Topo da ficha (visual novo, 28/10/2026): um bloco grafite com o nome, os botões e o resumo. O nome aparece
+       "Mariana de Souza" (filtro nome_de_pessoa); o nome gravado continua como veio do Data4U. #}
+    <section class="heroi-ficha" aria-labelledby="nome-do-aluno">
+      <div class="heroi-topo">
+        <div class="heroi-identidade">
+          <a class="voltar" href="{{ url_for('pagina_alunos') }}">&larr; Voltar à busca</a>
+          <div class="cabecalho-ficha">
+            <h1 class="titulo-grande" id="nome-do-aluno">{{ ficha.nome | nome_de_pessoa }}</h1>
+            {% if ficha.provisorio %}<span class="selo-situacao">Provisório</span>
+            {% elif ficha.situacao %}<span class="selo-situacao situacao-{{ ficha.situacao }}">{{ ficha.situacao_nome }}</span>{% endif %}
+            {% if ficha.matricula %}<span class="matricula-ficha">Matrícula {{ ficha.matricula }}</span>{% endif %}
+          </div>
+          {% if ativo %}<p class="heroi-linha">{{ ativo.nome }}{% if ativo.montado_por %} · {{ ativo.montado_por }}{% endif %}{% if ativo.fim %} · vence em {{ ativo.fim }}{% endif %}</p>{% endif %}
+        </div>
+        <div class="heroi-acoes">
+          <a class="botao-link botao-link-forte" href="{{ url_for('pagina_montar', aluno_id=ficha.id) }}">Lançar treino</a>
+          {% if ativo %}<a class="botao-link botao-heroi" href="{{ url_for('pagina_imprimir_treino', treino_id=ativo.id) }}">Imprimir treino</a>{% endif %}
+        </div>
       </div>
-      <div class="resumo-item{% if dias_sem_treinar is not none and dias_sem_treinar >= 7 %} resumo-alerta{% endif %}">
-        <span class="resumo-rotulo">Último treino</span>
-        {% if ultimo %}
-        <span class="resumo-valor">{% if dias_sem_treinar == 0 %}Hoje{% elif dias_sem_treinar == 1 %}Ontem{% else %}Há {{ dias_sem_treinar }} dias{% endif %}</span>
-        <span class="resumo-detalhe">{{ ultimo.ficha }} · {{ ultimo.data }}</span>
-        {% else %}
-        <span class="resumo-valor">Nenhum registrado</span>
-        <span class="resumo-detalhe">O app só vê quem usa o celular ou imprime</span>
-        {% endif %}
-      </div>
-      <div class="resumo-item{% if ultimo and ultimo.esforco == 3 %} resumo-alerta{% endif %}">
-        <span class="resumo-rotulo">Último esforço</span>
-        <span class="resumo-valor">{{ ultimo.esforco_nome if ultimo and ultimo.esforco_nome else "Sem nota" }}</span>
-        <span class="resumo-detalhe">{{ "Como o aluno sentiu o último treino" if ultimo and ultimo.esforco_nome else "O aluno não escolheu" }}</span>
-      </div>
-      <div class="resumo-item{% if sem_ler %} resumo-alerta{% endif %}">
-        <span class="resumo-rotulo">Comentários</span>
-        <span class="resumo-valor">{% if sem_ler %}{{ sem_ler }} sem ler{% else %}Nenhum sem ler{% endif %}</span>
-        <span class="resumo-detalhe">{% if comentarios_do_aluno.total %}<a href="#comentarios-do-aluno">Ver comentários</a>{% else %}O aluno ainda não comentou{% endif %}</span>
-      </div>
+      <section class="resumo-aluno" id="resumo-aluno" aria-label="Resumo do aluno">
+        <div class="resumo-item{% if ativo and ativo.trocar and not ficha.agendado %} resumo-alerta{% endif %}">
+          <span class="resumo-rotulo">Treino atual</span>
+          {% if ativo %}
+          <span class="resumo-valor">{{ ativo.nome }}</span>
+          {% if ativo.progresso is not none %}<progress class="resumo-barra" max="100" value="{{ ativo.progresso }}" aria-hidden="true"></progress>{% endif %}
+          <span class="resumo-detalhe">{% if ficha.agendado %}Troca agendada: {{ ficha.agendado.agendado_para }}{% elif ativo.trocar %}Hora de trocar{% elif ativo.sessoes_texto != "–" %}Sessões: {{ ativo.sessoes_texto }}{% else %}Desde {{ ativo.inicio }}{% endif %}</span>
+          {% else %}
+          <span class="resumo-valor">Nenhum ativo</span>
+          <span class="resumo-detalhe">{% if ficha.agendado %}Treino agendado para {{ ficha.agendado.agendado_para }}{% else %}<a href="{{ url_for('pagina_montar', aluno_id=ficha.id) }}">Lançar treino</a>{% endif %}</span>
+          {% endif %}
+        </div>
+        <div class="resumo-item{% if dias_sem_treinar is not none and dias_sem_treinar >= 7 %} resumo-alerta{% endif %}">
+          <span class="resumo-rotulo">Último treino</span>
+          {% if ultimo %}
+          <span class="resumo-valor">{% if dias_sem_treinar == 0 %}Hoje{% elif dias_sem_treinar == 1 %}Ontem{% else %}Há {{ dias_sem_treinar }} dias{% endif %}</span>
+          <span class="resumo-detalhe">{{ ultimo.ficha }} · {{ ultimo.data }}</span>
+          {% else %}
+          <span class="resumo-valor">Nenhum registrado</span>
+          <span class="resumo-detalhe">O app só vê quem usa o celular ou imprime</span>
+          {% endif %}
+        </div>
+        <div class="resumo-item{% if ultimo and ultimo.esforco == 3 %} resumo-alerta{% endif %}">
+          <span class="resumo-rotulo">Último esforço</span>
+          <span class="resumo-valor">{{ ultimo.esforco_nome if ultimo and ultimo.esforco_nome else "Sem nota" }}</span>
+          <span class="resumo-detalhe">{{ "Como o aluno sentiu o último treino" if ultimo and ultimo.esforco_nome else "O aluno não escolheu" }}</span>
+        </div>
+        <div class="resumo-item{% if sem_ler %} resumo-alerta{% endif %}">
+          <span class="resumo-rotulo">Comentários</span>
+          <span class="resumo-valor">{% if sem_ler %}{{ sem_ler }} sem ler{% else %}Nenhum sem ler{% endif %}</span>
+          <span class="resumo-detalhe">{% if comentarios_do_aluno.total %}<a href="#comentarios-do-aluno">Ver comentários</a>{% else %}O aluno ainda não comentou{% endif %}</span>
+        </div>
+      </section>
     </section>
 
     {# Comentários que o aluno escreveu pelo celular (o texto é do aluno: só sai escapado, nunca como HTML). #}
@@ -88,7 +100,6 @@
       <section class="cartao-lista painel-treinos" aria-labelledby="titulo-treinos">
         <div class="cabecalho-lista">
           <h2 id="titulo-treinos">Treinos</h2>
-          <a class="botao-link botao-link-forte" href="{{ url_for('pagina_montar', aluno_id=ficha.id) }}">Lançar treino</a>
         </div>
 
         {% if ficha.aviso_de_troca %}
