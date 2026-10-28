@@ -1693,3 +1693,33 @@ body.com-descanso .pagina-aluno { padding-bottom: 130px; }
   .com-exercicios .barra-importar { flex-wrap: nowrap; }
   .com-exercicios .barra-importar .botao-escuro { padding-inline: 12px; font-size: 14.5px; white-space: nowrap; }
 }
+
+/* ---- celular (28/10/2026): menu numa linha só e barra de baixo do "Lançar treino" mais baixa ---- */
+@media (max-width: 640px) {
+  .topo-conteudo { min-height: 0; padding-top: 8px; row-gap: 0; }
+  .topo-esquerda { width: 100%; row-gap: 0; }
+  .topo-nota { display: none; } /* o nome do computador autorizado: no celular não cabe e não muda nada no trabalho */
+  .topo-menu {
+    position: relative; /* o "sem ler" escondido (posição absoluta) do contador fica preso aqui dentro e não alarga a página */
+    flex-wrap: nowrap;
+    width: calc(100% + 32px);
+    margin: 0 -16px;
+    padding: 0 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* um esmaecido na direita avisa que o menu continua de lado */
+    -webkit-mask-image: linear-gradient(to right, #000 85%, transparent);
+    mask-image: linear-gradient(to right, #000 85%, transparent);
+  }
+  .topo-menu::-webkit-scrollbar { display: none; }
+  .topo-menu a { min-height: 44px; padding: 0 10px; font-size: 14.5px; white-space: nowrap; }
+
+  .rodape-treino { padding: 8px 0 6px; gap: 6px; }
+  .rodape-botoes { gap: 6px 8px; }
+  .rodape-botoes #salvar { flex: 1 1 auto; }
+  .rodape-treino .botao-principal { min-height: 44px; }
+  .rodape-botoes #cancelar { min-height: 44px; }
+  .rodape-botoes #salvar-como-padrao { min-height: 32px; padding: 0 10px; font-size: 13.5px; }
+  .rodape-treino .aviso { flex-basis: 100%; font-size: 13px; }
+  .rodape-treino .aviso:empty { display: none; }
+}
