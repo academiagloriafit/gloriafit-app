@@ -6,6 +6,9 @@ NUNCA use --debug num servidor aberto à internet: ele libera um console que
 executa código de quem acessar.
 """
 
+import base64
+import binascii
+import hashlib
 import os
 import threading
 from pathlib import Path
@@ -52,6 +55,7 @@ TAMANHO_MAXIMO_DO_PEDIDO = 512 * 1024
 # colunas usadas, dão alguns MB (51 mil linhas de situação), e o histórico de treinos uns 8 MB
 # (129 mil exercícios prescritos). O teto vale só para elas.
 TAMANHO_MAXIMO_DA_IMPORTACAO = 25 * 1024 * 1024
+TAMANHO_MAXIMO_DA_FOTO_DO_ALUNO = 6 * 1024 * 1024  # a foto que o aluno manda pelo app (o celular reduz antes; base64 cresce 1/3)
 
 
 # Páginas e rotas que NÃO exigem computador autorizado (o resto exige). Quem cria uma
@@ -84,6 +88,10 @@ ENDPOINTS_PUBLICOS = frozenset(
         "api_aluno_comentario",
         "api_aluno_comentarios",
         "api_aluno_comentarios_vistos",
+        "aluno_minha_foto",
+        "api_aluno_foto",
+        "api_aluno_trocar_foto",
+        "api_aluno_apagar_foto",
     }
 )
 
@@ -155,6 +163,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     # "MARIANA DE SOUZA" -> "Mariana de Souza" (só na tela; o nome gravado não muda)
     app.jinja_env.filters["nome_de_pessoa"] = nomes.nome_de_pessoa
     app.jinja_env.filters["iniciais"] = nomes.iniciais
+    app.jinja_env.filters["data_curta_utc"] = lambda texto: datas.formatar_dia(datas.dia_local(texto)) or ""  # "2026-10-29 13:00:00" (UTC) -> "29/10/2026"
     # No servidor o app fica ATRÁS de um proxy (Traefik), que cuida do HTTPS e repassa o
     # pedido por http. GLORIAFIT_ATRAS_DE_PROXY=1 faz o app acreditar nos cabeçalhos
     # X-Forwarded-* (endereço e https de verdade). SÓ ligue se o app NÃO for acessível sem
@@ -205,9 +214,9 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         )
         if request.is_secure:
             resposta.headers["Strict-Transport-Security"] = f"max-age={HSTS_SEGUNDOS}"
-        if request.endpoint not in ("static", "foto_do_aluno"):
+        if request.endpoint not in ("static", "foto_do_aluno", "aluno_minha_foto"):
             # Páginas e respostas da API têm nome e CPF de aluno: o navegador não guarda cópia.
-            # (A foto do aluno define o próprio cabeçalho: guardada só no navegador do computador autorizado, por pouco tempo.)
+            # (A foto do aluno define o próprio cabeçalho: o navegador guarda, mas confere com o servidor antes de usar.)
             resposta.headers["Cache-Control"] = "no-store"
         if g.get("renovar_cookie"):
             definir_cookie_do_dispositivo(resposta, g.renovar_cookie)
@@ -834,10 +843,74 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         dados = fotos.ler(conexao(), aluno_id, grande=request.args.get("tamanho") == "grande")
         if dados is None:
             abort(404)
+        return resposta_da_foto(dados)
+
+    def resposta_da_foto(dados: bytes) -> Response:
+        """A foto com "etiqueta" (ETag): o navegador guarda a cópia mas pergunta antes de usar; se a foto não mudou o servidor responde
+        só "igual" (304, sem a imagem). Assim a troca feita pelo aluno ou a volta para a foto da catraca aparecem na hora, e as listas
+        continuam leves. "private": proxy nenhum guarda."""
         resposta = Response(dados, mimetype="image/jpeg")
-        # O navegador do computador autorizado guarda por 1 hora (as listas mostram dezenas de fotos); "private": proxy nenhum guarda.
-        resposta.headers["Cache-Control"] = "private, max-age=3600"
-        return resposta
+        resposta.set_etag(hashlib.sha256(dados).hexdigest()[:32])
+        resposta.headers["Cache-Control"] = "private, no-cache"
+        return resposta.make_conditional(request)
+
+    @app.post("/api/alunos/<int(max=9223372036854775807):aluno_id>/foto/catraca")
+    def api_voltar_para_foto_da_catraca(aluno_id: int):
+        """O professor tira a foto que o aluno escolheu no app (ex.: não é o rosto dele) e volta a valer a da catraca."""
+        if conexao().execute("SELECT 1 FROM aluno WHERE id = ?", (aluno_id,)).fetchone() is None:
+            abort(404)
+        return jsonify(ok=True, havia=fotos.apagar_a_do_aluno(conexao(), aluno_id), **fotos.situacao_da_foto(conexao(), aluno_id))
+
+    # ------------------------------------------------------------ foto do aluno no app dele (29/10/2026)
+
+    @app.get("/aluno/foto")
+    def aluno_minha_foto():
+        """A foto do aluno logado (a que ele escolheu ou a da catraca). Só a DELE: o aluno vem do cookie, nunca de um número na URL."""
+        aluno = aluno_atual()
+        if aluno is None:
+            abort(401)
+        dados = fotos.ler(conexao(), aluno.id, grande=request.args.get("tamanho") == "grande")
+        if dados is None:
+            abort(404)
+        return resposta_da_foto(dados)
+
+    @app.get("/api/aluno/foto")
+    def api_aluno_foto():
+        """{"tem_foto", "propria", "enviada_em", "tem_catraca"} do aluno logado; 401 sem login."""
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        return jsonify(fotos.situacao_da_foto(conexao(), aluno.id))
+
+    @app.post("/api/aluno/foto")
+    def api_aluno_trocar_foto():
+        """O aluno troca a foto. Corpo: {"jpg": "<base64>"} (o celular já reduz a foto antes de mandar). 200 com a situação nova;
+        400 não é foto; 401 sem login; 413 grande demais; 429 trocou demais hoje. Vale na hora (decisão do Thiago, 29/10/2026)."""
+        request.max_content_length = TAMANHO_MAXIMO_DA_FOTO_DO_ALUNO  # só nesta rota, antes de ler o corpo
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        dados = corpo_json()
+        texto = dados.get("jpg") if isinstance(dados, dict) else None
+        if not isinstance(texto, str):
+            raise ErroDeEntrada("Formato do pedido inválido.")
+        try:
+            original = base64.b64decode(texto, validate=True)
+            fotos.trocar_pela_do_aluno(conexao(), aluno.id, original)
+        except (binascii.Error, ValueError, fotos.PacoteInvalido):
+            return jsonify(erro="Não deu para usar esta imagem. Escolha uma foto (JPG ou PNG)."), 400
+        except fotos.MuitasTrocas as erro:
+            return jsonify(erro=str(erro)), 429
+        return jsonify(ok=True, **fotos.situacao_da_foto(conexao(), aluno.id))
+
+    @app.post("/api/aluno/foto/apagar")
+    def api_aluno_apagar_foto():
+        """O aluno apaga a foto que escolheu: volta a valer a da catraca (se houver)."""
+        aluno = aluno_atual()
+        if aluno is None:
+            return jsonify(erro="Você precisa entrar de novo."), 401
+        fotos.apagar_a_do_aluno(conexao(), aluno.id)
+        return jsonify(ok=True, **fotos.situacao_da_foto(conexao(), aluno.id))
 
     @app.get("/alunos/novo")
     def pagina_novo_aluno():
@@ -947,6 +1020,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             ultimos_treinos=ciclo.ultimas_sessoes_do_aluno(conexao(), aluno_id),
             dias_sem_treinar=ciclo.dias_desde_o_ultimo_treino(conexao(), aluno_id),  # o resumo no topo da ficha
             historicos_ia=ia_historico.do_aluno(conexao(), aluno_id),  # "Por que este treino foi montado assim" (só o professor vê)
+            foto=fotos.situacao_da_foto(conexao(), aluno_id),  # a foto escolhida pelo aluno no app, com o botão de voltar à da catraca
         )
 
     @app.get("/treinos/<int:treino_id>/imprimir")

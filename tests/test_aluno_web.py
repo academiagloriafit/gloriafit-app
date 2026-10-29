@@ -536,7 +536,8 @@ def test_as_rotas_do_aluno_estao_na_lista_de_publicas_e_so_elas(app):
     rotas_do_aluno = {e for e in rotas_do_aluno if e.startswith(("pagina_aluno_", "api_aluno_"))}
 
     assert rotas_do_aluno == {e for e in ENDPOINTS_PUBLICOS if e.startswith(("pagina_aluno_", "api_aluno_"))}
-    assert len(rotas_do_aluno) == 14
+    assert len(rotas_do_aluno) == 17  # +3 da foto do aluno (29/10/2026)
+    assert "aluno_minha_foto" in ENDPOINTS_PUBLICOS  # /aluno/foto confere o login do aluno dentro da rota
 
 
 def test_nenhuma_resposta_do_aluno_mostra_cpf_hash_ou_token(cliente, remetente, caminho):

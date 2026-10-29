@@ -138,7 +138,8 @@ def buscar_alunos(conn: sqlite3.Connection, texto: str = "", limite: int = LIMIT
         f"""
         SELECT a.id, a.nome, a.provisorio, a.data4u_id, a.situacao,
                t.nome AS ultimo_treino, t.criado_em AS treino_em,
-               EXISTS (SELECT 1 FROM foto_aluno f WHERE f.aluno_id = a.id) AS tem_foto
+               (EXISTS (SELECT 1 FROM foto_aluno f WHERE f.aluno_id = a.id)
+                OR EXISTS (SELECT 1 FROM foto_propria p WHERE p.aluno_id = a.id)) AS tem_foto
         FROM aluno a
         LEFT JOIN treino t ON t.id = (
             SELECT id FROM treino WHERE aluno_id = a.id ORDER BY criado_em DESC, id DESC LIMIT 1

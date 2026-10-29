@@ -1,5 +1,7 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 20 (29/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô) e o treino agendado (montado hoje para entrar numa data futura) e a foto do aluno (a da catraca, em miniatura e numa versão maior para ver ao clicar).
+-- Versão 21 (29/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô) e o treino agendado (montado hoje para entrar numa data futura) e a foto do aluno (a da catraca, em miniatura e numa versão maior para ver ao clicar) e a foto que o próprio aluno escolhe no app.
+-- Mudança da versão 20 para a 21 (foto escolhida pelo aluno): nasceram `foto_propria` (a foto que o aluno põe no app; vale no lugar da
+-- foto da catraca) e `foto_propria_troca` (quando ele trocou, para limitar trocas por dia). Bancos da versão 20 são atualizados sozinhos.
 -- Mudança da versão 19 para a 20 (foto ampliada): `foto_aluno` ganhou `grande` (a foto num tamanho maior, para abrir ao clicar). Vazia nas
 -- fotos que já existiam: o PC da recepção manda de novo e ela é preenchida. Bancos da versão 19 são atualizados sozinhos na subida.
 -- Mudança da versão 18 para a 19 (foto do aluno): nasceu a tabela `foto_aluno` (a miniatura da foto que a recepção tirou no Data4U, só para
@@ -57,7 +59,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 20;
+PRAGMA user_version = 21;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -582,3 +584,25 @@ CREATE TABLE IF NOT EXISTS foto_aluno (
     atualizada_em  TEXT    NOT NULL,
     vista_em       TEXT    NOT NULL
 );
+
+-- ------------------------------------------------------------------ foto escolhida pelo aluno (versão 21)
+-- Pedido do Thiago (29/10/2026): o aluno pode trocar, no app, a foto da catraca por uma foto do rosto que ele prefira. Vale NA HORA, no app
+-- dele e nas telas do professor, no lugar da foto da catraca (que continua guardada em `foto_aluno` e volta se esta for apagada). O professor
+-- pode "voltar para a foto da catraca" (apaga esta linha). O envio diário do PC da recepção nunca mexe aqui. A catraca do Data4U não muda.
+--   miniatura / grande: refeitas no servidor (o que o celular mandou é descartado, inclusive dados escondidos como o local da foto).
+--   enviada_em: quando o aluno trocou (UTC). vista_em: a última vez que o aluno estava em uso (atualizada no envio diário das fotos);
+--   passados 90 dias sem uso, a foto é apagada, como a da catraca.
+-- foto_propria_troca: uma linha por troca (só a hora), para limitar quantas trocas por dia; linhas com mais de 2 dias são apagadas.
+CREATE TABLE IF NOT EXISTS foto_propria (
+    aluno_id    INTEGER PRIMARY KEY REFERENCES aluno(id) ON DELETE CASCADE,
+    miniatura   BLOB    NOT NULL CHECK (length(miniatura) BETWEEN 100 AND 60000),
+    grande      BLOB    NOT NULL CHECK (length(grande) BETWEEN 100 AND 400000),
+    enviada_em  TEXT    NOT NULL,
+    vista_em    TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS foto_propria_troca (
+    id        INTEGER PRIMARY KEY,
+    aluno_id  INTEGER NOT NULL REFERENCES aluno(id) ON DELETE CASCADE,
+    em        TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_foto_propria_troca ON foto_propria_troca(aluno_id, em);

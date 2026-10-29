@@ -53,6 +53,25 @@
       <ul id="lista-meus-comentarios" class="meu-comentarios-lista" hidden></ul>
     </section>
 
+    <!-- Sua foto (29/10/2026): o aluno troca a foto tirada na recepção por uma que ele prefira; vale na hora, aqui e para o professor. -->
+    <section id="minha-foto" class="painel painel-aluno minha-foto" aria-labelledby="titulo-minha-foto" hidden>
+      <h2 id="titulo-minha-foto" class="meu-comentarios-titulo">Sua foto</h2>
+      <div class="minha-foto-quadro">
+        <img id="minha-foto-atual" class="minha-foto-imagem" alt="Sua foto" width="160" height="160" hidden>
+        <span id="minha-foto-vazia" class="minha-foto-imagem minha-foto-vazia" aria-hidden="true" hidden>{{ (primeiro_nome or "")[:1] }}</span>
+        <canvas id="minha-foto-previa" class="minha-foto-imagem" width="320" height="320" aria-label="Prévia da foto escolhida" hidden></canvas>
+      </div>
+      <p id="minha-foto-texto" class="texto-apoio minha-foto-texto"></p>
+      <input id="minha-foto-arquivo" class="so-leitor" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
+      <div class="minha-foto-botoes">
+        <button id="minha-foto-trocar" class="botao-link botao-largo" type="button">Trocar foto</button>
+        <button id="minha-foto-salvar" class="botao-link botao-link-forte botao-largo" type="button" hidden>Usar esta foto</button>
+        <button id="minha-foto-cancelar" class="botao-link botao-largo" type="button" hidden>Cancelar</button>
+        <button id="minha-foto-apagar" class="botao-link botao-largo minha-foto-apagar" type="button" hidden>Voltar para a foto da recepção</button>
+      </div>
+      <p id="minha-foto-aviso" class="aviso-campo" role="status"></p>
+    </section>
+
     <section class="painel painel-aluno painel-sair">
       <button id="botao-sair" class="botao-link botao-largo" type="button">Sair</button>
       <p id="aviso-sair" class="aviso-campo" role="status"></p>
@@ -60,5 +79,6 @@
   </main>
 
   <script type="module" src="{{ url_for('static', filename='aluno_inicio.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='aluno_foto.js') }}"></script>
 </body>
 </html>

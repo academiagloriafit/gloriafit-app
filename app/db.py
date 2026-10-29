@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 20
+VERSAO_DO_BANCO = 21
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -494,11 +494,32 @@ def _de_19_para_20(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE foto_aluno ADD COLUMN grande BLOB CHECK (grande IS NULL OR length(grande) BETWEEN 100 AND 400000)")
 
 
+def _de_20_para_21(conn: sqlite3.Connection) -> None:
+    """Foto escolhida pelo aluno: nascem `foto_propria` e `foto_propria_troca` (vazias). Só acrescenta."""
+    conn.executescript(
+        """
+CREATE TABLE IF NOT EXISTS foto_propria (
+    aluno_id    INTEGER PRIMARY KEY REFERENCES aluno(id) ON DELETE CASCADE,
+    miniatura   BLOB    NOT NULL CHECK (length(miniatura) BETWEEN 100 AND 60000),
+    grande      BLOB    NOT NULL CHECK (length(grande) BETWEEN 100 AND 400000),
+    enviada_em  TEXT    NOT NULL,
+    vista_em    TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS foto_propria_troca (
+    id        INTEGER PRIMARY KEY,
+    aluno_id  INTEGER NOT NULL REFERENCES aluno(id) ON DELETE CASCADE,
+    em        TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_foto_propria_troca ON foto_propria_troca(aluno_id, em);
+        """
+    )
+
+
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
     10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13, 13: _de_13_para_14, 14: _de_14_para_15,
-    15: _de_15_para_16, 16: _de_16_para_17, 17: _de_17_para_18, 18: _de_18_para_19, 19: _de_19_para_20,
+    15: _de_15_para_16, 16: _de_16_para_17, 17: _de_17_para_18, 18: _de_18_para_19, 19: _de_19_para_20, 20: _de_20_para_21,
 }
 
 

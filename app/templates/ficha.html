@@ -32,6 +32,17 @@
             {% elif ficha.situacao %}<span class="selo-situacao situacao-{{ ficha.situacao }}">{{ ficha.situacao_nome }}</span>{% endif %}
             {% if ficha.matricula %}<span class="matricula-ficha">Matrícula {{ ficha.matricula }}</span>{% endif %}
           </div>
+          {% if foto and foto.propria %}
+          <p class="foto-do-aluno-aviso" id="foto-do-aluno-aviso" data-aluno="{{ ficha.id }}" data-tem-catraca="{{ 1 if foto.tem_catraca else 0 }}">
+            <span id="foto-do-aluno-texto">Foto escolhida pelo aluno no app{% if foto.enviada_em %} em {{ foto.enviada_em | data_curta_utc }}{% endif %}.</span>
+            <button type="button" class="botao-link" id="foto-voltar-catraca">{{ "Voltar para a foto da catraca" if foto.tem_catraca else "Tirar esta foto" }}</button>
+            <span id="foto-voltar-confirma" hidden>
+              <span>Tem certeza? A foto que o aluno escolheu será apagada.</span>
+              <button type="button" class="botao-link botao-link-forte" id="foto-voltar-sim">Sim, tirar</button>
+              <button type="button" class="botao-link" id="foto-voltar-nao">Não</button>
+            </span>
+          </p>
+          {% endif %}
           {% if ativo %}<p class="heroi-linha">{{ ativo.nome }}{% if ativo.montado_por %} · {{ ativo.montado_por }}{% endif %}{% if ativo.fim %} · vence em {{ ativo.fim }}{% endif %}</p>{% endif %}
         </div>
         <div class="heroi-acoes">
@@ -407,5 +418,6 @@
   <script type="module" src="{{ url_for('static', filename='padrao_ficha.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='fila_ficha.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='foto_grande.js') }}"></script>
+  {% if foto and foto.propria %}<script type="module" src="{{ url_for('static', filename='ficha_foto.js') }}"></script>{% endif %}
 </body>
 </html>

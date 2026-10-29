@@ -163,7 +163,9 @@ def test_foto_so_abre_em_computador_autorizado(caminho):
     resposta = _autorizado(caminho).get("/alunos/1/foto")
     assert resposta.status_code == 200
     assert resposta.mimetype == "image/jpeg" and resposta.data[:3] == b"\xff\xd8\xff"
-    assert resposta.headers["Cache-Control"] == "private, max-age=3600"
+    assert resposta.headers["Cache-Control"] == "private, no-cache" and resposta.headers["ETag"]
+    de_novo = _autorizado(caminho).get("/alunos/1/foto", headers={"If-None-Match": resposta.headers["ETag"]})
+    assert de_novo.status_code == 304 and de_novo.data == b""  # a foto não mudou: o navegador usa a cópia dele
     assert resposta.headers["X-Content-Type-Options"] == "nosniff"
 
 
@@ -232,3 +234,134 @@ def test_rota_da_foto_grande_e_a_tela_tem_o_clique(caminho):
     assert 'data-nome="Ana Souza"' in ficha and "foto_grande.js" in ficha
     for tela in ("/alunos", "/pendencias", "/ausentes"):
         assert "foto_grande.js" in navegador.get(tela).get_data(as_text=True), tela
+
+
+# ------------------------------------------------------------------ foto escolhida pelo aluno no app (versão 21)
+
+
+def _aluno_logado(caminho, aluno_id):
+    """O celular do aluno, já logado (sem autorização de computador)."""
+    from app import aluno_acesso
+
+    celular = criar_app(caminho).test_client()
+    c = conectar(caminho)
+    with c:
+        token = aluno_acesso._criar_sessao(c, aluno_id, datetime.now(timezone.utc))
+    c.close()
+    celular.set_cookie(aluno_acesso.NOME_DO_COOKIE, token)
+    return celular
+
+
+def test_rotas_da_foto_do_aluno_exigem_o_login_do_aluno(caminho):
+    anonimo = criar_app(caminho).test_client()
+    assert anonimo.get("/aluno/foto").status_code == 401
+    assert anonimo.get("/api/aluno/foto").status_code == 401
+    assert anonimo.post("/api/aluno/foto", json={"jpg": _b64(_jpeg())}).status_code == 401
+    assert anonimo.post("/api/aluno/foto/apagar", json={}).status_code == 401
+    # o aluno logado não abre a foto de outro aluno pela rota do professor
+    assert _aluno_logado(caminho, 2).get("/alunos/1/foto").status_code in (302, 401)
+
+
+def test_aluno_ve_so_a_propria_foto(caminho):
+    ana = _aluno_logado(caminho, 1)
+    assert ana.get("/api/aluno/foto").get_json() == {"tem_foto": True, "propria": False, "enviada_em": None, "tem_catraca": True}
+    assert ana.get("/aluno/foto").data == _autorizado(caminho).get("/alunos/1/foto").data
+    bruno = _aluno_logado(caminho, 2)
+    assert bruno.get("/aluno/foto").status_code == 404  # Bruno não tem foto; e não há como pedir a de outro
+    assert bruno.get("/aluno/foto?id=1").status_code == 404
+
+
+def test_aluno_troca_a_foto_e_o_professor_ve_na_hora(caminho):
+    professor = _autorizado(caminho)
+    da_catraca = professor.get("/alunos/1/foto")
+    ana = _aluno_logado(caminho, 1)
+    resposta = ana.post("/api/aluno/foto", json={"jpg": _b64(_jpeg(900, 1200, cor=(20, 200, 40)))})
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    assert corpo["ok"] and corpo["propria"] and corpo["tem_catraca"] and corpo["enviada_em"]
+
+    agora = professor.get("/alunos/1/foto", headers={"If-None-Match": da_catraca.headers["ETag"]})
+    assert agora.status_code == 200 and agora.data != da_catraca.data  # a etiqueta mudou: o navegador baixa a nova
+    assert ana.get("/aluno/foto").data == agora.data
+    ficha = professor.get("/alunos/1").get_data(as_text=True)
+    assert "Foto escolhida pelo aluno no app" in ficha and "Voltar para a foto da catraca" in ficha and "ficha_foto.js" in ficha
+
+    # a atualização diária do PC da recepção não passa por cima da foto escolhida
+    c = conectar(caminho)
+    fotos.importar(c, {"fotos": [{"id": 501, "jpg": _b64(_jpeg(cor=(1, 2, 3)))}]}, agora=datetime.now(timezone.utc))
+    c.close()
+    assert professor.get("/alunos/1/foto").data == agora.data
+
+
+def test_aluno_sem_foto_da_catraca_tambem_pode_escolher(caminho):
+    bruno = _aluno_logado(caminho, 2)
+    assert bruno.post("/api/aluno/foto", json={"jpg": _b64(_jpeg(formato="PNG"))}).status_code == 200
+    assert bruno.get("/aluno/foto").mimetype == "image/jpeg"
+    busca = _autorizado(caminho).get("/api/alunos").get_json()["alunos"]
+    assert {a["id"]: a["foto"] for a in busca} == {1: True, 2: True}
+    corpo = bruno.post("/api/aluno/foto/apagar", json={}).get_json()
+    assert corpo == {"ok": True, "tem_foto": False, "propria": False, "enviada_em": None, "tem_catraca": False}
+    assert bruno.get("/aluno/foto").status_code == 404
+
+
+@pytest.mark.parametrize("corpo", [{"jpg": "isto não é base64!"}, {"jpg": _b64(b"texto qualquer")}, {"jpg": 5}, {}, []])
+def test_foto_que_nao_e_imagem_e_recusada(caminho, corpo):
+    resposta = _aluno_logado(caminho, 1).post("/api/aluno/foto", json=corpo)
+    assert resposta.status_code == 400
+    assert _aluno_logado(caminho, 1).get("/api/aluno/foto").get_json()["propria"] is False
+
+
+def test_limite_de_trocas_por_dia(caminho):
+    ana = _aluno_logado(caminho, 1)
+    foto = _b64(_jpeg())
+    for _ in range(fotos.TROCAS_POR_DIA):
+        assert ana.post("/api/aluno/foto", json={"jpg": foto}).status_code == 200
+    resposta = ana.post("/api/aluno/foto", json={"jpg": foto})
+    assert resposta.status_code == 429 and "vezes hoje" in resposta.get_json()["erro"]
+
+
+def test_limite_de_trocas_libera_no_dia_seguinte(conn):
+    ontem = AGORA - timedelta(hours=25)
+    for _ in range(fotos.TROCAS_POR_DIA):
+        fotos.trocar_pela_do_aluno(conn, 1, _jpeg(), agora=ontem)
+    with pytest.raises(fotos.MuitasTrocas):
+        fotos.trocar_pela_do_aluno(conn, 1, _jpeg(), agora=ontem + timedelta(minutes=5))
+    fotos.trocar_pela_do_aluno(conn, 1, _jpeg(), agora=AGORA)  # passou um dia: libera
+
+
+def test_aluno_volta_para_a_foto_da_recepcao(caminho):
+    ana = _aluno_logado(caminho, 1)
+    da_catraca = ana.get("/aluno/foto").data
+    ana.post("/api/aluno/foto", json={"jpg": _b64(_jpeg(cor=(9, 9, 200)))})
+    corpo = ana.post("/api/aluno/foto/apagar", json={}).get_json()
+    assert corpo["ok"] and not corpo["propria"] and corpo["tem_foto"]
+    assert ana.get("/aluno/foto").data == da_catraca
+
+
+def test_professor_volta_para_a_foto_da_catraca(caminho):
+    ana = _aluno_logado(caminho, 1)
+    professor = _autorizado(caminho)
+    da_catraca = professor.get("/alunos/1/foto").data
+    ana.post("/api/aluno/foto", json={"jpg": _b64(_jpeg(cor=(9, 9, 200)))})
+
+    assert criar_app(caminho).test_client().post("/api/alunos/1/foto/catraca", json={}).status_code == 401
+    assert ana.post("/api/alunos/1/foto/catraca", json={}).status_code == 401  # o aluno não usa a rota do professor
+    resposta = professor.post("/api/alunos/1/foto/catraca", json={})
+    assert resposta.status_code == 200 and resposta.get_json()["havia"] is True
+    assert professor.get("/alunos/1/foto").data == da_catraca
+    assert "Foto escolhida pelo aluno" not in professor.get("/alunos/1").get_data(as_text=True)
+    assert professor.post("/api/alunos/999/foto/catraca", json={}).status_code == 404
+
+
+def test_foto_escolhida_some_quando_o_aluno_deixa_a_academia(conn):
+    fotos.trocar_pela_do_aluno(conn, 1, _jpeg(), agora=AGORA)
+    fotos.trocar_pela_do_aluno(conn, 3, _jpeg(), agora=AGORA)  # Carla está desativada (D)
+    depois = AGORA + timedelta(days=fotos.DIAS_SEM_CONFIRMACAO + 1)
+    fotos.importar(conn, {"fotos": [], "presentes": []}, agora=depois)
+    assert fotos.situacao_da_foto(conn, 1)["propria"] is True  # em uso: a foto continua
+    assert fotos.situacao_da_foto(conn, 3)["propria"] is False
+
+
+def test_tela_do_aluno_tem_a_secao_da_foto(caminho):
+    pagina = _aluno_logado(caminho, 1).get("/aluno").get_data(as_text=True)
+    assert 'id="minha-foto"' in pagina and "aluno_foto.js" in pagina and 'accept="image/*"' in pagina

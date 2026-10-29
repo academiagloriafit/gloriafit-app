@@ -2085,3 +2085,16 @@ img.avatar-foto { cursor: zoom-in; }
 .foto-ampliada img { display: block; max-width: 100%; max-height: 74vh; border-radius: 10px; background: var(--cinza-leve); }
 .foto-ampliada figcaption { font-size: 16px; font-weight: 700; text-align: center; overflow-wrap: anywhere; }
 .foto-ampliada-fechar { display: flex; margin: 12px auto 0; }
+
+/* ---- Sua foto (app do aluno, 29/10/2026): círculo grande, botões um embaixo do outro ---- */
+.minha-foto-quadro { display: flex; justify-content: center; margin: 4px 0 12px; }
+.minha-foto-imagem { width: 132px; height: 132px; border-radius: 50%; object-fit: cover; border: 2px solid var(--contorno-suave); background: var(--campo); }
+.minha-foto-vazia { display: flex; align-items: center; justify-content: center; font-size: 44px; font-weight: 800; color: var(--texto-suave); }
+.minha-foto-vazia[hidden], .minha-foto-imagem[hidden] { display: none; }
+.minha-foto-texto { text-align: center; margin: 0 0 12px; }
+.minha-foto-botoes { display: grid; gap: 10px; }
+.minha-foto-apagar { color: var(--texto-suave); }
+
+/* ---- Ficha: foto escolhida pelo aluno (o professor pode voltar para a da catraca) ---- */
+.foto-do-aluno-aviso { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 6px 0 0; font-size: 13px; color: var(--texto-suave); }
+.foto-do-aluno-aviso .botao-link { min-height: 32px; padding: 0 12px; font-size: 13px; }

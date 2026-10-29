@@ -13,7 +13,12 @@ Nada de reconhecimento facial: o dado de biometria do Data4U nunca sai do PC.
 QUANTO TEMPO: a cada envio, quem continua ativo e com foto é "visto". Foto que passa DIAS_SEM_CONFIRMACAO dias sem ser vista (o aluno
 saiu, ou a foto foi apagada no Data4U) é apagada. Decisão do Thiago (29/10/2026): 90 dias, caso o aluno volte.
 
-QUEM VÊ: só computador autorizado (rota /alunos/<id>/foto, protegida pela guarda da área do professor). Nunca no app do aluno.
+QUEM VÊ: computador autorizado (rota /alunos/<id>/foto, protegida pela guarda da área do professor) e, desde 29/10/2026, o próprio aluno
+no app dele (rota /aluno/foto: só a foto DELE, pelo cookie do aluno; nunca a de outra pessoa).
+
+FOTO ESCOLHIDA PELO ALUNO (29/10/2026, tabela foto_propria): no app, o aluno troca a foto da catraca por uma que ele prefira. Vale na hora,
+no app e nas telas do professor, no lugar da foto da catraca (que continua guardada e volta se a do aluno for apagada, pelo aluno ou pelo
+professor em "Voltar para a foto da catraca"). O envio diário nunca mexe nela. Limite de TROCAS_POR_DIA trocas em 24 horas.
 """
 
 import base64
@@ -36,10 +41,16 @@ PRESENTES_MAXIMOS = 20_000
 DIAS_SEM_CONFIRMACAO = 90
 SITUACOES_COM_FOTO = ("A", "P")  # ativo e pendente (plano vencido, ainda treinando)
 FORMATOS_ACEITOS = ("JPEG", "PNG")
+TROCAS_POR_DIA = 10  # trocas da foto pelo próprio aluno em 24 horas (contra abuso; ninguém troca a foto 10 vezes num dia)
+SITUACOES_EM_USO_DA_PROPRIA = ("A", "P", "T")  # a foto do aluno continua "vista" enquanto ele estiver ativo, pendente ou trancado
 
 
 class PacoteInvalido(Exception):
     """O pacote de fotos está fora do formato. Nada é gravado."""
+
+
+class MuitasTrocas(Exception):
+    """O aluno já trocou a foto TROCAS_POR_DIA vezes nas últimas 24 horas."""
 
 
 def _agora(agora: datetime | None) -> datetime:
@@ -177,17 +188,74 @@ def importar(conn: sqlite3.Connection, pacote, agora: datetime | None = None) ->
                 f"UPDATE foto_aluno SET vista_em = ? WHERE aluno_id IN ({','.join('?' * len(parte))})", [momento, *parte]
             ).rowcount
         relatorio["apagadas"] = conn.execute("DELETE FROM foto_aluno WHERE vista_em < ?", (limite,)).rowcount
+        # a foto escolhida pelo aluno: "vista" enquanto ele estiver em uso; 90 dias depois de sair, apagada como a da catraca
+        conn.execute(
+            f"""UPDATE foto_propria SET vista_em = ? WHERE aluno_id IN (
+                    SELECT id FROM aluno WHERE provisorio = 1 OR situacao IN ({",".join("?" * len(SITUACOES_EM_USO_DA_PROPRIA))}))""",
+            (momento, *SITUACOES_EM_USO_DA_PROPRIA),
+        )
+        relatorio["apagadas"] += conn.execute("DELETE FROM foto_propria WHERE vista_em < ?", (limite,)).rowcount
     return relatorio
 
 
 def ler(conn: sqlite3.Connection, aluno_id: int, grande: bool = False) -> bytes | None:
-    """A miniatura (ou, com grande=True, a foto grande; se ela ainda não chegou, a miniatura). None se o aluno não tem foto."""
-    linha = conn.execute("SELECT miniatura, grande FROM foto_aluno WHERE aluno_id = ?", (aluno_id,)).fetchone()
+    """A foto que vale para o aluno: a que ELE escolheu, se houver; senão a da catraca. A miniatura, ou com grande=True a foto grande
+    (se a grande da catraca ainda não chegou, a miniatura). None se o aluno não tem foto nenhuma."""
+    linha = conn.execute(
+        """
+        SELECT miniatura, grande FROM foto_propria WHERE aluno_id = ?
+        UNION ALL
+        SELECT miniatura, grande FROM foto_aluno WHERE aluno_id = ?
+        LIMIT 1
+        """,
+        (aluno_id, aluno_id),
+    ).fetchone()
     if linha is None:
         return None
     return bytes(linha[1] if grande and linha[1] is not None else linha[0])
 
 
 def alunos_com_foto(conn: sqlite3.Connection) -> frozenset[int]:
-    """Os ids (do app) de quem tem foto. Poucas centenas de números: as telas consultam uma vez por pedido."""
-    return frozenset(linha[0] for linha in conn.execute("SELECT aluno_id FROM foto_aluno"))
+    """Os ids (do app) de quem tem foto (da catraca ou escolhida). Poucas centenas de números: as telas consultam uma vez por pedido."""
+    return frozenset(linha[0] for linha in conn.execute("SELECT aluno_id FROM foto_aluno UNION SELECT aluno_id FROM foto_propria"))
+
+
+def situacao_da_foto(conn: sqlite3.Connection, aluno_id: int) -> dict:
+    """Para as telas: {"tem_foto", "propria" (o aluno escolheu), "enviada_em" (UTC, se escolheu), "tem_catraca"}."""
+    propria = conn.execute("SELECT enviada_em FROM foto_propria WHERE aluno_id = ?", (aluno_id,)).fetchone()
+    catraca = conn.execute("SELECT 1 FROM foto_aluno WHERE aluno_id = ?", (aluno_id,)).fetchone() is not None
+    return {
+        "tem_foto": propria is not None or catraca,
+        "propria": propria is not None,
+        "enviada_em": propria[0] if propria else None,
+        "tem_catraca": catraca,
+    }
+
+
+def trocar_pela_do_aluno(conn: sqlite3.Connection, aluno_id: int, original: bytes, agora: datetime | None = None) -> None:
+    """O aluno escolheu uma foto no app. Refaz as duas versões (a original é descartada) e grava no lugar da anterior escolhida.
+    Levanta PacoteInvalido se não for uma foto que dê para abrir e MuitasTrocas se passou do limite do dia."""
+    pequena, grande = miniatura(original), foto_grande(original)  # antes da transação: abrir imagem pode levar um instante
+    momento = _agora(agora)
+    with conn:
+        conn.execute("DELETE FROM foto_propria_troca WHERE em < ?", (_texto_utc(momento - timedelta(days=2)),))
+        trocas = conn.execute(
+            "SELECT COUNT(*) FROM foto_propria_troca WHERE aluno_id = ? AND em >= ?", (aluno_id, _texto_utc(momento - timedelta(days=1)))
+        ).fetchone()[0]
+        if trocas >= TROCAS_POR_DIA:
+            raise MuitasTrocas(f"Você já trocou a foto {TROCAS_POR_DIA} vezes hoje. Tente amanhã.")
+        conn.execute(
+            """
+            INSERT INTO foto_propria (aluno_id, miniatura, grande, enviada_em, vista_em) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (aluno_id) DO UPDATE SET miniatura = excluded.miniatura, grande = excluded.grande,
+                enviada_em = excluded.enviada_em, vista_em = excluded.vista_em
+            """,
+            (aluno_id, pequena, grande, _texto_utc(momento), _texto_utc(momento)),
+        )
+        conn.execute("INSERT INTO foto_propria_troca (aluno_id, em) VALUES (?, ?)", (aluno_id, _texto_utc(momento)))
+
+
+def apagar_a_do_aluno(conn: sqlite3.Connection, aluno_id: int) -> bool:
+    """Apaga a foto escolhida pelo aluno (por ele, ou pelo professor em "Voltar para a foto da catraca"). True se havia uma."""
+    with conn:
+        return conn.execute("DELETE FROM foto_propria WHERE aluno_id = ?", (aluno_id,)).rowcount > 0
