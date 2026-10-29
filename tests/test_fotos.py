@@ -413,3 +413,10 @@ def test_menu_do_professor_tem_o_simbolo_com_halteres(caminho):
     html = _autorizado(caminho).get("/alunos").get_data(as_text=True)
     assert 'class="marca marca-halteres"><img src="/static/marca/simbolo-halteres-fundo-escuro.png"' in html
     assert _autorizado(caminho).get("/static/marca/simbolo-halteres-fundo-escuro.png").status_code == 200
+
+
+def test_app_do_aluno_e_telas_de_entrar_tem_o_simbolo_com_halteres(caminho):
+    for navegador, tela in [(_aluno_logado(caminho, 1), "/aluno"), (_aluno_logado(caminho, 1), "/aluno/perfil"),
+                            (criar_app(caminho).test_client(), "/aluno/entrar"), (criar_app(caminho).test_client(), "/autorizar")]:
+        html = navegador.get(tela).get_data(as_text=True)
+        assert "marca-halteres" in html and "simbolo-halteres-fundo-escuro.png" in html and "logo-gloria-fit.png" not in html, tela
