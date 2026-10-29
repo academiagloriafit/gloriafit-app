@@ -365,3 +365,11 @@ def test_foto_escolhida_some_quando_o_aluno_deixa_a_academia(conn):
 def test_meu_perfil_tem_a_secao_da_foto(caminho):
     pagina = _aluno_logado(caminho, 1).get("/aluno/perfil").get_data(as_text=True)
     assert 'id="minha-foto"' in pagina and "aluno_foto.js" in pagina and 'accept="image/*"' in pagina
+
+
+def test_menu_lateral_mostra_a_miniatura_ou_as_iniciais(caminho):
+    for tela in ("/aluno", "/aluno/perfil"):
+        com_foto = _aluno_logado(caminho, 1).get(tela).get_data(as_text=True)
+        assert 'id="menu-foto" class="gaveta-foto" src="/aluno/foto" alt="" width="48" height="48">' in com_foto, tela
+        sem_foto = _aluno_logado(caminho, 2).get(tela).get_data(as_text=True)
+        assert 'height="48" hidden>' in sem_foto and ">BL</span>" in sem_foto, tela

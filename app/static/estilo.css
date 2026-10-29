@@ -2132,3 +2132,8 @@ img.avatar-foto { cursor: zoom-in; }
 .perfil-aviso { border-color: var(--contorno-suave); }
 .perfil-aviso-titulo { margin: 0; font-size: 17px; font-weight: 700; }
 .botao-whatsapp { text-decoration: none; justify-content: center; }
+/* miniatura da foto no alto do menu lateral (29/10/2026) */
+.gaveta-quem { display: flex; align-items: center; gap: 12px; min-width: 0; color: inherit; text-decoration: none; }
+.gaveta-foto { width: 48px; height: 48px; flex: none; border-radius: 50%; object-fit: cover; border: 2px solid var(--contorno-suave); background: var(--campo); }
+.gaveta-iniciais { display: grid; place-items: center; font-size: 17px; font-weight: 800; color: var(--texto-suave); }
+.gaveta-foto[hidden] { display: none; }

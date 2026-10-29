@@ -26,9 +26,19 @@ const aviso = document.getElementById("minha-foto-aviso");
 
 let escolhida = null; // a foto reduzida, pronta para mandar (base64)
 
+// A miniatura do menu lateral acompanha a troca (sem recarregar a página).
+const menuFoto = document.getElementById("menu-foto");
+const menuIniciais = document.getElementById("menu-iniciais");
+
 function mostrar(situacao) {
   const temFoto = Boolean(situacao && situacao.tem_foto);
-  if (temFoto) atual.src = "/aluno/foto?v=" + Date.now(); // força buscar de novo depois de trocar
+  const endereco = "/aluno/foto?v=" + Date.now(); // força buscar de novo depois de trocar
+  if (temFoto) atual.src = endereco;
+  if (menuFoto && menuIniciais) {
+    if (temFoto) menuFoto.src = endereco;
+    menuFoto.hidden = !temFoto;
+    menuIniciais.hidden = temFoto;
+  }
   atual.hidden = !temFoto;
   vazia.hidden = temFoto;
   texto.textContent = textoDaSituacao(situacao);

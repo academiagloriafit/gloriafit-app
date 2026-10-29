@@ -489,7 +489,11 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         if aluno is None:
             return redirect(url_for("pagina_aluno_entrar"))
         return render_template(
-            "aluno_inicio.html", primeiro_nome=primeiro_nome(aluno.nome), saudacao=perfil_aluno.saudacao_da_hora(), nome_curto=nomes.nome_de_pessoa(aluno.nome)
+            "aluno_inicio.html",
+            primeiro_nome=primeiro_nome(aluno.nome),
+            saudacao=perfil_aluno.saudacao_da_hora(),
+            nome_curto=nomes.nome_de_pessoa(aluno.nome),
+            tem_foto=fotos.situacao_da_foto(conexao(), aluno.id)["tem_foto"],  # a miniatura no menu lateral
         )
 
     @app.get("/aluno/perfil")
@@ -507,6 +511,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             perfil=perfil_aluno.para_tela(cadastro),
             whatsapp_da_academia=perfil_aluno.WHATSAPP_DA_ACADEMIA,
             nome_curto=nomes.nome_de_pessoa(aluno.nome),
+            tem_foto=fotos.situacao_da_foto(conexao(), aluno.id)["tem_foto"],
         )
 
     @app.post("/api/aluno/codigo")

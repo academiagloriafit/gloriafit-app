@@ -10,7 +10,12 @@
 </header>
 <dialog id="menu-aluno" class="gaveta-aluno" aria-label="Menu">
   <div class="gaveta-topo">
-    <span class="gaveta-nome">{{ nome_curto }}</span>
+    <a class="gaveta-quem" href="{{ url_for('pagina_aluno_perfil') }}">
+      {# a miniatura da foto (a escolhida no app ou a da catraca); sem foto, as iniciais #}
+      <img id="menu-foto" class="gaveta-foto" src="{{ url_for('aluno_minha_foto') }}" alt="" width="48" height="48"{% if not tem_foto %} hidden{% endif %}>
+      <span id="menu-iniciais" class="gaveta-foto gaveta-iniciais" aria-hidden="true"{% if tem_foto %} hidden{% endif %}>{{ nome_curto | iniciais }}</span>
+      <span class="gaveta-nome">{{ nome_curto }}</span>
+    </a>
     <button id="fechar-menu-aluno" class="gaveta-fechar" type="button"><span aria-hidden="true">&times;</span><span class="so-leitor">Fechar o menu</span></button>
   </div>
   <nav class="gaveta-links" aria-label="Área do aluno">
