@@ -37,12 +37,25 @@ function celulaDaSituacao(aluno) {
   return caixa;
 }
 
-// O nome com o círculo das iniciais na frente (visual novo, 28/10/2026). O nome aparece "Mariana de Souza".
-function celulaDoNome(nome) {
+// O nome com a foto do aluno (a da catraca) ou, sem foto, o círculo das iniciais na frente. O nome aparece "Mariana de Souza".
+// A foto vem de /alunos/<id>/foto (só abre em computador autorizado); o id já foi conferido como número inteiro.
+function celulaDoNome(aluno) {
   const caixa = celula("aluno-nome-lista", "");
-  const circulo = celula("avatar-aluno", iniciais(nome));
-  circulo.setAttribute("aria-hidden", "true");
-  caixa.append(circulo, document.createTextNode(nomeDePessoa(nome)));
+  let circulo;
+  if (aluno.foto === true) {
+    circulo = document.createElement("img");
+    circulo.className = "avatar-aluno avatar-foto";
+    circulo.src = "/alunos/" + aluno.id + "/foto";
+    circulo.alt = "";
+    circulo.width = 40;
+    circulo.height = 40;
+    circulo.loading = "lazy";
+    circulo.decoding = "async";
+  } else {
+    circulo = celula("avatar-aluno", iniciais(aluno.nome));
+    circulo.setAttribute("aria-hidden", "true");
+  }
+  caixa.append(circulo, document.createTextNode(nomeDePessoa(aluno.nome)));
   return caixa;
 }
 
@@ -55,7 +68,7 @@ function desenharLinha(aluno) {
   link.href = "/alunos/" + aluno.id;
 
   link.append(
-    celulaDoNome(aluno.nome),
+    celulaDoNome(aluno),
     Number.isInteger(aluno.matricula)
       ? celula("aluno-matricula", String(aluno.matricula))
       : celula("aluno-matricula", "—", true),

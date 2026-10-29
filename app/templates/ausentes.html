@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
 </head>
 <body>
+  {% from "_avatar.html" import avatar with context %}
   {% set menu_ativo = "ausentes" %}
   {% include "_topo.html" %}
 
@@ -24,7 +25,7 @@
 
     {% macro linha(a) %}
         <li class="linha-ausente">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
+          <a class="ausente-nome com-avatar" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ avatar(a.id, a.nome) }}<span>{{ a.nome | nome_de_pessoa }}</span>{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
           <span class="ausente-ultimo">{% if a.nunca %}Nenhum registrado<span class="ausente-desde"> · treino desde {{ a.desde }}</span>{% else %}{{ a.ultima }}{% endif %}</span>
           <span class="ausente-dias">{{ a.dias }} {{ "dia" if a.dias == 1 else "dias" }}</span>
           <span class="ausente-treino">{{ a.treino }}</span>

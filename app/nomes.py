@@ -26,3 +26,11 @@ def nome_de_pessoa(texto: str | None) -> str:
     """'MARIANA DE SOUZA' -> 'Mariana de Souza'. Vazio fica vazio; espaços repetidos viram um só."""
     palavras = (texto or "").split()
     return " ".join(_palavra(p, i == 0) for i, p in enumerate(palavras))
+
+
+def iniciais(texto: str | None) -> str:
+    """As letras do círculo no lugar da foto: primeira e última palavra que não são "de", "da"... ('MARIANA DE SOUZA' -> 'MS')."""
+    partes = [p for p in nome_de_pessoa(texto).split() if p not in _LIGACOES]
+    if not partes:
+        return ""
+    return (partes[0][:1] + (partes[-1][:1] if len(partes) > 1 else "")).upper()

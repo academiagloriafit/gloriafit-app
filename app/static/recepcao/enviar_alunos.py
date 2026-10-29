@@ -10,10 +10,14 @@ O QUE FAZ, passo a passo (é a mesma coisa que a tela "Atualizar alunos" faz no 
      com seus exercícios. O zip inteiro (258 tabelas, com RG, nascimento, pagamentos, digitais...) NUNCA sai do PC.
   4. Manda primeiro os alunos e depois o histórico de treinos (a ordem importa: o servidor liga cada treino ao aluno).
   5. Anota o resultado em enviar_alunos_log.txt. Enviar duas vezes a mesma cópia não duplica nada.
+  6. Uma vez por dia, as FOTOS dos alunos (29/10/2026): o Data4U guarda as fotos da catraca num banco à parte, o CACHE.D4U. O programa
+     copia esse arquivo, pergunta ao servidor quais alunos estão em uso e qual foto ele já tem, e manda só as fotos novas ou trocadas
+     desses alunos (nunca o dado de reconhecimento facial). Para ler o CACHE.D4U usa o mesmo leitor do Firebird que a extração diária
+     já usa (firebird-driver + o fbclient.dll do Data4U); se ele faltar, as fotos ficam para depois e o resto segue normal.
 
 COMO USAR (no PC, na pasta onde está este arquivo):
   python enviar_alunos.py --autorizar   uma vez só: pede o código de uso único que o Thiago gera no servidor
-  python enviar_alunos.py --conferir    monta os pacotes e mostra o resumo, SEM enviar nada (para testar)
+  python enviar_alunos.py --conferir    monta os pacotes e mostra o resumo (e quantas fotos há), SEM enviar nada (para testar)
   python enviar_alunos.py --instalar    cria a tarefa agendada do Windows (05:15, 08:15 e 12:15, depois das cópias)
   python enviar_alunos.py               o envio de verdade (é o que a tarefa agendada roda)
   python enviar_alunos.py --forcar      envia mesmo que essa cópia já tenha sido enviada
@@ -90,6 +94,16 @@ COLUNAS_DE_TEXTO = frozenset({
     "DT_LANCAMENTO",
 })
 TIPO_CONTATO_CELULAR = 30  # tabela TIPO_CONTATO do Data4U: 30 = Celular
+
+# Fotos dos alunos (29/10/2026). O Data4U guarda as fotos da catraca no CACHE.D4U (tabela BLOB_CACHE, chave "foto/<id>_im_foto").
+PASTA_DO_DATA4U = Path(r"C:\Users\Public\Documents\Data4U\Fit\Data")
+NOME_DO_CACHE = "CACHE.D4U"
+COPIA_DO_CACHE = "_cache_fotos_temp.D4U"  # cópia temporária na pasta NFSE; é apagada no fim, dê certo ou não
+CLIENTE_DO_FIREBIRD = Path(r"C:\Program Files (x86)\Data4U Fit\FB\fbclient.dll")
+ROTA_DO_ESTADO_DAS_FOTOS = "/api/fotos/estado"
+ROTA_DAS_FOTOS = "/api/fotos/importar"
+BYTES_DE_FOTO_POR_PACOTE = 12 * 1024 * 1024  # antes do base64 (que cresce 1/3): o pacote fica bem abaixo do limite do servidor
+TAMANHO_MAXIMO_DA_FOTO = 3 * 1024 * 1024  # o servidor recusa acima disso; as fotos do Data4U têm 30 a 50 KB
 
 ETAPAS = (
     ("alunos", "/api/alunos/importar", "os alunos"),
@@ -287,12 +301,12 @@ def data_da_extracao(texto) -> datetime | None:
 
 
 def ler_estado(pasta: Path) -> dict:
-    """{"alunos": "<data da cópia já enviada>", "treinos": "..."}. Arquivo ausente ou estragado = nada enviado ainda."""
+    """{"alunos": "<data da cópia já enviada>", "treinos": "...", "fotos": "<dia das fotos enviadas>"}. Ausente ou estragado = nada enviado."""
     try:
         estado = json.loads((pasta / ARQUIVO_DO_ESTADO).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return {k: v for k, v in estado.items() if k in ("alunos", "treinos") and isinstance(v, str)} if isinstance(estado, dict) else {}
+    return {k: v for k, v in estado.items() if k in ("alunos", "treinos", "fotos") and isinstance(v, str)} if isinstance(estado, dict) else {}
 
 
 def gravar_estado(pasta: Path, estado: dict) -> None:
@@ -499,6 +513,7 @@ def executar(
     registro=None,
     dormir=time.sleep,
     relogio=time.time,
+    ler_fotos=None,
 ) -> int:
     """O envio do dia. Devolve 0 (enviou, ou não havia nada novo) ou 1 (algo falhou; o motivo está no log)."""
     registro = registro or Registro(pasta)
@@ -518,8 +533,8 @@ def executar(
         pendentes = etapas_pendentes(ler_estado(pasta), manifesto["extracao"], forcar)
         if not pendentes:
             registro(f"Nada novo: a cópia de {manifesto['extracao']} já foi enviada.")
-            return 0
-        registro(f"Cópia do Data4U de {manifesto['extracao']}: enviando {' e '.join(pendentes)}.")
+        else:
+            registro(f"Cópia do Data4U de {manifesto['extracao']}: enviando {' e '.join(pendentes)}.")
 
         estado = ler_estado(pasta)
         for chave_da_etapa, rota, assunto in ETAPAS:
@@ -535,6 +550,16 @@ def executar(
             estado[chave_da_etapa] = manifesto["extracao"]
             gravar_estado(pasta, estado)  # grava a cada etapa: se a seguinte falhar, a próxima tentativa só refaz a que falta
             registro(f"Enviado: {assunto}.\n{relatorio}")
+
+        # As fotos (29/10/2026): uma vez por dia, depois dos alunos (o servidor só aceita foto de aluno que ele já conhece).
+        hoje = datetime.fromtimestamp(relogio()).strftime("%d/%m/%Y")
+        if forcar or estado.get("fotos") != hoje:
+            feito = enviar_fotos(pasta, endereco, chave, enviar, registro, dormir, ler_fotos or ler_fotos_do_cache)
+            if feito is False:
+                return 1
+            if feito:
+                estado["fotos"] = hoje
+                gravar_estado(pasta, estado)
     except CopiaInvalida as erro:
         registro(f"NÃO ENVIADO: {erro}")
         return 1
@@ -547,8 +572,126 @@ def executar(
     return 0
 
 
-def conferir(pasta: Path, registro=print) -> int:
-    """Monta os dois pacotes e mostra o resumo, sem enviar nada nem mexer no que já foi enviado."""
+# ------------------------------------------------------------------ fotos dos alunos (29/10/2026)
+
+
+def id_da_chave_da_foto(chave) -> int | None:
+    """'foto/4257_im_foto' -> 4257 (o id da pessoa no Data4U). Qualquer outra coisa -> None."""
+    if not isinstance(chave, str) or not chave.startswith("foto/") or not chave.endswith("_im_foto"):
+        return None
+    numero = chave[len("foto/") : -len("_im_foto")]
+    return int(numero) if numero.isdigit() and len(numero) <= 12 else None
+
+
+def copiar_cache(origem: Path, destino: Path) -> None:
+    """Copia o CACHE.D4U com o Data4U aberto (o Data4U não deixa dois programas abrirem o mesmo banco: lê-se a cópia)."""
+    with open(origem, "rb") as entrada, open(destino, "wb") as saida:
+        while True:
+            pedaco = entrada.read(4 * 1024 * 1024)
+            if not pedaco:
+                break
+            saida.write(pedaco)
+
+
+def ler_fotos_do_cache(pasta: Path, origem: Path | None = None, cliente: Path | None = None) -> dict[int, bytes] | None:
+    """{id da pessoa: bytes da foto} lidos de uma cópia do CACHE.D4U. None se não dá para ler aqui (sem cache ou sem o leitor do
+    Firebird): as fotos ficam para depois, sem atrapalhar o resto. Só lê as chaves de foto; a cópia é apagada no fim."""
+    import importlib  # o leitor do Firebird é carregado só aqui: o resto do programa continua só com a biblioteca padrão
+
+    origem = origem or PASTA_DO_DATA4U / NOME_DO_CACHE
+    cliente = cliente or CLIENTE_DO_FIREBIRD
+    if not origem.is_file() or not cliente.is_file():
+        return None
+    try:
+        fb = importlib.import_module("firebird.driver")
+    except ImportError:
+        return None
+    copia = pasta / COPIA_DO_CACHE
+    try:
+        copiar_cache(origem, copia)
+        fb.driver_config.fb_client_library.value = str(cliente)
+        fotos = {}
+        with fb.connect(str(copia), user="SYSDBA", charset="WIN1252") as conexao:
+            cursor = conexao.cursor()
+            cursor.execute("SELECT ds_key, ds_blob FROM blob_cache WHERE ds_key STARTING WITH 'foto/'")
+            for chave, blob in cursor:
+                identificador = id_da_chave_da_foto(chave)
+                dados = blob.read() if hasattr(blob, "read") else blob
+                if identificador is not None and isinstance(dados, bytes) and 0 < len(dados) <= TAMANHO_MAXIMO_DA_FOTO:
+                    fotos[identificador] = dados
+        return fotos
+    finally:
+        try:
+            copia.unlink()
+        except OSError:
+            pass
+
+
+def planejar_fotos(estado_do_servidor, fotos_do_cache: dict[int, bytes]) -> tuple[list[tuple[int, bytes]], list[int]]:
+    """(fotos a mandar, ids que têm foto no cache hoje). Só alunos que o servidor listou; só foto nova ou diferente da que ele tem."""
+    import hashlib
+
+    alunos = estado_do_servidor.get("alunos") if isinstance(estado_do_servidor, dict) else None
+    if not isinstance(alunos, list):
+        raise SemRede("O servidor não disse quais alunos estão em uso.")
+    resumos = {a["id"]: a.get("sha256") for a in alunos if isinstance(a, dict) and isinstance(a.get("id"), int)}
+    presentes = sorted(i for i in fotos_do_cache if i in resumos)
+    mandar = [(i, fotos_do_cache[i]) for i in presentes if hashlib.sha256(fotos_do_cache[i]).hexdigest() != resumos[i]]
+    return mandar, presentes
+
+
+def pacotes_de_fotos(mandar: list[tuple[int, bytes]], presentes: list[int], por_pacote: int) -> list[dict]:
+    """Divide as fotos em pacotes (até `por_pacote` fotos e BYTES_DE_FOTO_POR_PACOTE). Todo pacote leva a lista de presentes; sem foto
+    nova, vai um pacote só com ela (é o que diz ao servidor que essas fotos continuam valendo)."""
+    import base64
+
+    pacotes, atual, tamanho = [], [], 0
+    for identificador, dados in mandar:
+        if atual and (len(atual) >= por_pacote or tamanho + len(dados) > BYTES_DE_FOTO_POR_PACOTE):
+            pacotes.append(atual)
+            atual, tamanho = [], 0
+        atual.append({"id": identificador, "jpg": base64.b64encode(dados).decode("ascii")})
+        tamanho += len(dados)
+    if atual or not pacotes:
+        pacotes.append(atual)
+    return [{"fotos": fotos, "presentes": presentes} for fotos in pacotes]
+
+
+def enviar_fotos(pasta: Path, endereco: str, chave: str, enviar, registro, dormir, ler_fotos=ler_fotos_do_cache) -> bool | None:
+    """A etapa das fotos. True = feita; None = não dá para fazer neste PC agora (avisa e tenta no próximo horário, sem contar como
+    falha do envio); False = o servidor recusou ou não respondeu (conta como falha; tenta no próximo horário)."""
+    fotos_do_cache = ler_fotos(pasta)
+    if fotos_do_cache is None:
+        registro("Fotos: não deu para ler o CACHE.D4U neste PC (arquivo ou leitor do Firebird não encontrado). Ficam para depois.")
+        return None
+    status, estado = enviar_com_tentativas(enviar, endereco, ROTA_DO_ESTADO_DAS_FOTOS, {}, chave, registro, dormir)
+    if status == 401:
+        raise NaoAutorizado("O servidor não reconhece este PC. Rode: python enviar_alunos.py --autorizar")
+    if status != 200:
+        registro(f"Fotos: o servidor não respondeu como esperado (resposta {status}). Tento de novo no próximo horário.")
+        return False
+    mandar, presentes = planejar_fotos(estado, fotos_do_cache)
+    por_pacote = estado.get("fotos_por_pacote") if isinstance(estado.get("fotos_por_pacote"), int) else 100
+    total = {"gravadas": 0, "recusadas": 0, "apagadas": 0}
+    for pacote in pacotes_de_fotos(mandar, presentes, max(1, por_pacote)):
+        status, corpo = enviar_com_tentativas(enviar, endereco, ROTA_DAS_FOTOS, pacote, chave, registro, dormir)
+        if status != 200 or not isinstance(corpo, dict):
+            motivo = corpo.get("erro") if isinstance(corpo, dict) else None
+            registro(f"Fotos: o servidor recusou um pacote (resposta {status}{': ' + motivo if motivo else ''}). Tento de novo depois.")
+            return False
+        for campo in total:
+            total[campo] += corpo.get(campo, 0) if isinstance(corpo.get(campo), int) else 0
+    texto = f"Fotos: {len(presentes)} alunos em uso têm foto no Data4U; {total['gravadas']} novas ou trocadas enviadas"
+    if total["recusadas"]:
+        texto += f", {total['recusadas']} recusadas pelo servidor"
+    if total["apagadas"]:
+        texto += f", {total['apagadas']} antigas apagadas"
+    registro(texto + ".")
+    return True
+
+
+def conferir(pasta: Path, registro=print, ler_fotos=ler_fotos_do_cache) -> int:
+    """Monta os dois pacotes e mostra o resumo (e quantas fotos há no CACHE.D4U), sem enviar nada nem mexer no que já foi enviado."""
     caminho = pasta / NOME_DO_ZIP
     if not caminho.is_file():
         registro(f"Não achei o {NOME_DO_ZIP} em {pasta}.")
@@ -573,6 +716,11 @@ def conferir(pasta: Path, registro=print) -> int:
         f"Treinos: {resumo_t['treinos']} treinos, {resumo_t['fichas']} fichas, {resumo_t['prescricoes']} exercícios prescritos. "
         f"Pacote: {tamanho(pacote_t):.1f} MB."
     )
+    fotos_do_cache = ler_fotos(pasta)
+    if fotos_do_cache is None:
+        registro("Fotos: não deu para ler o CACHE.D4U neste PC (arquivo ou leitor do Firebird não encontrado).")
+    else:
+        registro(f"Fotos: {len(fotos_do_cache)} pessoas com foto no CACHE.D4U ({sum(map(len, fotos_do_cache.values())) / (1024 * 1024):.1f} MB).")
     registro("Nada foi enviado.")
     return 0
 

@@ -147,7 +147,7 @@ def test_texto_muito_comprido_e_cortado(turma):
 def test_resultado_nao_traz_cpf_nem_whatsapp(turma):
     aluno = buscar_alunos(turma, "maria")["alunos"][0]
     assert set(aluno) == {
-        "id", "nome", "provisorio", "matricula", "situacao", "situacao_nome", "ultimo_treino", "atualizado_em",
+        "id", "nome", "provisorio", "matricula", "situacao", "situacao_nome", "ultimo_treino", "atualizado_em", "foto",
     }
 
 

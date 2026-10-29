@@ -971,3 +971,136 @@ def test_o_programa_pode_ser_baixado_do_app_pelo_pc_sem_autorizacao(servidor_de_
 
     assert resposta.status == 200
     assert baixado == CAMINHO_DO_PROGRAMA.read_bytes()
+
+
+# ------------------------------------------------------------------ fotos dos alunos (29/10/2026)
+
+
+def _foto(cor=(200, 120, 80)) -> bytes:
+    import io
+
+    from PIL import Image
+
+    saida = io.BytesIO()
+    Image.new("RGB", (120, 160), cor).save(saida, "JPEG")
+    return saida.getvalue()
+
+
+@pytest.mark.parametrize(
+    "chave, esperado",
+    [("foto/4257_im_foto", 4257), ("foto/1_im_foto", 1), ("foto/_im_foto", None), ("foto/12a_im_foto", None),
+     ("lancamento_avaliacao/3_im_foto", None), ("pessoa/472_ds_observacoes", None), ("foto/4257_ds_face", None), (None, None)],
+)
+def test_id_da_chave_da_foto(chave, esperado):
+    assert ea.id_da_chave_da_foto(chave) == esperado
+
+
+def test_planejar_fotos_manda_so_aluno_em_uso_com_foto_nova_ou_trocada():
+    import hashlib
+
+    igual, trocada, nova, de_fora = _foto((1, 1, 1)), _foto((2, 2, 2)), _foto((3, 3, 3)), _foto((4, 4, 4))
+    estado = {"alunos": [{"id": 1, "sha256": hashlib.sha256(igual).hexdigest()}, {"id": 2, "sha256": "0" * 64}, {"id": 3, "sha256": None},
+                         {"id": 5, "sha256": None}]}
+
+    mandar, presentes = ea.planejar_fotos(estado, {1: igual, 2: trocada, 3: nova, 9: de_fora})
+
+    assert [i for i, _ in mandar] == [2, 3]
+    assert presentes == [1, 2, 3]  # o 9 não está em uso; o 5 está em uso mas não tem foto no Data4U
+
+
+def test_planejar_fotos_sem_lista_do_servidor_e_erro():
+    with pytest.raises(ea.SemRede):
+        ea.planejar_fotos({"erro": "x"}, {1: b"x"})
+
+
+def test_pacotes_de_fotos_respeitam_o_limite_e_todos_levam_os_presentes(monkeypatch):
+    monkeypatch.setattr(ea, "BYTES_DE_FOTO_POR_PACOTE", 25)
+    mandar = [(i, b"x" * 10) for i in range(1, 8)]
+
+    pacotes = ea.pacotes_de_fotos(mandar, [1, 2, 3, 4, 5, 6, 7], por_pacote=5)
+
+    assert [[f["id"] for f in p["fotos"]] for p in pacotes] == [[1, 2], [3, 4], [5, 6], [7]]  # 2 x 10 bytes cabem em 25
+    assert all(p["presentes"] == [1, 2, 3, 4, 5, 6, 7] for p in pacotes)
+    assert ea.pacotes_de_fotos([], [1, 2], por_pacote=5) == [{"fotos": [], "presentes": [1, 2]}]
+
+
+def test_sem_cache_ou_sem_leitor_as_fotos_ficam_para_depois(tmp_path):
+    assert ea.ler_fotos_do_cache(tmp_path, origem=tmp_path / "nao_existe.D4U", cliente=tmp_path / "fbclient.dll") is None
+
+
+class ServidorDeFotos(ServidorDeMentira):
+    def __init__(self, alunos, respostas=None):
+        super().__init__(respostas)
+        self.alunos = alunos
+
+    def __call__(self, endereco, rota, pacote, chave):
+        if rota == ea.ROTA_DO_ESTADO_DAS_FOTOS and rota not in self.respostas:
+            self.recebidos.append((rota, pacote, chave))
+            return 200, {"alunos": self.alunos, "fotos_por_pacote": 2}
+        if rota == ea.ROTA_DAS_FOTOS and rota not in self.respostas:
+            self.recebidos.append((rota, pacote, chave))
+            return 200, {"gravadas": len(pacote["fotos"]), "recusadas": 0, "sem_aluno": 0, "vistas": len(pacote["presentes"]), "apagadas": 0}
+        return super().__call__(endereco, rota, pacote, chave)
+
+
+def test_fotos_vao_depois_dos_alunos_e_so_uma_vez_por_dia(pasta):
+    servidor = ServidorDeFotos([{"id": 10, "sha256": None}, {"id": 11, "sha256": None}, {"id": 12, "sha256": None}])
+    cache = {10: _foto(), 11: _foto((9, 9, 9)), 12: _foto((5, 5, 5)), 99: _foto()}
+
+    assert _executar(pasta, servidor, ler_fotos=lambda _p: cache) == 0
+
+    rotas = [r[0] for r in servidor.recebidos]
+    assert rotas == ["/api/alunos/importar", "/api/treinos/importar", ea.ROTA_DO_ESTADO_DAS_FOTOS, ea.ROTA_DAS_FOTOS, ea.ROTA_DAS_FOTOS]
+    enviados = [f["id"] for r in servidor.recebidos if r[0] == ea.ROTA_DAS_FOTOS for f in r[1]["fotos"]]
+    assert enviados == [10, 11, 12]  # o 99 não está em uso: não sai do PC
+    assert "Fotos: 3 alunos em uso têm foto no Data4U; 3 novas ou trocadas enviadas." in _log(pasta)
+    assert "fotos" in ea.ler_estado(pasta)
+
+    servidor.recebidos.clear()
+    assert _executar(pasta, servidor, ler_fotos=lambda _p: cache) == 0
+    assert servidor.recebidos == []  # mesmo dia, mesma cópia: nada
+
+
+def test_fotos_que_falham_contam_como_falha_e_ficam_para_o_proximo_horario(pasta):
+    servidor = ServidorDeFotos([{"id": 10, "sha256": None}], {ea.ROTA_DAS_FOTOS: (400, {"erro": "pacote ruim"})})
+
+    assert _executar(pasta, servidor, ler_fotos=lambda _p: {10: _foto()}) == 1
+
+    assert "fotos" not in ea.ler_estado(pasta) and ea.ler_estado(pasta)["alunos"] == AGORA_DA_COPIA
+    assert "Fotos: o servidor recusou um pacote (resposta 400: pacote ruim)" in _log(pasta)
+
+
+def test_fotos_que_nao_dao_para_ler_nao_derrubam_o_envio(pasta):
+    servidor = ServidorDeFotos([])
+
+    assert _executar(pasta, servidor, ler_fotos=lambda _p: None) == 0
+
+    assert ea.ROTA_DO_ESTADO_DAS_FOTOS not in [r[0] for r in servidor.recebidos]
+    assert "fotos" not in ea.ler_estado(pasta)
+
+
+def test_os_pacotes_de_fotos_passam_no_servidor_de_verdade():
+    from app import fotos
+
+    conn = conectar()
+    criar_tabelas(conn)
+    conn.execute("INSERT INTO aluno (id, nome, situacao, data4u_id) VALUES (1, 'ANA SOUZA', 'A', 501), (2, 'BRUNO LIMA', 'P', 502)")
+    conn.commit()
+    cache = {501: _foto(), 502: _foto((1, 2, 3)), 777: _foto()}
+
+    mandar, presentes = ea.planejar_fotos(fotos.estado(conn), cache)
+    for pacote in ea.pacotes_de_fotos(mandar, presentes, fotos.FOTOS_POR_PACOTE):
+        assert fotos.importar(conn, json.loads(json.dumps(pacote)))["gravadas"] == 2
+
+    assert fotos.alunos_com_foto(conn) == {1, 2}
+    assert ea.planejar_fotos(fotos.estado(conn), cache)[0] == []  # na rodada seguinte não há o que mandar
+    conn.close()
+
+
+def test_conferir_mostra_quantas_fotos_ha_no_cache(tmp_path):
+    escrever_base(tmp_path)
+    mensagens = []
+
+    assert ea.conferir(tmp_path, mensagens.append, ler_fotos=lambda _p: {1: b"x" * 1024, 2: b"y" * 1024}) == 0
+
+    assert any(m.startswith("Fotos: 2 pessoas com foto no CACHE.D4U") for m in mensagens)

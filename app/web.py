@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
+from flask import Flask, Response, abort, g, jsonify, redirect, render_template, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app import (
@@ -29,6 +29,7 @@ from app import (
     execucao,
     exercicios,
     filas,
+    fotos,
     ia_historico,
     ia_retorno,
     ia_treino,
@@ -153,6 +154,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = TAMANHO_MAXIMO_DO_PEDIDO
     # "MARIANA DE SOUZA" -> "Mariana de Souza" (só na tela; o nome gravado não muda)
     app.jinja_env.filters["nome_de_pessoa"] = nomes.nome_de_pessoa
+    app.jinja_env.filters["iniciais"] = nomes.iniciais
     # No servidor o app fica ATRÁS de um proxy (Traefik), que cuida do HTTPS e repassa o
     # pedido por http. GLORIAFIT_ATRAS_DE_PROXY=1 faz o app acreditar nos cabeçalhos
     # X-Forwarded-* (endereço e https de verdade). SÓ ligue se o app NÃO for acessível sem
@@ -203,8 +205,9 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         )
         if request.is_secure:
             resposta.headers["Strict-Transport-Security"] = f"max-age={HSTS_SEGUNDOS}"
-        if request.endpoint != "static":
+        if request.endpoint not in ("static", "foto_do_aluno"):
             # Páginas e respostas da API têm nome e CPF de aluno: o navegador não guarda cópia.
+            # (A foto do aluno define o próprio cabeçalho: guardada só no navegador do computador autorizado, por pouco tempo.)
             resposta.headers["Cache-Control"] = "no-store"
         if g.get("renovar_cookie"):
             definir_cookie_do_dispositivo(resposta, g.renovar_cookie)
@@ -312,6 +315,16 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     def contador_de_comentarios():
         # O número do menu "Comentários". É uma função (e não um número) para a conta só rodar nas telas que a usam (o topo do professor).
         return {"comentarios_novos": lambda: comentarios.contar_nao_lidos(conexao())}
+
+    @app.context_processor
+    def fotos_dos_alunos():
+        # Quem tem foto (ids do app). Função: só consulta o banco nas telas que mostram foto, e uma vez por pedido.
+        def com_foto() -> frozenset[int]:
+            if "com_foto" not in g:
+                g.com_foto = fotos.alunos_com_foto(conexao())
+            return g.com_foto
+
+        return {"com_foto": com_foto}
 
     @app.context_processor
     def contador_de_pendencias():
@@ -796,6 +809,34 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         if not relatorio.simulado:
             importacoes.registrar(conexao(), "treinos", relatorio.extraido_em)
         return jsonify(relatorio.como_dicionario())
+
+    # ------------------------------------------------------------ foto do aluno (29/10/2026)
+
+    @app.post("/api/fotos/estado")
+    def api_fotos_estado():
+        """Para o envio diário do PC da recepção: quais alunos estão em uso e o resumo da foto que o servidor já tem (app/fotos.py)."""
+        return jsonify(fotos.estado(conexao()))
+
+    @app.post("/api/fotos/importar")
+    def api_importar_fotos():
+        """Recebe um pacote de fotos do PC da recepção (até fotos.FOTOS_POR_PACOTE). 200 com as contagens; 400 se o pacote não serve."""
+        request.max_content_length = TAMANHO_MAXIMO_DA_IMPORTACAO  # só nesta rota, antes de ler o corpo
+        try:
+            relatorio = fotos.importar(conexao(), corpo_json())
+        except fotos.PacoteInvalido as erro:
+            return jsonify(erro=str(erro)), 400
+        return jsonify(relatorio)
+
+    @app.get("/alunos/<int(max=9223372036854775807):aluno_id>/foto")
+    def foto_do_aluno(aluno_id: int):
+        """A miniatura da foto do aluno. Só computador autorizado (a guarda da área do professor cuida disso). 404 se não tem foto."""
+        dados = fotos.ler(conexao(), aluno_id)
+        if dados is None:
+            abort(404)
+        resposta = Response(dados, mimetype="image/jpeg")
+        # O navegador do computador autorizado guarda por 1 hora (as listas mostram dezenas de fotos); "private": proxy nenhum guarda.
+        resposta.headers["Cache-Control"] = "private, max-age=3600"
+        return resposta
 
     @app.get("/alunos/novo")
     def pagina_novo_aluno():

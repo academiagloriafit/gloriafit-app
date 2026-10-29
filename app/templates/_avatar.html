@@ -1,0 +1,9 @@
+{# A foto do aluno (a da catraca, em miniatura) ou, sem foto, as iniciais num círculo. Importar com contexto:
+   {% from "_avatar.html" import avatar with context %}  (precisa de com_foto(), do app). A imagem só abre em computador autorizado. #}
+{% macro avatar(aluno_id, nome, classe="") -%}
+{%- if aluno_id in com_foto() -%}
+<img class="avatar-aluno avatar-foto{{ ' ' ~ classe if classe }}" src="{{ url_for('foto_do_aluno', aluno_id=aluno_id) }}" alt="" width="40" height="40" loading="lazy" decoding="async">
+{%- else -%}
+<span class="avatar-aluno{{ ' ' ~ classe if classe }}" aria-hidden="true">{{ nome | iniciais }}</span>
+{%- endif -%}
+{%- endmacro %}

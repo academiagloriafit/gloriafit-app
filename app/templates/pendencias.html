@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
 </head>
 <body>
+  {% from "_avatar.html" import avatar with context %}
   {% set menu_ativo = "pendencias" %}
   {% include "_topo.html" %}
 
@@ -33,7 +34,7 @@
       <ul class="linhas" id="lista-trocar">
         {% for a in p.trocar.alunos %}
         <li class="linha-pendencia">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}</a>
+          <a class="ausente-nome com-avatar" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ avatar(a.id, a.nome) }}<span>{{ a.nome | nome_de_pessoa }}</span></a>
           <span class="pendencia-detalhe">{{ a.motivo }}<span class="pendencia-treino"> · {{ a.treino }}</span>{% if a.agendado %}<span class="pendencia-agendado"> · Troca agendada para {{ a.agendado }}</span>{% endif %}</span>
           {% if a.agendado %}<a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>{% else %}<a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>{% endif %}
         </li>
@@ -53,7 +54,7 @@
       <ul class="linhas" id="lista-comentarios-pendentes">
         {% for c in p.comentarios.comentarios %}
         <li class="linha-pendencia">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">{{ c.aluno | nome_de_pessoa }}</a>
+          <a class="ausente-nome com-avatar" href="{{ url_for('pagina_ficha', aluno_id=c.aluno_id) }}">{{ avatar(c.aluno_id, c.aluno) }}<span>{{ c.aluno | nome_de_pessoa }}</span></a>
           <span class="pendencia-detalhe">“{{ c.texto | truncate(120, True, "…") }}”<span class="pendencia-treino"> · {{ c.quando }}</span></span>
           <a class="botao-link" href="{{ url_for('pagina_comentarios') }}">Ler e responder</a>
         </li>
@@ -73,7 +74,7 @@
       <ul class="linhas" id="lista-sem-treino">
         {% for a in p.sem_treino.alunos %}
         <li class="linha-pendencia">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
+          <a class="ausente-nome com-avatar" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ avatar(a.id, a.nome) }}<span>{{ a.nome | nome_de_pessoa }}</span>{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
           <span class="pendencia-detalhe">Nenhum treino ativo{% if a.agendado %}<span class="pendencia-agendado"> · Treino agendado para {{ a.agendado }}</span>{% endif %}</span>
           {% if a.agendado %}<a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>{% else %}<a class="botao-link" href="{{ url_for('pagina_montar', aluno_id=a.id) }}">Lançar treino</a>{% endif %}
         </li>
@@ -93,7 +94,7 @@
       <ul class="linhas" id="lista-agendados">
         {% for a in p.agendados.alunos %}
         <li class="linha-pendencia">
-          <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}</a>
+          <a class="ausente-nome com-avatar" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ avatar(a.id, a.nome) }}<span>{{ a.nome | nome_de_pessoa }}</span></a>
           <span class="pendencia-detalhe">Entra em {{ a.dia }}<span class="pendencia-treino"> · {{ a.treino }}</span></span>
           <a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Ver ficha</a>
         </li>

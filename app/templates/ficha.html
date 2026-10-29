@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
 </head>
 <body>
+  {% from "_avatar.html" import avatar with context %}
   {% set menu_ativo = "alunos" %}
   {% include "_topo.html" %}
 
@@ -25,6 +26,7 @@
         <div class="heroi-identidade">
           <a class="voltar" href="{{ url_for('pagina_alunos') }}">&larr; Voltar à busca</a>
           <div class="cabecalho-ficha">
+            {{ avatar(ficha.id, ficha.nome, "avatar-grande") }}
             <h1 class="titulo-grande" id="nome-do-aluno">{{ ficha.nome | nome_de_pessoa }}</h1>
             {% if ficha.provisorio %}<span class="selo-situacao">Provisório</span>
             {% elif ficha.situacao %}<span class="selo-situacao situacao-{{ ficha.situacao }}">{{ ficha.situacao_nome }}</span>{% endif %}

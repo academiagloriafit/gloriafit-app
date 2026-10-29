@@ -137,7 +137,8 @@ def buscar_alunos(conn: sqlite3.Connection, texto: str = "", limite: int = LIMIT
     linhas = conn.execute(
         f"""
         SELECT a.id, a.nome, a.provisorio, a.data4u_id, a.situacao,
-               t.nome AS ultimo_treino, t.criado_em AS treino_em
+               t.nome AS ultimo_treino, t.criado_em AS treino_em,
+               EXISTS (SELECT 1 FROM foto_aluno f WHERE f.aluno_id = a.id) AS tem_foto
         FROM aluno a
         LEFT JOIN treino t ON t.id = (
             SELECT id FROM treino WHERE aluno_id = a.id ORDER BY criado_em DESC, id DESC LIMIT 1
@@ -161,6 +162,7 @@ def buscar_alunos(conn: sqlite3.Connection, texto: str = "", limite: int = LIMIT
             "situacao_nome": SITUACOES.get(linha["situacao"]),
             "ultimo_treino": linha["ultimo_treino"],
             "atualizado_em": data_local(linha["treino_em"]),
+            "foto": bool(linha["tem_foto"]),  # a tela pede a miniatura em /alunos/<id>/foto
         }
         for linha in linhas
     ]

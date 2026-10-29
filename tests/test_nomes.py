@@ -21,3 +21,13 @@ from app.nomes import nome_de_pessoa
 )
 def test_nome_de_pessoa(entrada, saida):
     assert nome_de_pessoa(entrada) == saida
+
+
+@pytest.mark.parametrize(
+    "entrada, saida",
+    [("MARIANA DE SOUZA", "MS"), ("JOÃO PEDRO DOS SANTOS", "JS"), ("ÉRICA", "É"), ("", ""), (None, "")],
+)
+def test_iniciais(entrada, saida):
+    from app.nomes import iniciais
+
+    assert iniciais(entrada) == saida

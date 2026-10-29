@@ -1,5 +1,7 @@
 -- Banco de dados do app Glória Fit (SQLite).
--- Versão 18 (28/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô) e o treino agendado (montado hoje para entrar numa data futura).
+-- Versão 19 (29/10/2026): exercícios, alunos (vindos do Data4U), treinos, treinos padrão, filas numeradas, computadores autorizados, senha de administrador, pedidos de treino sob medida (IA), o registro de quando os alunos e o histórico de treinos foram atualizados, o login do aluno (senha, códigos por WhatsApp, sessões), os comentários do aluno sobre o treino e o que o aluno faz durante o treino (esforço ao concluir, exercício feito, carga usada) e o que o robô aprende com os professores (avaliação do rascunho da IA e o que o professor mudou antes de salvar) e o histórico de por que um treino feito com a IA foi montado daquele jeito (o que o professor escreveu para o robô, quantas fichas diferentes ele pediu e a justificativa do robô) e o treino agendado (montado hoje para entrar numa data futura) e a foto do aluno (a da catraca, em miniatura).
+-- Mudança da versão 18 para a 19 (foto do aluno): nasceu a tabela `foto_aluno` (a miniatura da foto que a recepção tirou no Data4U, só para
+-- o professor reconhecer o aluno nas telas). Bancos da versão 18 são atualizados sozinhos na subida.
 -- Mudança da versão 17 para a 18 (treino agendado): `treino` ganhou `agendado_para` (o dia em que um treino montado antes da hora vira o ativo
 -- do aluno; o atual é concluído nesse dia). Vazio = treino comum. Bancos da versão 17 são atualizados sozinhos na subida.
 -- Mudança da versão 16 para a 17 (fichas diferentes dos dias): `treino_ia` ganhou `fichas_pedidas` (quantas fichas DIFERENTES o professor pediu ao
@@ -53,7 +55,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 18;
+PRAGMA user_version = 19;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -559,3 +561,19 @@ CREATE TABLE IF NOT EXISTS execucao (
 );
 -- A pergunta mais frequente: "qual foi a última carga deste aluno neste exercício?" (cada ficha aberta faz uma por exercício).
 CREATE INDEX IF NOT EXISTS ix_execucao_exercicio ON execucao(aluno_id, exercicio_nome, dia);
+
+-- ------------------------------------------------------------------ foto do aluno (versão 19)
+-- A foto que a recepção tirou no Data4U (cadastro da catraca), reduzida a uma miniatura, só para o professor reconhecer o aluno nas
+-- telas do computador autorizado. Vem do PC da recepção no envio diário (app/fotos.py). Nunca aparece no app do aluno nem em página aberta.
+--   miniatura: JPEG quadrado pequeno, refeito no servidor a partir da foto original (a original não é guardada).
+--   origem_sha256: o "resumo" da foto original; o PC da recepção compara e só manda de novo a foto que mudou.
+--   atualizada_em: quando a miniatura foi gravada (UTC). vista_em: a última vez que o envio diário confirmou que o aluno continua ativo
+--   e com foto (UTC). Passados 90 dias sem confirmação (o aluno saiu), a foto é apagada.
+-- Nada além da imagem: o dado de reconhecimento facial do Data4U (biometria) NUNCA vem para cá.
+CREATE TABLE IF NOT EXISTS foto_aluno (
+    aluno_id       INTEGER PRIMARY KEY REFERENCES aluno(id) ON DELETE CASCADE,
+    miniatura      BLOB    NOT NULL CHECK (length(miniatura) BETWEEN 100 AND 60000),
+    origem_sha256  TEXT    NOT NULL CHECK (length(origem_sha256) = 64 AND origem_sha256 NOT GLOB '*[^0-9a-f]*'),
+    atualizada_em  TEXT    NOT NULL,
+    vista_em       TEXT    NOT NULL
+);
