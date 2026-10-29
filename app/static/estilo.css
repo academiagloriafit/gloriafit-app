@@ -2098,3 +2098,5 @@ img.avatar-foto { cursor: zoom-in; }
 /* ---- Ficha: foto escolhida pelo aluno (o professor pode voltar para a da catraca) ---- */
 .foto-do-aluno-aviso { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 6px 0 0; font-size: 13px; color: var(--texto-suave); }
 .foto-do-aluno-aviso .botao-link { min-height: 32px; padding: 0 12px; font-size: 13px; }
+.foto-do-aluno-aviso .botao-link:not(.botao-link-forte) { background: transparent; color: inherit; border: 1px solid var(--contorno-suave, #4a4e53); }
+.foto-do-aluno-aviso .botao-link:not(.botao-link-forte):hover { color: #fff; border-color: #fff; }

@@ -96,7 +96,7 @@ async function prepararFoto(escolha) {
   }
   escolhida = await lerComoBase64(blob);
   modoEscolha(true);
-  aviso.textContent = "Assim vai ficar. Toque em “Usar esta foto” para salvar.";
+  texto.textContent = "Confira a foto nova. Ela só vale depois que você tocar em \u201cUsar esta foto\u201d.";
 }
 
 async function enviar(rota, corpo, textoDeEspera) {
