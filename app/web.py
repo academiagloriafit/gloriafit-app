@@ -829,8 +829,9 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
 
     @app.get("/alunos/<int(max=9223372036854775807):aluno_id>/foto")
     def foto_do_aluno(aluno_id: int):
-        """A miniatura da foto do aluno. Só computador autorizado (a guarda da área do professor cuida disso). 404 se não tem foto."""
-        dados = fotos.ler(conexao(), aluno_id)
+        """A miniatura da foto do aluno (com ?tamanho=grande, a foto maior que abre ao clicar). Só computador autorizado (a guarda da
+        área do professor cuida disso). 404 se não tem foto."""
+        dados = fotos.ler(conexao(), aluno_id, grande=request.args.get("tamanho") == "grande")
         if dados is None:
             abort(404)
         resposta = Response(dados, mimetype="image/jpeg")

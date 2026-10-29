@@ -6,7 +6,8 @@ O envio diário do PC da recepção (static/recepcao/enviar_alunos.py) lê esse 
   1. POST /api/fotos/estado    -> o servidor diz quais alunos estão em uso (situação A ou P) e o "resumo" (sha256) da foto que já tem.
   2. POST /api/fotos/importar  -> o PC manda, em pacotes, só as fotos novas ou trocadas, mais a lista de quem tem foto no cache hoje.
 
-O QUE O SERVIDOR GUARDA: só uma miniatura quadrada (LADO x LADO, JPEG), refeita aqui a partir da original (a original é descartada).
+O QUE O SERVIDOR GUARDA: uma miniatura quadrada (LADO x LADO, JPEG) para as listas e, desde a versão 20 do banco, a foto inteira reduzida
+(no máximo LADO_GRANDE no lado maior) para abrir quando o professor clica. As duas são refeitas aqui; a original é descartada.
 Nada de reconhecimento facial: o dado de biometria do Data4U nunca sai do PC.
 
 QUANTO TEMPO: a cada envio, quem continua ativo e com foto é "visto". Foto que passa DIAS_SEM_CONFIRMACAO dias sem ser vista (o aluno
@@ -24,6 +25,8 @@ from datetime import datetime, timedelta, timezone
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+LADO_GRANDE = 640  # pixels no lado maior da foto que abre ao clicar (ver quem é a pessoa)
+QUALIDADE_GRANDE = 84
 LADO = 160  # pixels: a maior miniatura na tela tem 56 px; 160 fica nítido em tela de alta densidade
 QUALIDADE = 82
 TAMANHO_MAXIMO_DA_ORIGINAL = 3 * 1024 * 1024  # as fotos do Data4U têm 30 a 50 KB
@@ -49,6 +52,15 @@ def _texto_utc(momento: datetime) -> str:
 
 def miniatura(original: bytes) -> bytes:
     """A miniatura quadrada (JPEG) de uma foto. Levanta PacoteInvalido se não for uma imagem JPEG/PNG que dê para abrir."""
+    return _refazer(original, grande=False)
+
+
+def foto_grande(original: bytes) -> bytes:
+    """A foto inteira, sem recorte, com no máximo LADO_GRANDE no lado maior (nunca aumenta uma foto pequena)."""
+    return _refazer(original, grande=True)
+
+
+def _refazer(original: bytes, grande: bool) -> bytes:
     if not original or len(original) > TAMANHO_MAXIMO_DA_ORIGINAL:
         raise PacoteInvalido("foto vazia ou grande demais")
     try:
@@ -57,22 +69,28 @@ def miniatura(original: bytes) -> bytes:
                 raise PacoteInvalido(f"formato {imagem.format!r} não aceito")
             if imagem.width * imagem.height > PIXELS_MAXIMOS:
                 raise PacoteInvalido("foto com pixels demais")
-            imagem.draft("RGB", (LADO * 2, LADO * 2))  # JPEG: já abre reduzida (mais rápido, menos memória)
+            alvo = LADO_GRANDE if grande else LADO * 2
+            imagem.draft("RGB", (alvo, alvo))  # JPEG: já abre reduzida (mais rápido, menos memória)
             imagem = ImageOps.exif_transpose(imagem).convert("RGB")
-            # recorte quadrado um pouco acima do centro: em foto de cadastro o rosto fica na parte de cima
-            quadrada = ImageOps.fit(imagem, (LADO, LADO), method=Image.Resampling.LANCZOS, centering=(0.5, 0.38))
             saida = io.BytesIO()
-            quadrada.save(saida, "JPEG", quality=QUALIDADE, optimize=True)
+            if grande:
+                imagem.thumbnail((LADO_GRANDE, LADO_GRANDE), Image.Resampling.LANCZOS)  # mantém a proporção; não aumenta
+                imagem.save(saida, "JPEG", quality=QUALIDADE_GRANDE, optimize=True)
+            else:
+                # recorte quadrado um pouco acima do centro: em foto de cadastro o rosto fica na parte de cima
+                quadrada = ImageOps.fit(imagem, (LADO, LADO), method=Image.Resampling.LANCZOS, centering=(0.5, 0.38))
+                quadrada.save(saida, "JPEG", quality=QUALIDADE, optimize=True)
             return saida.getvalue()
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as erro:
         raise PacoteInvalido(f"não deu para abrir a foto ({type(erro).__name__})") from None
 
 
 def estado(conn: sqlite3.Connection) -> dict:
-    """O que o PC da recepção precisa saber: os alunos em uso (pelo id do Data4U) e o resumo da foto que o servidor já tem."""
+    """O que o PC da recepção precisa saber: os alunos em uso (pelo id do Data4U) e o resumo da foto que o servidor já tem.
+    Foto sem a versão grande (gravada antes da versão 20) volta sem resumo: o PC entende que precisa mandar de novo."""
     linhas = conn.execute(
         f"""
-        SELECT a.data4u_id, f.origem_sha256
+        SELECT a.data4u_id, CASE WHEN f.grande IS NOT NULL THEN f.origem_sha256 END
         FROM aluno a LEFT JOIN foto_aluno f ON f.aluno_id = a.id
         WHERE a.data4u_id IS NOT NULL AND a.situacao IN ({",".join("?" * len(SITUACOES_COM_FOTO))})
         ORDER BY a.data4u_id
@@ -137,19 +155,19 @@ def importar(conn: sqlite3.Connection, pacote, agora: datetime | None = None) ->
             relatorio["sem_aluno"] += 1
             continue
         try:
-            miniaturas.append((aluno_id, miniatura(original), hashlib.sha256(original).hexdigest()))
+            miniaturas.append((aluno_id, miniatura(original), foto_grande(original), hashlib.sha256(original).hexdigest()))
         except PacoteInvalido:
             relatorio["recusadas"] += 1
 
     with conn:
-        for aluno_id, dados, resumo in miniaturas:
+        for aluno_id, dados, grande, resumo in miniaturas:
             conn.execute(
                 """
-                INSERT INTO foto_aluno (aluno_id, miniatura, origem_sha256, atualizada_em, vista_em) VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (aluno_id) DO UPDATE SET miniatura = excluded.miniatura, origem_sha256 = excluded.origem_sha256,
-                    atualizada_em = excluded.atualizada_em, vista_em = excluded.vista_em
+                INSERT INTO foto_aluno (aluno_id, miniatura, grande, origem_sha256, atualizada_em, vista_em) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (aluno_id) DO UPDATE SET miniatura = excluded.miniatura, grande = excluded.grande,
+                    origem_sha256 = excluded.origem_sha256, atualizada_em = excluded.atualizada_em, vista_em = excluded.vista_em
                 """,
-                (aluno_id, dados, resumo, momento, momento),
+                (aluno_id, dados, grande, resumo, momento, momento),
             )
             relatorio["gravadas"] += 1
         vistos = [por_data4u[i] for i in presentes if i in por_data4u]
@@ -162,9 +180,12 @@ def importar(conn: sqlite3.Connection, pacote, agora: datetime | None = None) ->
     return relatorio
 
 
-def ler(conn: sqlite3.Connection, aluno_id: int) -> bytes | None:
-    linha = conn.execute("SELECT miniatura FROM foto_aluno WHERE aluno_id = ?", (aluno_id,)).fetchone()
-    return bytes(linha[0]) if linha else None
+def ler(conn: sqlite3.Connection, aluno_id: int, grande: bool = False) -> bytes | None:
+    """A miniatura (ou, com grande=True, a foto grande; se ela ainda não chegou, a miniatura). None se o aluno não tem foto."""
+    linha = conn.execute("SELECT miniatura, grande FROM foto_aluno WHERE aluno_id = ?", (aluno_id,)).fetchone()
+    if linha is None:
+        return None
+    return bytes(linha[1] if grande and linha[1] is not None else linha[0])
 
 
 def alunos_com_foto(conn: sqlite3.Connection) -> frozenset[int]:

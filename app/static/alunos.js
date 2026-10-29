@@ -51,6 +51,8 @@ function celulaDoNome(aluno) {
     circulo.height = 40;
     circulo.loading = "lazy";
     circulo.decoding = "async";
+    circulo.dataset.nome = nomeDePessoa(aluno.nome); // a legenda da foto ampliada (foto_grande.js)
+    circulo.title = "Clique para ampliar";
   } else {
     circulo = celula("avatar-aluno", iniciais(aluno.nome));
     circulo.setAttribute("aria-hidden", "true");

@@ -2076,3 +2076,12 @@ body.com-descanso .pagina-aluno { padding-bottom: 130px; }
 .tema-grafite img.avatar-aluno { display: block; }
 .tema-grafite .avatar-grande { display: grid; flex: none; width: 52px; height: 52px; border-radius: 50%; place-items: center; background: var(--grafite-item); color: #ffffff; font-size: 17px; font-weight: 800; box-shadow: 0 0 0 2px var(--grafite-borda); }
 .tema-grafite img.avatar-grande { display: block; }
+
+/* ---- foto ampliada (29/10/2026): clicar na foto do aluno abre a foto grande no meio da tela ---- */
+img.avatar-foto { cursor: zoom-in; }
+.foto-ampliada { padding: 16px; border: 0; border-radius: 16px; background: var(--papel); color: var(--texto); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); max-width: min(92vw, 680px); }
+.foto-ampliada::backdrop { background: rgba(10, 11, 13, 0.72); }
+.foto-ampliada figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.foto-ampliada img { display: block; max-width: 100%; max-height: 74vh; border-radius: 10px; background: var(--cinza-leve); }
+.foto-ampliada figcaption { font-size: 16px; font-weight: 700; text-align: center; overflow-wrap: anywhere; }
+.foto-ampliada-fechar { display: flex; margin: 12px auto 0; }

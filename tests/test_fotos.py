@@ -199,3 +199,36 @@ def test_telas_mostram_a_foto_ou_as_iniciais(caminho):
 
     busca = navegador.get("/api/alunos").get_json()["alunos"]
     assert {a["id"]: a["foto"] for a in busca} == {1: True, 2: False}
+
+
+# ------------------------------------------------------------------ foto ampliada (versão 20)
+
+
+def test_foto_grande_mantem_a_proporcao_e_nao_passa_do_limite():
+    with Image.open(io.BytesIO(fotos.foto_grande(_jpeg(1200, 1600)))) as imagem:
+        assert imagem.format == "JPEG" and imagem.size == (480, fotos.LADO_GRANDE)
+    with Image.open(io.BytesIO(fotos.foto_grande(_jpeg(300, 400)))) as imagem:
+        assert imagem.size == (300, 400)  # foto pequena não é aumentada
+
+
+def test_importar_guarda_as_duas_e_foto_sem_a_grande_e_pedida_de_novo(conn):
+    original = _jpeg(600, 800)
+    fotos.importar(conn, {"fotos": [{"id": 501, "jpg": _b64(original)}]}, agora=AGORA)
+    assert len(fotos.ler(conn, 1, grande=True)) > len(fotos.ler(conn, 1))
+    assert fotos.estado(conn)["alunos"][0]["sha256"] == hashlib.sha256(original).hexdigest()
+
+    conn.execute("UPDATE foto_aluno SET grande = NULL")  # como ficam as fotos gravadas antes da versão 20
+    assert fotos.estado(conn)["alunos"][0]["sha256"] is None  # o PC manda de novo
+    assert fotos.ler(conn, 1, grande=True) == fotos.ler(conn, 1)  # enquanto isso, a grande cai na miniatura
+
+
+def test_rota_da_foto_grande_e_a_tela_tem_o_clique(caminho):
+    navegador = _autorizado(caminho)
+    pequena = navegador.get("/alunos/1/foto").data
+    grande = navegador.get("/alunos/1/foto?tamanho=grande")
+    assert grande.status_code == 200 and grande.mimetype == "image/jpeg" and len(grande.data) > len(pequena)
+
+    ficha = navegador.get("/alunos/1").get_data(as_text=True)
+    assert 'data-nome="Ana Souza"' in ficha and "foto_grande.js" in ficha
+    for tela in ("/alunos", "/pendencias", "/ausentes"):
+        assert "foto_grande.js" in navegador.get(tela).get_data(as_text=True), tela
