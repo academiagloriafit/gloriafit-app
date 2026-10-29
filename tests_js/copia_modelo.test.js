@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   ARQUIVOS_DOS_TREINOS,
   ARQUIVOS_NECESSARIOS,
+  COLUNAS_DO_ENDERECO,
   COLUNAS_DOS_TREINOS,
   COLUNAS_ENVIADAS,
+  colunasAEnviar,
   CopiaInvalida,
   HORAS_ATE_AVISAR,
   MENSAGEM_SEM_REDE,
@@ -102,7 +104,7 @@ describe("montarPacote: o que sai do computador", () => {
     expect(pacote.tabelas.PESSOA_STATUS.linhas[1]).toEqual([102, "2026-01-01", "7777-07-07", "D"]);
   });
 
-  it("de contatos só vai o celular (tipo 30): telefone fixo e e-mail ficam", () => {
+  it("de contatos só vão celular (30) e e-mail (100): telefone fixo e comercial ficam", () => {
     const { pacote, resumo } = montarPacote(copia());
 
     expect(TIPO_CONTATO_CELULAR).toBe(30);
@@ -153,6 +155,37 @@ describe("montarPacote: o que sai do computador", () => {
     const { pacote } = montarPacote(copia({ pessoas: [pessoa(101, "JOÃO DA CONCEIÇÃO")] }));
 
     expect(pacote.tabelas.PESSOA.linhas[0][1]).toBe("JOÃO DA CONCEIÇÃO");
+  });
+});
+
+describe("montarPacote: e-mail e endereço para o Meu perfil (29/10/2026)", () => {
+  const COM_ENDERECO = [...COLUNAS_REAIS.PESSOA, ...COLUNAS_DO_ENDERECO];
+  const comEndereco = (p) => ({ ...p, NR_CEP: 29122300, CD_UF: "ES", DS_LOCALIDADE: "VILA VELHA", DS_BAIRRO: "GLÓRIA", DS_LOGRADOURO: "RUA X, 1", DS_COMPLEMENTO: null });
+
+  it("com as seis colunas na cópia, o endereço vai junto (CEP como texto) e o e-mail tipo 100 também", () => {
+    const arquivos = copia({
+      pessoas: [comEndereco(pessoa(101, "ANA FICTICIA"))],
+      periodos: [],
+      contatos: [
+        { ID_CONTATO: 1, ID_PESSOA: 101, ID_TIPO_CONTATO: 100, DS_CONTATO: "ana@exemplo.test", ST_PRINCIPAL: "T" },
+        { ID_CONTATO: 2, ID_PESSOA: 101, ID_TIPO_CONTATO: 20, DS_CONTATO: "2733334444", ST_PRINCIPAL: "F" },
+      ],
+      manifesto: { extracao: "07/10/2026 05:00:17", tabelas: {
+        PESSOA: { linhas: 1, colunas: COM_ENDERECO },
+        PESSOA_STATUS: { linhas: 0, colunas: COLUNAS_REAIS.PESSOA_STATUS },
+        CONTATO_PESSOA: { linhas: 2, colunas: COLUNAS_REAIS.CONTATO_PESSOA },
+      } },
+    });
+    const { pacote } = montarPacote(arquivos);
+
+    expect(pacote.tabelas.PESSOA.colunas).toEqual([...COLUNAS_ENVIADAS.PESSOA, ...COLUNAS_DO_ENDERECO]);
+    expect(pacote.tabelas.PESSOA.linhas[0]).toEqual([101, "ANA FICTICIA", "F", "11144477735", "F", "29122300", "ES", "VILA VELHA", "GLÓRIA", "RUA X, 1", null]);
+    expect(pacote.tabelas.CONTATO_PESSOA.linhas).toEqual([[1, 101, 100, "ana@exemplo.test"]]);
+    expect(JSON.stringify(pacote)).not.toContain("1990-01-01");
+  });
+
+  it("sem alguma das seis colunas, o endereço não vai (o servidor aceita assim)", () => {
+    expect(colunasAEnviar({ tabelas: { PESSOA: { colunas: [...COLUNAS_REAIS.PESSOA, "NR_CEP"] } } }, "PESSOA")).toEqual(COLUNAS_ENVIADAS.PESSOA);
   });
 });
 

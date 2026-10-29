@@ -2100,3 +2100,35 @@ img.avatar-foto { cursor: zoom-in; }
 .foto-do-aluno-aviso .botao-link { min-height: 32px; padding: 0 12px; font-size: 13px; }
 .foto-do-aluno-aviso .botao-link:not(.botao-link-forte) { background: transparent; color: inherit; border: 1px solid var(--contorno-suave, #4a4e53); }
 .foto-do-aluno-aviso .botao-link:not(.botao-link-forte):hover { color: #fff; border-color: #fff; }
+
+/* ---- Menu lateral do aluno e "Meu perfil" (29/10/2026) ---- */
+.topo-aluno .topo-conteudo { flex-wrap: nowrap; padding: 0 16px; }
+.topo-aluno .marca { color: inherit; text-decoration: none; }
+.botao-menu-aluno { width: 48px; height: 48px; margin-right: -8px; border: 0; border-radius: 10px; background: transparent; color: inherit; display: grid; place-items: center; cursor: pointer; }
+.botao-menu-aluno:focus-visible, .gaveta-fechar:focus-visible { outline: 2px solid var(--laranja); outline-offset: 2px; }
+.icone-menu { width: 22px; height: 16px; background: linear-gradient(currentColor 0 0) top / 100% 2px no-repeat, linear-gradient(currentColor 0 0) center / 100% 2px no-repeat, linear-gradient(currentColor 0 0) bottom / 100% 2px no-repeat; }
+.gaveta-aluno { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(84vw, 320px); max-width: none; height: 100%; max-height: none; padding: 0; border: 0; border-left: 1px solid var(--linha); background: var(--papel); color: var(--texto); flex-direction: column; }
+.gaveta-aluno[open] { display: flex; animation: gaveta-entra 0.18s ease-out; }
+.gaveta-aluno::backdrop { background: rgba(0, 0, 0, 0.62); }
+@keyframes gaveta-entra { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .gaveta-aluno[open] { animation: none; } }
+.gaveta-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: max(16px, env(safe-area-inset-top, 0px)) 12px 12px 20px; border-bottom: 1px solid var(--linha); }
+.gaveta-nome { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gaveta-fechar { width: 44px; height: 44px; flex: none; border: 0; border-radius: 10px; background: transparent; color: var(--texto-suave); font-size: 30px; line-height: 1; cursor: pointer; }
+.gaveta-links { display: flex; flex-direction: column; padding: 10px 0; }
+.gaveta-link { display: flex; align-items: center; min-height: 56px; padding: 0 20px; border-left: 3px solid transparent; color: var(--texto); font-size: 17px; font-weight: 600; text-decoration: none; }
+.gaveta-link:hover { background: var(--realce); }
+.gaveta-link[aria-current="page"] { border-left-color: var(--laranja); background: var(--realce); color: var(--laranja-texto); }
+.gaveta-rodape { margin-top: auto; padding: 16px 20px max(20px, env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; border-top: 1px solid var(--linha); }
+
+.perfil-cabeca { align-items: center; text-align: center; }
+.perfil-nome { margin: 0; font-size: 26px; line-height: 1.15; text-wrap: balance; }
+.perfil-cabeca .minha-foto-botoes { width: 100%; }
+.perfil-lista { margin: 0; display: flex; flex-direction: column; }
+.perfil-lista > div { display: grid; gap: 2px; padding: 12px 0; border-top: 1px solid var(--linha); }
+.perfil-lista > div:first-child { border-top: 0; padding-top: 0; }
+.perfil-lista dt { font-size: 13px; color: var(--texto-suave); }
+.perfil-lista dd { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.perfil-aviso { border-color: var(--contorno-suave); }
+.perfil-aviso-titulo { margin: 0; font-size: 17px; font-weight: 700; }
+.botao-whatsapp { text-decoration: none; justify-content: center; }

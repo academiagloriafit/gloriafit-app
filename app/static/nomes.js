@@ -7,7 +7,7 @@ const SIGLAS = new Set(["ii", "iii", "iv"]);
 function palavra(texto, primeira) {
   const minuscula = texto.toLocaleLowerCase("pt-BR");
   if (!primeira && LIGACOES.has(minuscula)) return minuscula;
-  if (SIGLAS.has(minuscula)) return minuscula.toLocaleUpperCase("pt-BR");
+  if (SIGLAS.has(minuscula.replace(/[.,;:]+$/, ""))) return minuscula.toLocaleUpperCase("pt-BR");
   // hífen e apóstrofo: cada pedaço com maiúscula ("Ana-Maria", "D'Ávila")
   return minuscula.replace(/\p{L}+/gu, (pedaco) => pedaco.charAt(0).toLocaleUpperCase("pt-BR") + pedaco.slice(1));
 }

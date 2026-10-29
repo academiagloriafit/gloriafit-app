@@ -52,10 +52,18 @@ def dados_do_data4u() -> dict[str, list[dict]]:
     número, e-mail e telefone fixo, lançamentos que não são de treino, professores e exercícios que ninguém usou."""
     return {
         "PESSOA": [
-            {"ID": 101, "NM_PESSOA": "ANA FICTICIA", "TP_PESSOA": "F", "NR_CPF": 11144477735, "NR_RG": "9", "ST_DELETED": "F"},
-            {"ID": 102, "NM_PESSOA": "BRUNO FICTICIO", "TP_PESSOA": "F", "NR_CPF": 52998224725, "NR_RG": "8", "ST_DELETED": "F"},
-            {"ID": 900, "NM_PESSOA": "PROF ANA", "TP_PESSOA": "F", "NR_CPF": None, "NR_RG": None, "ST_DELETED": "F"},
-            {"ID": 901, "NM_PESSOA": "PROF QUE NAO MONTOU", "TP_PESSOA": "F", "NR_CPF": None, "NR_RG": None, "ST_DELETED": "F"},
+            {"ID": 101, "NM_PESSOA": "ANA FICTICIA", "TP_PESSOA": "F", "NR_CPF": 11144477735, "NR_RG": "9", "ST_DELETED": "F",
+             "NR_CEP": 29122300, "CD_UF": "ES", "DS_LOCALIDADE": "VILA VELHA", "DS_BAIRRO": "GLÓRIA", "DS_LOGRADOURO": "RUA DAS FLORES, 10",
+             "DS_COMPLEMENTO": None, "DT_NASCIMENTO": "1990-01-01"},
+            {"ID": 102, "NM_PESSOA": "BRUNO FICTICIO", "TP_PESSOA": "F", "NR_CPF": 52998224725, "NR_RG": "8", "ST_DELETED": "F",
+             "NR_CEP": None, "CD_UF": None, "DS_LOCALIDADE": None, "DS_BAIRRO": None, "DS_LOGRADOURO": None, "DS_COMPLEMENTO": None,
+             "DT_NASCIMENTO": None},
+            {"ID": 900, "NM_PESSOA": "PROF ANA", "TP_PESSOA": "F", "NR_CPF": None, "NR_RG": None, "ST_DELETED": "F",
+             "NR_CEP": None, "CD_UF": None, "DS_LOCALIDADE": None, "DS_BAIRRO": None, "DS_LOGRADOURO": None, "DS_COMPLEMENTO": None,
+             "DT_NASCIMENTO": None},
+            {"ID": 901, "NM_PESSOA": "PROF QUE NAO MONTOU", "TP_PESSOA": "F", "NR_CPF": None, "NR_RG": None, "ST_DELETED": "F",
+             "NR_CEP": None, "CD_UF": None, "DS_LOCALIDADE": None, "DS_BAIRRO": None, "DS_LOGRADOURO": None, "DS_COMPLEMENTO": None,
+             "DT_NASCIMENTO": None},
         ],
         "PESSOA_STATUS": [
             {"ID_PESSOA": 101, "DT_INI_STATUS": "2026-01-01", "DT_FIM_STATUS": "7777-07-07", "CD_STATUS": "A"},
@@ -236,9 +244,12 @@ def test_o_pacote_do_python_so_leva_o_que_o_app_usa(tmp_path):
     (alunos, resumo_alunos), (treinos, resumo_treinos) = _pacotes_do_python(caminho)
 
     assert alunos["extracao"] == treinos["extracao"] == AGORA_DA_COPIA
-    assert alunos["tabelas"]["PESSOA"]["colunas"] == ["ID", "NM_PESSOA", "TP_PESSOA", "NR_CPF", "ST_DELETED"]  # sem RG
-    assert alunos["tabelas"]["PESSOA"]["linhas"][0] == [101, "ANA FICTICIA", "F", "11144477735", "F"]  # CPF virou texto
-    assert alunos["tabelas"]["CONTATO_PESSOA"]["linhas"] == [[1, 101, 30, "27988887766"]]  # sem e-mail e sem telefone fixo
+    assert alunos["tabelas"]["PESSOA"]["colunas"] == [  # sem RG e sem nascimento; com o endereço ("Meu perfil", 29/10/2026)
+        "ID", "NM_PESSOA", "TP_PESSOA", "NR_CPF", "ST_DELETED", "NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGRADOURO", "DS_COMPLEMENTO"]
+    assert alunos["tabelas"]["PESSOA"]["linhas"][0] == [  # CPF e CEP viraram texto
+        101, "ANA FICTICIA", "F", "11144477735", "F", "29122300", "ES", "VILA VELHA", "GLÓRIA", "RUA DAS FLORES, 10", None]
+    assert alunos["tabelas"]["CONTATO_PESSOA"]["linhas"] == [  # celular e e-mail; sem telefone fixo
+        [1, 101, 30, "27988887766"], [2, 101, 100, "ana@exemplo.com.br"]]
     assert resumo_alunos["linhas"] == {"PESSOA": 4, "PESSOA_STATUS": 2, "CONTATO_PESSOA": 3}
     assert [l[0] for l in treinos["tabelas"]["PESSOA"]["linhas"]] == [900]  # só o professor que montou treino
     assert [l[0] for l in treinos["tabelas"]["LANCAMENTO_OBJ"]["linhas"]] == [5001, 5002]  # o 7777 não é de treino
@@ -252,8 +263,22 @@ def test_os_pacotes_do_python_passam_no_servidor(tmp_path):
 
     (alunos, _), (treinos, _) = _pacotes_do_python(caminho)
 
-    assert len(importar_alunos.copia_de_pacote(alunos).pessoas) == 4
+    copia = importar_alunos.copia_de_pacote(alunos)
+    assert len(copia.pessoas) == 4 and copia.com_perfil
     assert len(importar_treinos.copia_de_pacote(treinos).linhas["TREINO"]) == 3
+
+
+def test_copia_sem_as_colunas_do_endereco_vai_sem_elas_e_o_servidor_aceita(tmp_path):
+    dados = dados_do_data4u()
+    for pessoa in dados["PESSOA"]:
+        for coluna in ea.COLUNAS_DO_ENDERECO:
+            pessoa.pop(coluna)
+    caminho = escrever_base(tmp_path, extracao=texto_da_extracao(agora_em_brasilia()), tabelas=dados)
+
+    (alunos, _), _ = _pacotes_do_python(caminho)
+
+    assert alunos["tabelas"]["PESSOA"]["colunas"] == ["ID", "NM_PESSOA", "TP_PESSOA", "NR_CPF", "ST_DELETED"]
+    assert importar_alunos.copia_de_pacote(alunos).com_perfil is False
 
 
 # ------------------------------------------------------------------ ler o .zip e conferir contra o manifesto
@@ -809,7 +834,8 @@ def test_conferir_mostra_o_resumo_e_nao_envia_nem_grava_nada(tmp_path, capsys):
 
     saida = capsys.readouterr().out
     assert "Cópia do Data4U de 14/10/2026 05:00:17" in saida
-    assert "4 pessoas" in saida and "1 celulares" in saida and "3 treinos" in saida and "Nada foi enviado" in saida
+    assert "4 pessoas" in saida and "1 celulares, 1 e-mails" in saida and "endereço incluído" in saida
+    assert "3 treinos" in saida and "Nada foi enviado" in saida
     assert sorted(p.name for p in tmp_path.iterdir()) == [ea.NOME_DO_ZIP]  # nem log, nem estado
 
 

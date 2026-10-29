@@ -494,8 +494,24 @@ def _de_19_para_20(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE foto_aluno ADD COLUMN grande BLOB CHECK (grande IS NULL OR length(grande) BETWEEN 100 AND 400000)")
 
 
+_COLUNAS_DO_PERFIL = (
+    ("email", "TEXT CHECK (email IS NULL OR length(email) BETWEEN 3 AND 254)"),
+    ("cep", "TEXT CHECK (cep IS NULL OR (length(cep) = 8 AND cep NOT GLOB '*[^0-9]*'))"),
+    ("uf", "TEXT CHECK (uf IS NULL OR length(uf) = 2)"),
+    ("cidade", "TEXT CHECK (cidade IS NULL OR length(cidade) <= 120)"),
+    ("bairro", "TEXT CHECK (bairro IS NULL OR length(bairro) <= 120)"),
+    ("logradouro", "TEXT CHECK (logradouro IS NULL OR length(logradouro) <= 200)"),
+    ("complemento", "TEXT CHECK (complemento IS NULL OR length(complemento) <= 120)"),
+)
+
+
 def _de_20_para_21(conn: sqlite3.Connection) -> None:
-    """Foto escolhida pelo aluno: nascem `foto_propria` e `foto_propria_troca` (vazias). Só acrescenta."""
+    """Foto escolhida pelo aluno: nascem `foto_propria` e `foto_propria_troca` (vazias). "Meu perfil": o `aluno` ganha e-mail e
+    endereço (vazios; a próxima importação do Data4U preenche). Só acrescenta; confere antes."""
+    existentes = {linha[1] for linha in conn.execute("PRAGMA table_info(aluno)")}
+    for nome, tipo in _COLUNAS_DO_PERFIL:
+        if nome not in existentes:
+            conn.execute(f"ALTER TABLE aluno ADD COLUMN {nome} {tipo}")
     conn.executescript(
         """
 CREATE TABLE IF NOT EXISTS foto_propria (

@@ -11,7 +11,7 @@ from app.db import conectar, criar_tabelas
 from app.web import criar_app
 
 PASTA_DO_APP = Path(__file__).resolve().parent.parent / "app"
-TELAS_DO_ALUNO = ("aluno_entrar.html", "aluno_inicio.html")
+TELAS_DO_ALUNO = ("aluno_entrar.html", "aluno_inicio.html", "aluno_perfil.html")
 
 
 @pytest.fixture

@@ -696,3 +696,96 @@ def test_linha_de_comando_com_copia_ruim_nao_cria_banco_e_sai_com_erro(tmp_path,
     assert codigo == 1
     assert "nada foi gravado" in capsys.readouterr().err
     assert not banco.exists()
+
+
+# ------------------------------------------------------------------ e-mail e endereço ("Meu perfil", 29/10/2026)
+
+COLUNAS_COM_ENDERECO = {**COLUNAS, "PESSOA": COLUNAS["PESSOA"] + list(imp.COLUNAS_DO_ENDERECO)}
+ENDERECO = {"NR_CEP": 29122300, "CD_UF": "es", "DS_LOCALIDADE": "VILA  VELHA", "DS_BAIRRO": "GLÓRIA",
+            "DS_LOGRADOURO": "RUA DOM PEDRO II, 28", "DS_COMPLEMENTO": ""}
+SEM_ENDERECO = dict.fromkeys(imp.COLUNAS_DO_ENDERECO)
+
+
+def _copia_com_endereco(tmp_path, pessoas, periodos, contatos=()):
+    manifesto = {"extracao": "07/10/2026 05:00:17", "tabelas": {
+        "PESSOA": {"linhas": len(pessoas), "colunas": COLUNAS_COM_ENDERECO["PESSOA"]},
+        "PESSOA_STATUS": {"linhas": len(periodos), "colunas": COLUNAS["PESSOA_STATUS"]},
+        "CONTATO_PESSOA": {"linhas": len(contatos), "colunas": COLUNAS["CONTATO_PESSOA"]},
+    }}
+    return carregar_copia(escrever_copia(tmp_path, pessoas, periodos, contatos, manifesto=manifesto))
+
+
+def test_email_e_endereco_so_de_quem_esta_em_uso(conn, tmp_path):
+    copia = _copia_com_endereco(
+        tmp_path,
+        [pessoa(1, **ENDERECO), pessoa(2, **ENDERECO), pessoa(3, **{**SEM_ENDERECO, "NR_CEP": 1310100})],
+        [periodo(1, "A"), periodo(2, "D"), periodo(3, "T")],
+        [contato(1, 1, "27988887766"), contato(2, 1, "nao-e-email", tipo=100), contato(3, 1, " Ana@Exemplo.com ", tipo=100),
+         contato(4, 2, "bruno@exemplo.com", tipo=100), contato(5, 3, "2733334444", tipo=20)],
+    )
+    assert copia.com_perfil
+    relatorio = importar(conn, copia, agora=AGORA)
+
+    ana = por_matricula(conn, 1)
+    assert (ana["email"], ana["cep"], ana["uf"], ana["cidade"], ana["bairro"], ana["logradouro"], ana["complemento"]) == (
+        "Ana@Exemplo.com", "29122300", "ES", "VILA VELHA", "GLÓRIA", "RUA DOM PEDRO II, 28", None)
+    bruno = por_matricula(conn, 2)  # desistente: nada de e-mail nem endereço guardado
+    assert all(bruno[c] is None for c in imp.CAMPOS_DO_PERFIL)
+    carla = por_matricula(conn, 3)
+    assert carla["cep"] == "01310100" and carla["email"] is None  # o zero da frente que o número perdeu volta
+    assert (relatorio.em_uso, relatorio.em_uso_com_email, relatorio.em_uso_com_endereco) == (2, 1, 1)
+    assert "Ana@" not in relatorio.texto() and "2 com" not in relatorio.texto().split("E-mail")[0]
+
+
+def test_quem_sai_da_academia_perde_o_email_e_o_endereco_no_app(conn, tmp_path):
+    pessoas = [pessoa(1, **ENDERECO)]
+    importar(conn, _copia_com_endereco(tmp_path, pessoas, [periodo(1, "A")]), agora=AGORA)
+    assert por_matricula(conn, 1)["logradouro"] == "RUA DOM PEDRO II, 28"
+    relatorio = importar(conn, _copia_com_endereco(tmp_path, pessoas, [periodo(1, "C")]), agora=AGORA)
+    assert por_matricula(conn, 1)["logradouro"] is None and relatorio.atualizados == 1
+
+
+def test_mudanca_so_no_endereco_conta_como_atualizado(conn, tmp_path):
+    importar(conn, _copia_com_endereco(tmp_path, [pessoa(1, **ENDERECO)], [periodo(1, "A")]), agora=AGORA)
+    relatorio = importar(conn, _copia_com_endereco(tmp_path, [pessoa(1, **{**ENDERECO, "DS_BAIRRO": "CENTRO"})], [periodo(1, "A")]), agora=AGORA)
+    assert relatorio.atualizados == 1 and por_matricula(conn, 1)["bairro"] == "CENTRO"
+    relatorio = importar(conn, _copia_com_endereco(tmp_path, [pessoa(1, **{**ENDERECO, "DS_BAIRRO": "CENTRO"})], [periodo(1, "A")]), agora=AGORA)
+    assert relatorio.iguais == 1
+
+
+def test_copia_sem_endereco_nao_apaga_o_que_ja_estava(conn, tmp_path):
+    importar(conn, _copia_com_endereco(tmp_path, [pessoa(1, **ENDERECO)], [periodo(1, "A")], [contato(1, 1, "a@b.com", tipo=100)]), agora=AGORA)
+    relatorio = importar_de(conn, tmp_path, [pessoa(1)], [periodo(1, "A")])  # programa antigo do PC: sem as colunas
+    aluno = por_matricula(conn, 1)
+    assert aluno["email"] == "a@b.com" and aluno["logradouro"] == "RUA DOM PEDRO II, 28"
+    assert "não vieram nesta cópia" in relatorio.texto()
+
+
+@pytest.mark.parametrize("valor, esperado", [(29122300, "29122300"), ("29122-300", "29122300"), (1310100, "01310100"),
+                                             (291223000, None), ("", None), (None, None), (123, None)])
+def test_limpar_cep(valor, esperado):
+    assert imp.limpar_cep(valor) == esperado
+
+
+def test_pacote_do_navegador_com_e_sem_endereco(conn):
+    base = {"extracao": "07/10/2026 05:00:17", "tabelas": {
+        "PESSOA_STATUS": {"colunas": COLUNAS["PESSOA_STATUS"], "linhas": [[1, "2026-01-01", "2026-12-31", "A"]]},
+        "CONTATO_PESSOA": {"colunas": COLUNAS["CONTATO_PESSOA"], "linhas": [[1, 1, 100, "ana@exemplo.com"]]},
+    }}
+    colunas = list(imp.COLUNAS_NECESSARIAS["PESSOA"])
+    sem = {**base, "tabelas": {**base["tabelas"], "PESSOA": {"colunas": colunas, "linhas": [[1, "ANA", "F", None, "F"]]}}}
+    assert imp.copia_de_pacote(sem, agora=AGORA).com_perfil is False
+    com = {**base, "tabelas": {**base["tabelas"], "PESSOA": {"colunas": colunas + list(imp.COLUNAS_DO_ENDERECO),
+                                                              "linhas": [[1, "ANA", "F", None, "F", "29122300", "ES", "VILA VELHA", "GLÓRIA", "RUA X", None]]}}}
+    copia = imp.copia_de_pacote(com, agora=AGORA)
+    assert copia.com_perfil
+    importar(conn, copia, agora=AGORA)
+    assert por_matricula(conn, 1)["email"] == "ana@exemplo.com"
+    # metade do endereço, ou coluna a mais: recusado
+    pela_metade = {**base, "tabelas": {**base["tabelas"], "PESSOA": {"colunas": colunas + ["NR_CEP"], "linhas": [[1, "ANA", "F", None, "F", "1"]]}}}
+    with pytest.raises(CopiaInvalida):
+        imp.copia_de_pacote(pela_metade, agora=AGORA)
+    errado = {**base, "tabelas": {**base["tabelas"], "PESSOA": {"colunas": colunas + list(imp.COLUNAS_DO_ENDERECO),
+                                                                 "linhas": [[1, "ANA", "F", None, "F", "1", 5, None, None, None, None]]}}}
+    with pytest.raises(CopiaInvalida):
+        imp.copia_de_pacote(errado, agora=AGORA)

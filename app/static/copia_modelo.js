@@ -2,7 +2,8 @@
 //
 // Regras (LGPD, princípio da necessidade): do base_total.zip (258 tabelas, com RG, nascimento,
 // e-mail, pagamentos, digitais...) só saem daqui 3 tabelas dos alunos (e 6 do histórico de treinos),
-// e delas só as colunas que o app usa. E-mail e telefones que não são celular nem chegam a ser enviados.
+// e delas só as colunas que o app usa. Telefones que não são celular nem chegam a ser enviados (e-mail e endereço vão desde
+// 29/10/2026, para o "Meu perfil"; o servidor só guarda os de quem está em uso).
 // Do histórico de treinos só vão os lançamentos e os professores dos treinos, e os exercícios que
 // alguma prescrição usa. Quais treinos entram no app quem decide é o servidor (app/importar_treinos.py).
 // A conferência da cópia contra o _manifesto.json (data, número de linhas, colunas) acontece
@@ -31,8 +32,22 @@ const COLUNAS_DE_TEXTO = new Set([
   "NM_PESSOA", "TP_PESSOA", "NR_CPF", "ST_DELETED", "DT_INI_STATUS", "DT_FIM_STATUS", "CD_STATUS", "DS_CONTATO",
   "NM_TREINO", "NM_TREINO_FICHA", "NR_SERIE", "DS_REPETICAO", "DS_PESO", "TM_PAUSA", "DS_PRESCRICAO_OBS", "NM_EXERCICIO",
   "DT_LANCAMENTO",
+  "NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGRADOURO", "DS_COMPLEMENTO",
 ]);
 export const TIPO_CONTATO_CELULAR = 30; // tabela TIPO_CONTATO do Data4U: 30 = Celular
+export const TIPO_CONTATO_EMAIL = 100; // 100 = e-mail ("Meu perfil" do aluno, 29/10/2026)
+const TIPOS_DE_CONTATO_ENVIADOS = new Set([TIPO_CONTATO_CELULAR, TIPO_CONTATO_EMAIL]); // fixo e comercial não saem daqui
+// Endereço da pessoa ("Meu perfil"). Vai junto quando a cópia tem as seis colunas; o servidor só guarda o de quem está em uso.
+export const COLUNAS_DO_ENDERECO = ["NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGRADOURO", "DS_COMPLEMENTO"];
+
+export function colunasAEnviar(manifesto, tabela) {
+  const colunas = [...COLUNAS_ENVIADAS[tabela]];
+  const existentes = manifesto.tabelas[tabela] && manifesto.tabelas[tabela].colunas;
+  if (tabela === "PESSOA" && Array.isArray(existentes) && COLUNAS_DO_ENDERECO.every((c) => existentes.includes(c))) {
+    colunas.push(...COLUNAS_DO_ENDERECO);
+  }
+  return colunas;
+}
 export const ARQUIVOS_NECESSARIOS = ["_manifesto.json", ...Object.keys(COLUNAS_ENVIADAS).map((t) => t + ".jsonl")];
 // Além dos de cima (a PESSOA.jsonl já está lá). LANCAMENTO_OBJ é a maior (176 mil linhas): diz de QUEM é cada treino.
 export const ARQUIVOS_DOS_TREINOS = Object.keys(COLUNAS_DOS_TREINOS)
@@ -126,11 +141,12 @@ export function montarPacote(arquivos) {
   const pacote = { extracao: manifesto.extracao, tabelas: {} };
   const resumo = { extracao: manifesto.extracao, linhas: {} };
 
-  for (const [tabela, colunas] of Object.entries(COLUNAS_ENVIADAS)) {
+  for (const tabela of Object.keys(COLUNAS_ENVIADAS)) {
+    const colunas = colunasAEnviar(manifesto, tabela);
     const linhas = lerTabela(arquivos, manifesto, tabela, colunas);
     resumo.linhas[tabela] = linhas.length;
     const aproveitadas =
-      tabela === "CONTATO_PESSOA" ? linhas.filter((l) => l.ID_TIPO_CONTATO === TIPO_CONTATO_CELULAR) : linhas;
+      tabela === "CONTATO_PESSOA" ? linhas.filter((l) => TIPOS_DE_CONTATO_ENVIADOS.has(l.ID_TIPO_CONTATO)) : linhas;
     pacote.tabelas[tabela] = { colunas: [...colunas], linhas: reduzir(colunas, aproveitadas) };
   }
   return { pacote, resumo };

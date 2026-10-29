@@ -92,8 +92,13 @@ COLUNAS_DE_TEXTO = frozenset({
     "NM_PESSOA", "TP_PESSOA", "NR_CPF", "ST_DELETED", "DT_INI_STATUS", "DT_FIM_STATUS", "CD_STATUS", "DS_CONTATO",
     "NM_TREINO", "NM_TREINO_FICHA", "NR_SERIE", "DS_REPETICAO", "DS_PESO", "TM_PAUSA", "DS_PRESCRICAO_OBS", "NM_EXERCICIO",
     "DT_LANCAMENTO",
+    "NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGRADOURO", "DS_COMPLEMENTO",
 })
 TIPO_CONTATO_CELULAR = 30  # tabela TIPO_CONTATO do Data4U: 30 = Celular
+TIPO_CONTATO_EMAIL = 100  # 100 = e-mail ("Meu perfil" do aluno, 29/10/2026)
+TIPOS_DE_CONTATO_ENVIADOS = (TIPO_CONTATO_CELULAR, TIPO_CONTATO_EMAIL)  # telefone fixo e comercial não saem do PC
+# Endereço da pessoa ("Meu perfil"). Vai junto quando a cópia tem as seis colunas; o servidor só guarda o de quem está em uso.
+COLUNAS_DO_ENDERECO = ["NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGRADOURO", "DS_COMPLEMENTO"]
 
 # Fotos dos alunos (29/10/2026). O Data4U guarda as fotos da catraca no CACHE.D4U (tabela BLOB_CACHE, chave "foto/<id>_im_foto").
 PASTA_DO_DATA4U = Path(r"C:\Users\Public\Documents\Data4U\Fit\Data")
@@ -211,16 +216,27 @@ def _ler_tabela(arquivos: dict[str, bytes], manifesto: dict, tabela: str, coluna
     return linhas
 
 
+def colunas_a_enviar(manifesto: dict, tabela: str) -> list[str]:
+    """As colunas que vão desta tabela. PESSOA leva também o endereço quando a cópia tem as seis colunas dele."""
+    colunas = list(COLUNAS_ENVIADAS[tabela])
+    dados = manifesto["tabelas"].get(tabela)
+    existentes = dados.get("colunas") if isinstance(dados, dict) else None
+    if tabela == "PESSOA" and isinstance(existentes, list) and all(c in existentes for c in COLUNAS_DO_ENDERECO):
+        colunas += COLUNAS_DO_ENDERECO
+    return colunas
+
+
 def montar_pacote(arquivos: dict[str, bytes]) -> tuple[dict, dict]:
     """O pacote dos alunos (vai para /api/alunos/importar). `arquivos`: {"_manifesto.json": bytes, "PESSOA.jsonl": bytes, ...}."""
     manifesto = _ler_manifesto(arquivos["_manifesto.json"])
     pacote = {"extracao": manifesto["extracao"], "tabelas": {}}
     resumo = {"extracao": manifesto["extracao"], "linhas": {}}
     for tabela, colunas in COLUNAS_ENVIADAS.items():
+        colunas = colunas_a_enviar(manifesto, tabela)
         linhas = _ler_tabela(arquivos, manifesto, tabela, colunas)
         resumo["linhas"][tabela] = len(linhas)
-        if tabela == "CONTATO_PESSOA":  # só celular; e-mail e telefone fixo nem saem do PC
-            linhas = [l for l in linhas if l.get("ID_TIPO_CONTATO") == TIPO_CONTATO_CELULAR]
+        if tabela == "CONTATO_PESSOA":  # só celular e e-mail; telefone fixo e comercial nem saem do PC
+            linhas = [l for l in linhas if l.get("ID_TIPO_CONTATO") in TIPOS_DE_CONTATO_ENVIADOS]
         pacote["tabelas"][tabela] = {"colunas": list(colunas), "linhas": _reduzir(colunas, linhas)}
     return pacote, resumo
 
@@ -706,10 +722,13 @@ def conferir(pasta: Path, registro=print, ler_fotos=ler_fotos_do_cache) -> int:
     def tamanho(pacote: dict) -> float:
         return len(json.dumps(pacote, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) / (1024 * 1024)
 
+    tipos = [linha[2] for linha in pacote_a["tabelas"]["CONTATO_PESSOA"]["linhas"]]  # colunas: ID_CONTATO, ID_PESSOA, ID_TIPO_CONTATO, ...
+    celulares, emails = tipos.count(TIPO_CONTATO_CELULAR), tipos.count(TIPO_CONTATO_EMAIL)
     registro(f"Cópia do Data4U de {resumo_a['extracao']}.")
     registro(
         f"Alunos: {resumo_a['linhas']['PESSOA']} pessoas, {resumo_a['linhas']['PESSOA_STATUS']} períodos de situação, "
-        f"{resumo_a['linhas']['CONTATO_PESSOA']} contatos ({len(pacote_a['tabelas']['CONTATO_PESSOA']['linhas'])} celulares). "
+        f"{resumo_a['linhas']['CONTATO_PESSOA']} contatos ({celulares} celulares, {emails} e-mails), "
+        f"endereço {'incluído' if 'NR_CEP' in pacote_a['tabelas']['PESSOA']['colunas'] else 'não encontrado na cópia'}. "
         f"Pacote: {tamanho(pacote_a):.1f} MB."
     )
     registro(

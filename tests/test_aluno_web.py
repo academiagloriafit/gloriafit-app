@@ -306,7 +306,8 @@ def test_depois_de_criar_a_senha_a_tela_inicial_cumprimenta_o_aluno(cliente, rem
 
     assert resposta.status_code == 200
     html = resposta.get_data(as_text=True)
-    assert "Olá, Ana!" in html and "aluno_inicio.js" in html
+    assert re.search(r"(Bom dia|Boa tarde|Boa noite), Ana!", html) and "aluno_inicio.js" in html
+    assert "menu_aluno.js" in html and 'id="menu-aluno"' in html and 'href="/aluno/perfil"' in html
     assert "Cache-Control" in resposta.headers and "no-store" in resposta.headers["Cache-Control"]
 
 
@@ -536,7 +537,7 @@ def test_as_rotas_do_aluno_estao_na_lista_de_publicas_e_so_elas(app):
     rotas_do_aluno = {e for e in rotas_do_aluno if e.startswith(("pagina_aluno_", "api_aluno_"))}
 
     assert rotas_do_aluno == {e for e in ENDPOINTS_PUBLICOS if e.startswith(("pagina_aluno_", "api_aluno_"))}
-    assert len(rotas_do_aluno) == 17  # +3 da foto do aluno (29/10/2026)
+    assert len(rotas_do_aluno) == 18  # +3 da foto do aluno e +1 do "Meu perfil" (29/10/2026)
     assert "aluno_minha_foto" in ENDPOINTS_PUBLICOS  # /aluno/foto confere o login do aluno dentro da rota
 
 
@@ -569,3 +570,29 @@ def test_a_tela_do_aluno_tem_os_elementos_que_o_javascript_dos_comentarios_procu
 
     for id_ in ids:
         assert f'id="{id_}"' in html
+
+
+# ------------------------------------------------------------------ "Meu perfil" (29/10/2026)
+
+
+def test_meu_perfil_mostra_os_dados_do_aluno_logado_e_nada_se_edita(cliente, remetente, caminho):
+    assert cliente.get("/aluno/perfil").status_code == 302  # sem login: vai para a tela de entrar
+    _sql(caminho, "UPDATE aluno SET email = 'ana@exemplo.com', cep = '29122300', uf = 'ES', cidade = 'VILA VELHA', bairro = 'GLÓRIA',"
+                  " logradouro = 'RUA DOM PEDRO II, 28', complemento = 'APTO 101' WHERE id = 1")
+    _criar_acesso(cliente, remetente, caminho)
+
+    resposta = cliente.get("/aluno/perfil")
+    html = resposta.get_data(as_text=True)
+    assert resposta.status_code == 200 and "no-store" in resposta.headers["Cache-Control"]
+    for esperado in ("Ana Souza", CPF_FORMATADO, "(27) 98888-7766", "ana@exemplo.com", "Rua Dom Pedro II, 28 – Apto 101",
+                     "Glória – Vila Velha/ES", "CEP 29122-300", "feitas na recepção", "https://wa.me/5527992882112?text=",
+                     'aria-current="page">Meu perfil', "aluno_foto.js"):
+        assert esperado in html, esperado
+    assert NOME_SECRETO_DO_PROFESSOR not in html
+    assert "<input" in html and html.count("<input") == 1  # só o de escolher a foto: nenhum dado do cadastro é editável
+
+
+def test_meu_perfil_sem_email_e_endereco_diz_nao_informado(cliente, remetente, caminho):
+    _criar_acesso(cliente, remetente, caminho)
+    html = cliente.get("/aluno/perfil").get_data(as_text=True)
+    assert html.count("Não informado") == 2  # e-mail e endereço

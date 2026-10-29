@@ -362,6 +362,6 @@ def test_foto_escolhida_some_quando_o_aluno_deixa_a_academia(conn):
     assert fotos.situacao_da_foto(conn, 3)["propria"] is False
 
 
-def test_tela_do_aluno_tem_a_secao_da_foto(caminho):
-    pagina = _aluno_logado(caminho, 1).get("/aluno").get_data(as_text=True)
+def test_meu_perfil_tem_a_secao_da_foto(caminho):
+    pagina = _aluno_logado(caminho, 1).get("/aluno/perfil").get_data(as_text=True)
     assert 'id="minha-foto"' in pagina and "aluno_foto.js" in pagina and 'accept="image/*"' in pagina

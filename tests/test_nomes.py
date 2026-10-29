@@ -14,6 +14,7 @@ from app.nomes import nome_de_pessoa
         ("ÂNGELA  D'ÁVILA", "Ângela D'Ávila"),
         ("ANA-MARIA LIMA", "Ana-Maria Lima"),
         ("PEDRO ALVES II", "Pedro Alves II"),
+        ("RUA DOM PEDRO II, 28", "Rua Dom Pedro II, 28"),
         ("DE LIMA", "De Lima"),  # a primeira palavra sempre com maiúscula
         ("", ""),
         (None, ""),

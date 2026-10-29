@@ -16,7 +16,7 @@ def _palavra(palavra: str, primeira: bool) -> str:
     minuscula = palavra.lower()
     if not primeira and minuscula in _LIGACOES:
         return minuscula
-    if minuscula in _SIGLAS:
+    if minuscula.rstrip(".,;:") in _SIGLAS:  # "II," no meio de um endereço ("Rua Dom Pedro II, 28")
         return minuscula.upper()
     # hífen e apóstrofo: cada pedaço com maiúscula ("Ana-Maria", "D'Ávila")
     return re.sub(r"[^\W\d_]+", lambda m: m.group(0)[:1].upper() + m.group(0)[1:], minuscula)

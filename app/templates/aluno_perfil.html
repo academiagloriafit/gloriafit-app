@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR" class="tema-palco">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Meu perfil · Glória Fit</title>
+  <link rel="preload" href="{{ url_for('static', filename='fontes/archivo-latin-wdth-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+  {% include "_icones.html" %}
+  {% include "_app_aluno.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% set aba = "perfil" %}
+  {% include "_topo_aluno.html" %}
+
+  <main class="pagina pagina-aluno pagina-perfil">
+    {# A foto: a única coisa que o aluno muda sozinho (vale na hora, aqui e para o professor). #}
+    <section id="minha-foto" class="painel painel-aluno perfil-cabeca" aria-labelledby="titulo-perfil">
+      <div class="minha-foto-quadro">
+        <img id="minha-foto-atual" class="minha-foto-imagem" alt="Sua foto" width="160" height="160" hidden>
+        <span id="minha-foto-vazia" class="minha-foto-imagem minha-foto-vazia" aria-hidden="true">{{ perfil.nome | iniciais }}</span>
+        <canvas id="minha-foto-previa" class="minha-foto-imagem" width="320" height="320" aria-label="Prévia da foto escolhida" hidden></canvas>
+      </div>
+      <h1 id="titulo-perfil" class="perfil-nome">{{ perfil.nome }}</h1>
+      <p id="minha-foto-texto" class="texto-apoio minha-foto-texto"></p>
+      <input id="minha-foto-arquivo" class="so-leitor" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
+      <div class="minha-foto-botoes">
+        <button id="minha-foto-trocar" class="botao-link botao-largo" type="button">Trocar foto</button>
+        <button id="minha-foto-salvar" class="botao-link botao-link-forte botao-largo" type="button" hidden>Usar esta foto</button>
+        <button id="minha-foto-cancelar" class="botao-link botao-largo" type="button" hidden>Cancelar</button>
+        <button id="minha-foto-apagar" class="botao-link botao-largo minha-foto-apagar" type="button" hidden>Voltar para a foto da recepção</button>
+      </div>
+      <p id="minha-foto-aviso" class="aviso-campo" role="status"></p>
+    </section>
+
+    {# Os dados do cadastro: só para ver. Quem muda é a recepção (decisão do Thiago, 29/10/2026). #}
+    <section class="painel painel-aluno perfil-dados" aria-labelledby="titulo-dados">
+      <h2 id="titulo-dados" class="meu-comentarios-titulo">Seus dados</h2>
+      <dl class="perfil-lista">
+        <div><dt>Nome</dt><dd>{{ perfil.nome }}</dd></div>
+        <div><dt>CPF</dt><dd>{{ perfil.cpf }}</dd></div>
+        <div><dt>WhatsApp</dt><dd>{{ perfil.whatsapp }}</dd></div>
+        <div><dt>E-mail</dt><dd class="perfil-email">{{ perfil.email }}</dd></div>
+        <div><dt>Endereço</dt><dd>{% for linha in perfil.endereco %}{{ linha }}{% if not loop.last %}<br>{% endif %}{% endfor %}</dd></div>
+      </dl>
+    </section>
+
+    <section class="painel painel-aluno perfil-aviso" aria-labelledby="titulo-aviso">
+      <h2 id="titulo-aviso" class="perfil-aviso-titulo">Algum dado errado ou mudou?</h2>
+      <p class="texto-apoio">Para sua segurança, as alterações de cadastro são feitas na recepção. É só levar um documento com foto na próxima vez que vier treinar.</p>
+      <a class="botao-link botao-largo botao-whatsapp" href="https://wa.me/{{ whatsapp_da_academia }}?text={{ 'Olá! Sou aluno(a) da Glória Fit e quero atualizar meu cadastro.' | urlencode }}" target="_blank" rel="noopener">Falar com a academia no WhatsApp</a>
+    </section>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='menu_aluno.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='aluno_foto.js') }}"></script>
+</body>
+</html>

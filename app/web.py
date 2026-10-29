@@ -41,6 +41,7 @@ from app import (
     importar_treinos,
     modelos,
     nomes,
+    perfil_aluno,
     pendencias,
     provisorios,
     treinos,
@@ -76,6 +77,7 @@ ENDPOINTS_PUBLICOS = frozenset(
         "api_autorizar",
         "pagina_aluno_entrar",
         "pagina_aluno_inicio",
+        "pagina_aluno_perfil",
         "api_aluno_pedir_codigo",
         "api_aluno_definir_senha",
         "api_aluno_entrar",
@@ -486,7 +488,26 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
         aluno = aluno_atual()
         if aluno is None:
             return redirect(url_for("pagina_aluno_entrar"))
-        return render_template("aluno_inicio.html", primeiro_nome=primeiro_nome(aluno.nome))
+        return render_template(
+            "aluno_inicio.html", primeiro_nome=primeiro_nome(aluno.nome), saudacao=perfil_aluno.saudacao_da_hora(), nome_curto=nomes.nome_de_pessoa(aluno.nome)
+        )
+
+    @app.get("/aluno/perfil")
+    def pagina_aluno_perfil():
+        """"Meu perfil" (29/10/2026): a foto (que o aluno pode trocar) e os dados do cadastro, só para ver. Mudança de cadastro é na
+        recepção (decisão do Thiago): assim a base do Data4U continua sendo a oficial e passa pela conferência da academia."""
+        aluno = aluno_atual()
+        if aluno is None:
+            return redirect(url_for("pagina_aluno_entrar"))
+        cadastro = conexao().execute(
+            "SELECT nome, cpf, whatsapp, email, cep, uf, cidade, bairro, logradouro, complemento FROM aluno WHERE id = ?", (aluno.id,)
+        ).fetchone()
+        return render_template(
+            "aluno_perfil.html",
+            perfil=perfil_aluno.para_tela(cadastro),
+            whatsapp_da_academia=perfil_aluno.WHATSAPP_DA_ACADEMIA,
+            nome_curto=nomes.nome_de_pessoa(aluno.nome),
+        )
 
     @app.post("/api/aluno/codigo")
     def api_aluno_pedir_codigo():

@@ -54,6 +54,13 @@ COLUNAS_NECESSARIAS = {
     "CONTATO_PESSOA": ("ID_CONTATO", "ID_PESSOA", "ID_TIPO_CONTATO", "DS_CONTATO"),
 }
 TIPO_CONTATO_CELULAR = 30  # tabela TIPO_CONTATO do Data4U: 30 = Celular
+TIPO_CONTATO_EMAIL = 100  # 100 = e-mail
+# "Meu perfil" (29/10/2026): o endereço vem de PESSOA. É opcional no pacote: o PC da recepção com o programa antigo ainda manda
+# só as colunas de cima, e aí o importador não mexe em e-mail nem endereço (para não apagar o que já estava).
+COLUNAS_DO_ENDERECO = ("NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGRADOURO", "DS_COMPLEMENTO")
+# E-mail e endereço só ficam guardados de quem está em uso (ativo, pendente, trancado): de ex-aluno o app não precisa (LGPD).
+SITUACOES_COM_PERFIL = ("A", "P", "T")
+CAMPOS_DO_PERFIL = ("email", "cep", "uf", "cidade", "bairro", "logradouro", "complemento")
 # Teto de tamanho de cada tabela lida do .zip. As maiores têm ~8 MB; o teto só impede
 # que um arquivo estranho encha a memória.
 TAMANHO_MAXIMO_TABELA = 200 * 1024 * 1024
@@ -72,6 +79,7 @@ class Copia:
     pessoas: list[dict]
     periodos: dict[int, list[dict]]  # situação por pessoa (PESSOA_STATUS)
     contatos: dict[int, list[dict]]  # telefones e e-mails por pessoa (CONTATO_PESSOA)
+    com_perfil: bool = False  # a cópia trouxe endereço e e-mail (programa novo do PC); sem isso, não se mexe neles
 
     @property
     def dia(self) -> str:
@@ -151,10 +159,10 @@ def carregar_copia(origem: str | Path) -> Copia:
             )
         tabelas[nome] = linhas
 
-    return _montar_copia(extraido_em, tabelas)
+    return _montar_copia(extraido_em, tabelas, all(c in colunas["PESSOA"] for c in COLUNAS_DO_ENDERECO))
 
 
-def _montar_copia(extraido_em: datetime, tabelas: dict[str, list[dict]]) -> Copia:
+def _montar_copia(extraido_em: datetime, tabelas: dict[str, list[dict]], com_perfil: bool = False) -> Copia:
     periodos: dict[int, list[dict]] = defaultdict(list)
     for linha in tabelas["PESSOA_STATUS"]:
         if not isinstance(linha["DT_INI_STATUS"], str) or not isinstance(linha["DT_FIM_STATUS"], str):
@@ -166,7 +174,7 @@ def _montar_copia(extraido_em: datetime, tabelas: dict[str, list[dict]]) -> Copi
     contatos: dict[int, list[dict]] = defaultdict(list)
     for linha in tabelas["CONTATO_PESSOA"]:
         contatos[linha["ID_PESSOA"]].append(linha)
-    return Copia(extraido_em, tabelas["PESSOA"], dict(periodos), dict(contatos))
+    return Copia(extraido_em, tabelas["PESSOA"], dict(periodos), dict(contatos), com_perfil)
 
 
 # ------------------------------------------------------------------ pacote enviado pelo navegador
@@ -184,7 +192,10 @@ LIMITE_DE_LINHAS_POR_TABELA = 1_000_000
 
 _TIPOS_DAS_COLUNAS = {
     # (tipo obrigatório, aceita vazio?). int não aceita bool (True seria 1).
-    "PESSOA": {"ID": (int, False), "NM_PESSOA": (str, True), "TP_PESSOA": (str, True), "NR_CPF": (str, True), "ST_DELETED": (str, True)},
+    "PESSOA": {"ID": (int, False), "NM_PESSOA": (str, True), "TP_PESSOA": (str, True), "NR_CPF": (str, True), "ST_DELETED": (str, True),
+               # as do endereço só são conferidas quando vêm (o CEP é número no Data4U; o programa do PC manda como texto)
+               "NR_CEP": ((int, str), True), "CD_UF": (str, True), "DS_LOCALIDADE": (str, True), "DS_BAIRRO": (str, True),
+               "DS_LOGRADOURO": (str, True), "DS_COMPLEMENTO": (str, True)},
     "PESSOA_STATUS": {"ID_PESSOA": (int, False), "DT_INI_STATUS": (str, False), "DT_FIM_STATUS": (str, False), "CD_STATUS": (str, True)},
     "CONTATO_PESSOA": {"ID_CONTATO": (int, False), "ID_PESSOA": (int, False), "ID_TIPO_CONTATO": (int, True), "DS_CONTATO": (str, True)},
 }
@@ -233,8 +244,12 @@ def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
         linhas = bloco.get("linhas") if isinstance(bloco, dict) else None
         if not isinstance(colunas, list) or not isinstance(linhas, list):
             raise CopiaInvalida(f"{nome}: formato inesperado.")
-        # Exatamente as colunas usadas: coluna a mais seria dado pessoal que o app não precisa.
-        if len(colunas) != len(set(colunas)) or set(colunas) != set(COLUNAS_NECESSARIAS[nome]):
+        # Exatamente as colunas usadas: coluna a mais seria dado pessoal que o app não precisa. Em PESSOA, o endereço vem inteiro
+        # (programa novo do PC) ou não vem (programa antigo).
+        aceitas = [set(COLUNAS_NECESSARIAS[nome])]
+        if nome == "PESSOA":
+            aceitas.append(set(COLUNAS_NECESSARIAS[nome]) | set(COLUNAS_DO_ENDERECO))
+        if len(colunas) != len(set(colunas)) or set(colunas) not in aceitas:
             raise CopiaInvalida(f"{nome}: as colunas enviadas precisam ser exatamente {', '.join(COLUNAS_NECESSARIAS[nome])}.")
         if len(linhas) > LIMITE_DE_LINHAS_POR_TABELA:
             raise CopiaInvalida(f"{nome}: linhas demais.")
@@ -245,11 +260,12 @@ def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
                 raise CopiaInvalida(f"{nome}, linha {numero}: formato inesperado.")
             registro = dict(zip(colunas, linha))
             for coluna, (tipo, aceita_vazio) in tipos.items():
-                if not valor_serve(registro[coluna], tipo, aceita_vazio):
+                if coluna in registro and not valor_serve(registro[coluna], tipo, aceita_vazio):
                     raise CopiaInvalida(f"{nome}, linha {numero}: a coluna {coluna} está num formato inesperado.")
             convertidas.append(registro)
         tabelas[nome] = convertidas
-    return _montar_copia(extraido_em, tabelas)
+    com_perfil = all(c in pacote["tabelas"]["PESSOA"]["colunas"] for c in COLUNAS_DO_ENDERECO)
+    return _montar_copia(extraido_em, tabelas, com_perfil)
 
 
 # ------------------------------------------------------------------ regras (funções puras)
@@ -325,6 +341,50 @@ def _nome_limpo(valor) -> str:
     return " ".join(str(valor or "").split())
 
 
+_EMAIL = re.compile(r"[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}")
+
+
+def escolher_email(contatos: list[dict]) -> str | None:
+    """O primeiro e-mail (por ordem de cadastro) que tem cara de e-mail. Nada é corrigido: o que não serve fica de fora."""
+    for contato in sorted((c for c in contatos if c.get("ID_TIPO_CONTATO") == TIPO_CONTATO_EMAIL), key=lambda c: c["ID_CONTATO"]):
+        texto = "".join(str(contato.get("DS_CONTATO") or "").split())
+        if len(texto) <= 254 and _EMAIL.fullmatch(texto):
+            return texto
+    return None
+
+
+def _texto_curto(valor, limite: int) -> str | None:
+    texto = _nome_limpo(valor)
+    return texto[:limite] if texto else None
+
+
+def limpar_cep(valor) -> str | None:
+    """8 números, ou None. CEP com outro tamanho (no Data4U há alguns com 9) fica vazio: não se adivinha qual número sobra."""
+    if valor is None:
+        return None
+    digitos = re.sub(r"[^0-9]", "", str(valor))
+    if len(digitos) == 7:  # o Data4U guarda o CEP como número: "29122-300" fica 29122300, mas "01310-100" perde o zero
+        digitos = "0" + digitos
+    return digitos if len(digitos) == 8 else None
+
+
+def perfil_da_pessoa(pessoa: dict, contatos: list[dict]) -> dict:
+    """E-mail e endereço que vão para o "Meu perfil" do aluno."""
+    uf = _nome_limpo(pessoa.get("CD_UF")).upper()
+    return {
+        "email": escolher_email(contatos),
+        "cep": limpar_cep(pessoa.get("NR_CEP")),
+        "uf": uf if len(uf) == 2 and uf.isalpha() else None,
+        "cidade": _texto_curto(pessoa.get("DS_LOCALIDADE"), 120),
+        "bairro": _texto_curto(pessoa.get("DS_BAIRRO"), 120),
+        "logradouro": _texto_curto(pessoa.get("DS_LOGRADOURO"), 200),
+        "complemento": _texto_curto(pessoa.get("DS_COMPLEMENTO"), 120),
+    }
+
+
+PERFIL_VAZIO = dict.fromkeys(CAMPOS_DO_PERFIL)
+
+
 # ------------------------------------------------------------------ importação
 
 
@@ -351,6 +411,10 @@ class Relatorio:
     celular_que_nao_serve: int = 0  # tinha celular, mas sem DDD ou fora do formato
     whatsapp_varios: int = 0
     whatsapp_mantido_do_app: int = 0  # a recepção corrigiu no app: a cópia não sobrescreveu
+    com_perfil: bool = False  # a cópia trouxe e-mail e endereço
+    em_uso_com_email: int = 0
+    em_uso_com_endereco: int = 0
+    em_uso: int = 0
     # já estavam no app com matrícula, mas não vieram nesta cópia (ficam como estão)
     no_app_e_fora_da_copia: int = 0
     # alunos provisórios (cadastrados no app antes de chegarem pelo Data4U)
@@ -401,6 +465,12 @@ class Relatorio:
             f"    com celular que não serve de WhatsApp (sem DDD ou fora do formato): {self.celular_que_nao_serve}",
             f"    com mais de um celular válido (usei o primeiro cadastrado): {self.whatsapp_varios}",
             f"    WhatsApp mantido porque foi digitado ou corrigido no app: {self.whatsapp_mantido_do_app}",
+            (
+                f"  E-mail e endereço (só de quem está em uso, {self.em_uso}): {self.em_uso_com_email} com e-mail, "
+                f"{self.em_uso_com_endereco} com endereço"
+                if self.com_perfil
+                else "  E-mail e endereço: não vieram nesta cópia (programa antigo no PC da recepção); ficaram como estavam"
+            ),
             f"  Já estavam no app e não vieram nesta cópia (mantidos): {self.no_app_e_fora_da_copia}",
             f"  Alunos provisórios que continuam sem par no Data4U: {self.provisorios_sem_par} "
             f"(desses, {self.provisorios_com_cpf_duvidoso} têm o CPF de alguém do Data4U, mas sem certeza para juntar)",
@@ -410,10 +480,19 @@ class Relatorio:
 
 def _inserir(conn, aluno: dict, cadastrado_em: str) -> None:
     conn.execute(
-        "INSERT INTO aluno (nome, cpf, whatsapp, data4u_id, situacao, criado_em)"
-        " VALUES (:nome, :cpf, :whatsapp, :data4u_id, :situacao, :criado_em)",
-        {**aluno, "criado_em": cadastrado_em},
+        "INSERT INTO aluno (nome, cpf, whatsapp, data4u_id, situacao, criado_em, email, cep, uf, cidade, bairro, logradouro, complemento)"
+        " VALUES (:nome, :cpf, :whatsapp, :data4u_id, :situacao, :criado_em,"
+        " :email, :cep, :uf, :cidade, :bairro, :logradouro, :complemento)",
+        {**PERFIL_VAZIO, **aluno, "criado_em": cadastrado_em},
     )
+
+
+def _gravar_perfil(conn, aluno_id: int, aluno: dict) -> None:
+    if "email" in aluno:  # só quando a cópia trouxe e-mail e endereço
+        conn.execute(
+            "UPDATE aluno SET email = ?, cep = ?, uf = ?, cidade = ?, bairro = ?, logradouro = ?, complemento = ? WHERE id = ?",
+            (*(aluno[c] for c in CAMPOS_DO_PERFIL), aluno_id),
+        )
 
 
 def _juntar_ao_provisorio(conn, provisorio, aluno: dict, relatorio: "Relatorio") -> None:
@@ -431,13 +510,14 @@ def _juntar_ao_provisorio(conn, provisorio, aluno: dict, relatorio: "Relatorio")
         " WHERE id = ? AND provisorio = 1 AND data4u_id IS NULL",
         (aluno["nome"], whatsapp, aluno["data4u_id"], aluno["situacao"], provisorio["id"]),
     )
+    _gravar_perfil(conn, provisorio["id"], aluno)
 
 
 def importar(conn, copia: Copia, agora: datetime | None = None) -> Relatorio:
     """Grava os alunos da cópia no banco, tudo ou nada. Devolve o relatório."""
     agora = agora or datetime.now(timezone.utc)
     cadastrado_em = agora.strftime("%Y-%m-%d %H:%M:%S")  # UTC, como o banco guarda
-    relatorio = Relatorio(extraido_em=copia.extraido_em, pessoas_na_copia=len(copia.pessoas))
+    relatorio = Relatorio(extraido_em=copia.extraido_em, pessoas_na_copia=len(copia.pessoas), com_perfil=copia.com_perfil)
 
     alunos_da_copia: list[dict] = []
     for pessoa in sorted(copia.pessoas, key=lambda p: p["ID"]):
@@ -473,9 +553,15 @@ def importar(conn, copia: Copia, agora: datetime | None = None) -> Relatorio:
         relatorio.sem_celular += not zap.tinha_celular
         relatorio.celular_que_nao_serve += zap.tinha_celular and zap.numero is None
         relatorio.whatsapp_varios += zap.varios_validos
-        alunos_da_copia.append(
-            {"data4u_id": pessoa["ID"], "nome": nome, "cpf": cpf, "whatsapp": zap.numero, "situacao": letra}
-        )
+        aluno = {"data4u_id": pessoa["ID"], "nome": nome, "cpf": cpf, "whatsapp": zap.numero, "situacao": letra}
+        if copia.com_perfil:
+            em_uso = letra in SITUACOES_COM_PERFIL
+            perfil = perfil_da_pessoa(pessoa, copia.contatos.get(pessoa["ID"], [])) if em_uso else PERFIL_VAZIO
+            aluno.update(perfil)
+            relatorio.em_uso += em_uso
+            relatorio.em_uso_com_email += perfil["email"] is not None
+            relatorio.em_uso_com_endereco += perfil["logradouro"] is not None
+        alunos_da_copia.append(aluno)
 
     ids_da_copia = {a["data4u_id"] for a in alunos_da_copia}
 
@@ -483,7 +569,8 @@ def importar(conn, copia: Copia, agora: datetime | None = None) -> Relatorio:
         existentes = {
             linha["data4u_id"]: linha
             for linha in conn.execute(
-                "SELECT id, data4u_id, nome, cpf, whatsapp, whatsapp_corrigido_no_app, situacao"
+                "SELECT id, data4u_id, nome, cpf, whatsapp, whatsapp_corrigido_no_app, situacao,"
+                " email, cep, uf, cidade, bairro, logradouro, complemento"
                 " FROM aluno WHERE data4u_id IS NOT NULL"
             )
         }
@@ -523,13 +610,15 @@ def importar(conn, copia: Copia, agora: datetime | None = None) -> Relatorio:
                 whatsapp = atual["whatsapp"]  # o número do app prevalece (decisão de 07/10/2026)
                 relatorio.whatsapp_mantido_do_app += 1
             novos_valores = (aluno["nome"], aluno["cpf"], whatsapp, aluno["situacao"])
-            if novos_valores == (atual["nome"], atual["cpf"], atual["whatsapp"], atual["situacao"]):
+            perfil_igual = "email" not in aluno or all(aluno[c] == atual[c] for c in CAMPOS_DO_PERFIL)
+            if novos_valores == (atual["nome"], atual["cpf"], atual["whatsapp"], atual["situacao"]) and perfil_igual:
                 relatorio.iguais += 1
                 continue
             conn.execute(
                 "UPDATE aluno SET nome = ?, cpf = ?, whatsapp = ?, situacao = ? WHERE id = ?",
                 (*novos_valores, atual["id"]),
             )
+            _gravar_perfil(conn, atual["id"], aluno)
             relatorio.atualizados += 1
 
         relatorio.no_app_e_fora_da_copia = sum(1 for i in existentes if i not in ids_da_copia)

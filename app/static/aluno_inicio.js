@@ -1,4 +1,4 @@
-// Tela /aluno: o treino do aluno (fichas e exercícios) e o botão Sair.
+// Tela /aluno: o treino do aluno (fichas e exercícios). O menu lateral e o "Sair" estão em menu_aluno.js.
 // Texto sempre via textContent (o helper `el`): nada que vem do banco é interpretado como HTML.
 import { buscarJson, enviarJson } from "./api.js";
 import { atualizarMeusComentarios } from "./aluno_comentarios.js";
@@ -59,8 +59,6 @@ import {
   textoDosExercicios,
 } from "./aluno_modelo.js";
 
-const botaoSair = document.getElementById("botao-sair");
-const avisoSair = document.getElementById("aviso-sair");
 const avisoTreino = document.getElementById("aviso-treino");
 const botaoDeNovo = document.getElementById("botao-de-novo");
 const areaDoTreino = document.getElementById("treino");
@@ -1014,23 +1012,6 @@ async function atualizarTreinoAoVoltar() {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && Date.now() - ultimaBuscaDoTreino > MINIMO_ENTRE_BUSCAS) atualizarTreinoAoVoltar();
-});
-
-botaoSair.addEventListener("click", async () => {
-  if (botaoSair.disabled) return;
-  botaoSair.disabled = true;
-  try {
-    const { status } = await enviarJson("/api/aluno/sair", {});
-    if (status === 200) {
-      window.location.assign("/aluno/entrar");
-      return; // o botão continua travado: a página está sendo trocada
-    }
-    avisoSair.textContent = `Não consegui sair (código ${status}). Tente de novo.`;
-  } catch {
-    avisoSair.textContent = MENSAGEM_SEM_REDE;
-  }
-  avisoSair.classList.add("aviso-erro");
-  botaoSair.disabled = false;
 });
 
 // Ao recarregar a página o histórico pode guardar o "estado" de uma ficha aberta antes; a página sempre começa na lista.

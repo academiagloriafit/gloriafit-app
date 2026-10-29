@@ -128,7 +128,16 @@ CREATE TABLE IF NOT EXISTS aluno (
     situacao                   TEXT
         CHECK (situacao IS NULL OR situacao IN ('A', 'T', 'P', 'D', 'I', 'C')),
     provisorio                 INTEGER NOT NULL DEFAULT 0 CHECK (provisorio IN (0, 1)),
-    criado_em                  TEXT    NOT NULL DEFAULT (datetime('now'))
+    criado_em                  TEXT    NOT NULL DEFAULT (datetime('now')),
+    -- Contato e endereço para o "Meu perfil" do aluno (29/10/2026). Vêm do Data4U (PESSOA e CONTATO_PESSOA tipo 100) e só
+    -- ficam preenchidos para quem está em uso (situação A, P ou T); de quem saiu, ficam vazios. Quem muda é a recepção, no Data4U.
+    email                      TEXT    CHECK (email IS NULL OR length(email) BETWEEN 3 AND 254),
+    cep                        TEXT    CHECK (cep IS NULL OR (length(cep) = 8 AND cep NOT GLOB '*[^0-9]*')),
+    uf                         TEXT    CHECK (uf IS NULL OR length(uf) = 2),
+    cidade                     TEXT    CHECK (cidade IS NULL OR length(cidade) <= 120),
+    bairro                     TEXT    CHECK (bairro IS NULL OR length(bairro) <= 120),
+    logradouro                 TEXT    CHECK (logradouro IS NULL OR length(logradouro) <= 200),
+    complemento                TEXT    CHECK (complemento IS NULL OR length(complemento) <= 120)
 );
 CREATE INDEX IF NOT EXISTS ix_aluno_cpf ON aluno(cpf);
 

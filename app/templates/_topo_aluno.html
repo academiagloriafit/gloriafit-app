@@ -1,0 +1,24 @@
+{# Cabeçalho das telas do aluno (29/10/2026): a marca e o botão do menu lateral. O menu leva para "Meu treino" e "Meu perfil"
+   (depois, "Mensalidades"). `aba` marca onde a pessoa está. Precisa do script menu_aluno.js. #}
+<header class="topo topo-aluno">
+  <div class="topo-conteudo">
+    <a class="marca" href="{{ url_for('pagina_aluno_inicio') }}"><img src="{{ url_for('static', filename='marca/logo-gloria-fit.png') }}" alt="" width="36" height="36"><span>Glória Fit</span></a>
+    <button id="abrir-menu-aluno" class="botao-menu-aluno" type="button" aria-haspopup="dialog" aria-controls="menu-aluno">
+      <span class="icone-menu" aria-hidden="true"></span><span class="so-leitor">Abrir o menu</span>
+    </button>
+  </div>
+</header>
+<dialog id="menu-aluno" class="gaveta-aluno" aria-label="Menu">
+  <div class="gaveta-topo">
+    <span class="gaveta-nome">{{ nome_curto }}</span>
+    <button id="fechar-menu-aluno" class="gaveta-fechar" type="button"><span aria-hidden="true">&times;</span><span class="so-leitor">Fechar o menu</span></button>
+  </div>
+  <nav class="gaveta-links" aria-label="Área do aluno">
+    <a class="gaveta-link gaveta-treino" href="{{ url_for('pagina_aluno_inicio') }}"{% if aba == "treino" %} aria-current="page"{% endif %}>Meu treino</a>
+    <a class="gaveta-link gaveta-perfil" href="{{ url_for('pagina_aluno_perfil') }}"{% if aba == "perfil" %} aria-current="page"{% endif %}>Meu perfil</a>
+  </nav>
+  <div class="gaveta-rodape">
+    <button id="botao-sair" class="botao-link botao-largo" type="button">Sair</button>
+    <p id="aviso-sair" class="aviso-campo" role="status"></p>
+  </div>
+</dialog>
