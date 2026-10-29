@@ -4,7 +4,8 @@
 <header class="topo">
   <div class="topo-conteudo">
     <div class="topo-esquerda">
-      <div class="marca"><img src="{{ url_for('static', filename='marca/logo-gloria-fit.png') }}" alt="" width="36" height="36"><span>Glória Fit</span></div>
+      {# símbolo oficial com os halteres (PDF da marca), halteres em cinza-claro para o fundo grafite (opção A, Thiago 29/10/2026) #}
+      <div class="marca marca-halteres"><img src="{{ url_for('static', filename='marca/simbolo-halteres-fundo-escuro.png') }}" alt="" width="68" height="34"><span>Glória Fit</span></div>
       <nav class="topo-menu" aria-label="Principal">
         <a class="menu-alunos{% if menu_ativo == 'alunos' %} ativo{% endif %}" href="{{ url_for('pagina_alunos') }}"{% if menu_ativo == "alunos" %} aria-current="page"{% endif %}>Alunos</a>
         <a class="menu-pendencias{% if menu_ativo == 'pendencias' %} ativo{% endif %}" href="{{ url_for('pagina_pendencias') }}"{% if menu_ativo == "pendencias" %} aria-current="page"{% endif %}>Pendências{% set pend = pendencias_total() %}{% if pend %}<span class="contador-menu contador-pendencias">{{ pend }}<span class="so-leitor"> para resolver</span></span>{% endif %}</a>

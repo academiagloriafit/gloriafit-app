@@ -38,8 +38,8 @@
 
   <main>
     <article class="cupom" aria-label="Pré-visualização do cupom">
-      <img class="cupom-logo" src="{{ url_for('static', filename='marca/logo-cupom-invertido.png') }}" alt="" width="192" height="192">
-      <div class="cupom-titulo">{{ cupom.academia }}</div>
+      {# logo oficial completo (halteres + "ACADEMIA GLÓRIA Fit") em preto e branco; ele já traz o nome, então o título em texto saiu (opção 1, Thiago 29/10/2026) #}
+      <img class="cupom-logo cupom-logo-completo" src="{{ url_for('static', filename='marca/logo-completo-cupom.png') }}" alt="{{ cupom.academia }}" width="384" height="274">
       <hr class="cupom-separador">
       {% for rotulo, valor in cupom.cabecalho %}
       <div class="cupom-linha{% if rotulo in ('ALUNO', 'TREINO') %} cupom-forte{% endif %}">{{ rotulo }}: {{ valor }}</div>

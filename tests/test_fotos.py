@@ -407,3 +407,9 @@ def test_foto_escolhida_segue_a_regra_da_catraca_e_fica_no_trancamento(conn):
     fotos.importar(conn, {"fotos": []}, agora=AGORA + timedelta(days=fotos.DIAS_DE_ACESSO + 1))
     assert not fotos.situacao_da_foto(conn, 1)["propria"]  # inativo e sem vir há mais de 2 meses
     assert fotos.situacao_da_foto(conn, 2)["propria"]  # trancado: a foto que ele escolheu espera a volta
+
+
+def test_menu_do_professor_tem_o_simbolo_com_halteres(caminho):
+    html = _autorizado(caminho).get("/alunos").get_data(as_text=True)
+    assert 'class="marca marca-halteres"><img src="/static/marca/simbolo-halteres-fundo-escuro.png"' in html
+    assert _autorizado(caminho).get("/static/marca/simbolo-halteres-fundo-escuro.png").status_code == 200

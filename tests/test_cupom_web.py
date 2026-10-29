@@ -183,27 +183,22 @@ def test_intervalo_e_observacao_aparecem_na_tela_de_impressao_e_texto_perigoso_n
     assert "<b>devagar</b>" not in html
 
 
-def test_cupom_tem_o_simbolo_da_academia_no_topo_em_preto_e_branco(cliente):
-    """Pedido do Thiago (20/10/2026): o símbolo no topo, e depois invertido (opção B: disco preto com o F branco, fora do círculo papel).
-    A térmica só imprime preto: o arquivo é de 1 bit, 192 pontos."""
+def test_cupom_tem_o_logo_completo_no_topo_em_preto_e_branco(cliente):
+    """Pedido do Thiago (29/10/2026, opção 1): o logo oficial completo (halteres + "ACADEMIA GLÓRIA Fit") no topo, sem o título em
+    texto (o logo já traz o nome). A térmica só imprime preto: o arquivo é de 1 bit, 384 pontos de largura (48 mm)."""
     import struct
 
     html = cliente.get("/treinos/1/imprimir").get_data(as_text=True)
-    assert html.index("cupom-logo") < html.index("cupom-titulo")  # o símbolo vem antes do nome da academia
-    assert "marca/logo-cupom-invertido.png" in html
+    assert "marca/logo-completo-cupom.png" in html and "cupom-titulo" not in html
+    assert html.index("cupom-logo") < html.index("ALUNO:")
     # lê cabeçalho do PNG à mão (a CI não tem Pillow): largura, altura, bits por ponto, tipo de cor
-    cabecalho = (PASTA_ESTATICA / "marca" / "logo-cupom-invertido.png").read_bytes()[16:26]
+    cabecalho = (PASTA_ESTATICA / "marca" / "logo-completo-cupom.png").read_bytes()[16:26]
     largura, altura, bits, _tipo_de_cor = struct.unpack(">IIBB", cabecalho)
-    assert (largura, altura) == (192, 192)
+    assert (largura, altura) == (384, 274)
     assert bits == 1  # 1 bit por ponto: só preto e branco, sem cinza que a térmica borraria
-    assert cliente.get("/static/marca/logo-cupom-invertido.png").status_code == 200
-
-
-def test_o_simbolo_do_cupom_e_o_mesmo_que_o_thiago_aprovou_na_folha_de_teste():
-    """Opção B (invertido, redondo) da folha de teste = o símbolo que vai no cupom, ponto por ponto."""
-    cupom = (PASTA_ESTATICA / "marca" / "logo-cupom-invertido.png").read_bytes()
-    folha = (PASTA_ESTATICA / "teste_impressao" / "logo-invertido-redondo.png").read_bytes()
-    assert cupom == folha
+    assert cliente.get("/static/marca/logo-completo-cupom.png").status_code == 200
+    css = (PASTA_ESTATICA / "imprimir.css").read_text(encoding="utf-8")
+    assert re.search(r"\.cupom-logo-completo\s*\{[^}]*width: 48mm", css)  # 384 pontos / 8 por mm: sem borrar
 
 
 def test_css_do_cupom_pede_letra_forte_e_grande_para_a_termica():

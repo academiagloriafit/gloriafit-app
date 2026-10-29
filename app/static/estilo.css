@@ -2137,3 +2137,7 @@ img.avatar-foto { cursor: zoom-in; }
 .gaveta-foto { width: 48px; height: 48px; flex: none; border-radius: 50%; object-fit: cover; border: 2px solid var(--contorno-suave); background: var(--campo); }
 .gaveta-iniciais { display: grid; place-items: center; font-size: 17px; font-weight: 800; color: var(--texto-suave); }
 .gaveta-foto[hidden] { display: none; }
+
+/* símbolo com halteres no menu do professor (29/10/2026): mais largo que alto, sem o recorte redondo */
+.tema-grafite .marca-halteres img { width: 64px; height: 32px; border-radius: 0; }
+@media (min-width: 641px) { .tema-grafite .marca-halteres img { width: 68px; height: 34px; } }

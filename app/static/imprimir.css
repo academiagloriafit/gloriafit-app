@@ -104,7 +104,7 @@
   box-shadow: 0 2px 0 #c9c8c2, 0 12px 24px rgba(20, 20, 20, 0.12);
 }
 
-/* Símbolo da academia, só preto e branco (192 pontos = 24 mm a 8 pontos por mm: sem borrar na impressora). */
+/* Logo da academia, só preto e branco. O completo (29/10/2026) tem 384 x 274 pontos = 48 x 34,25 mm a 8 pontos por mm: sem borrar. */
 .cupom-logo {
   display: block;
   width: 24mm;
@@ -184,3 +184,5 @@
     break-inside: auto;
   }
 }
+
+.cupom-logo-completo { width: 48mm; height: 34.25mm; }
