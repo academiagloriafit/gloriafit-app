@@ -1130,3 +1130,29 @@ def test_conferir_mostra_quantas_fotos_ha_no_cache(tmp_path):
     assert ea.conferir(tmp_path, mensagens.append, ler_fotos=lambda _p: {1: b"x" * 1024, 2: b"y" * 1024}) == 0
 
     assert any(m.startswith("Fotos: 2 pessoas com foto no CACHE.D4U") for m in mensagens)
+
+
+def test_acessos_pela_catraca_so_os_recentes_e_so_a_data(tmp_path):
+    agora = agora_em_brasilia()
+    dados = dados_do_data4u()
+    dados["ACC_PESSOA"] = [
+        {"ID_PESSOA": 101, "DT_LAST_ACCESS": f"{agora - timedelta(days=3):%Y-%m-%d %H:%M:%S}", "ID_ACC_LOCAL": -1, "NR_ACCESS_DAY": 1},
+        {"ID_PESSOA": 102, "DT_LAST_ACCESS": f"{agora - timedelta(days=90):%Y-%m-%d %H:%M:%S}", "ID_ACC_LOCAL": -1, "NR_ACCESS_DAY": 0},
+        {"ID_PESSOA": 900, "DT_LAST_ACCESS": None, "ID_ACC_LOCAL": -1, "NR_ACCESS_DAY": 0},
+    ]
+    caminho = escrever_base(tmp_path, extracao=texto_da_extracao(agora), tabelas=dados)
+
+    alunos, resumo = ea.montar_pacote(ea.ler_arquivos_do_zip(caminho, ea.TABELAS_DOS_ALUNOS, ea.TABELAS_OPCIONAIS_DOS_ALUNOS))
+
+    assert alunos["tabelas"]["ACC_PESSOA"] == {"colunas": ["ID_PESSOA", "DT_LAST_ACCESS"],
+                                               "linhas": [[101, f"{agora - timedelta(days=3):%Y-%m-%d %H:%M:%S}"]]}
+    assert resumo["linhas"]["ACC_PESSOA"] == 1
+    copia = importar_alunos.copia_de_pacote(alunos)
+    assert copia.acessos == {101: f"{agora - timedelta(days=3):%Y-%m-%d}"}
+    assert ea.DIAS_DE_ACESSO == importar_alunos.DIAS_DE_ACESSO_RECENTE
+
+
+def test_copia_sem_a_tabela_de_acessos_vai_sem_ela(tmp_path):
+    caminho = escrever_base(tmp_path, extracao=texto_da_extracao(agora_em_brasilia()))
+    alunos, _ = ea.montar_pacote(ea.ler_arquivos_do_zip(caminho, ea.TABELAS_DOS_ALUNOS, ea.TABELAS_OPCIONAIS_DOS_ALUNOS))
+    assert "ACC_PESSOA" not in alunos["tabelas"] and importar_alunos.copia_de_pacote(alunos).acessos is None

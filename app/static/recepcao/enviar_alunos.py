@@ -43,7 +43,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
@@ -92,8 +92,13 @@ COLUNAS_DE_TEXTO = frozenset({
     "NM_PESSOA", "TP_PESSOA", "NR_CPF", "ST_DELETED", "DT_INI_STATUS", "DT_FIM_STATUS", "CD_STATUS", "DS_CONTATO",
     "NM_TREINO", "NM_TREINO_FICHA", "NR_SERIE", "DS_REPETICAO", "DS_PESO", "TM_PAUSA", "DS_PRESCRICAO_OBS", "NM_EXERCICIO",
     "DT_LANCAMENTO",
-    "NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGRADOURO", "DS_COMPLEMENTO",
+    "NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGRADOURO", "DS_COMPLEMENTO", "DT_LAST_ACCESS",
 })
+# Último acesso pela catraca (29/10/2026): decide quem tem foto mesmo inativo. Só vai quem passou nos últimos DIAS_DE_ACESSO dias
+# (antes da data da cópia) e só a data; as outras colunas da ACC_PESSOA (contagens, local) ficam no PC.
+TABELA_DE_ACESSOS = "ACC_PESSOA"
+COLUNAS_DE_ACESSOS = ["ID_PESSOA", "DT_LAST_ACCESS"]
+DIAS_DE_ACESSO = 60
 TIPO_CONTATO_CELULAR = 30  # tabela TIPO_CONTATO do Data4U: 30 = Celular
 TIPO_CONTATO_EMAIL = 100  # 100 = e-mail ("Meu perfil" do aluno, 29/10/2026)
 TIPOS_DE_CONTATO_ENVIADOS = (TIPO_CONTATO_CELULAR, TIPO_CONTATO_EMAIL)  # telefone fixo e comercial não saem do PC
@@ -238,6 +243,16 @@ def montar_pacote(arquivos: dict[str, bytes]) -> tuple[dict, dict]:
         if tabela == "CONTATO_PESSOA":  # só celular e e-mail; telefone fixo e comercial nem saem do PC
             linhas = [l for l in linhas if l.get("ID_TIPO_CONTATO") in TIPOS_DE_CONTATO_ENVIADOS]
         pacote["tabelas"][tabela] = {"colunas": list(colunas), "linhas": _reduzir(colunas, linhas)}
+    dados = manifesto["tabelas"].get(TABELA_DE_ACESSOS)
+    if TABELA_DE_ACESSOS + ".jsonl" in arquivos and isinstance(dados, dict) and all(c in (dados.get("colunas") or []) for c in COLUNAS_DE_ACESSOS):
+        linhas = _ler_tabela(arquivos, manifesto, TABELA_DE_ACESSOS, COLUNAS_DE_ACESSOS)
+        try:
+            desde = (datetime.strptime(manifesto["extracao"][:10], "%d/%m/%Y") - timedelta(days=DIAS_DE_ACESSO)).strftime("%Y-%m-%d")
+        except ValueError:
+            raise CopiaInvalida("O _manifesto.json não informa direito a data da cópia.") from None
+        recentes = [l for l in linhas if isinstance(l.get("DT_LAST_ACCESS"), str) and l["DT_LAST_ACCESS"][:10] >= desde]
+        resumo["linhas"][TABELA_DE_ACESSOS] = len(recentes)
+        pacote["tabelas"][TABELA_DE_ACESSOS] = {"colunas": list(COLUNAS_DE_ACESSOS), "linhas": _reduzir(COLUNAS_DE_ACESSOS, recentes)}
     return pacote, resumo
 
 
@@ -278,9 +293,10 @@ def montar_pacote_de_treinos(arquivos: dict[str, bytes]) -> tuple[dict, dict]:
     return pacote, resumo
 
 
-def ler_arquivos_do_zip(caminho: Path, tabelas: list[str]) -> dict[str, bytes]:
-    """Abre SÓ as entradas pedidas do .zip (o resto das 258 tabelas nem é lido) e devolve {nome: bytes}."""
-    nomes = ["_manifesto.json"] + [t + ".jsonl" for t in tabelas]
+def ler_arquivos_do_zip(caminho: Path, tabelas: list[str], opcionais: tuple[str, ...] = ()) -> dict[str, bytes]:
+    """Abre SÓ as entradas pedidas do .zip (o resto das 258 tabelas nem é lido) e devolve {nome: bytes}. As `opcionais` são lidas
+    se existirem (sem elas o pacote vai como antes)."""
+    nomes = ["_manifesto.json"] + [t + ".jsonl" for t in tabelas] + [t + ".jsonl" for t in opcionais]
     arquivos = {}
     try:
         with zipfile.ZipFile(caminho) as zip_:
@@ -288,6 +304,8 @@ def ler_arquivos_do_zip(caminho: Path, tabelas: list[str]) -> dict[str, bytes]:
                 try:
                     info = zip_.getinfo(nome)
                 except KeyError:
+                    if nome in [t + ".jsonl" for t in opcionais]:
+                        continue
                     raise CopiaInvalida(f"Não achei {nome} dentro do arquivo.") from None
                 if info.flag_bits & 0x1:
                     raise CopiaInvalida(f"{nome} está protegido por senha.")
@@ -302,6 +320,7 @@ def ler_arquivos_do_zip(caminho: Path, tabelas: list[str]) -> dict[str, bytes]:
 
 
 TABELAS_DOS_ALUNOS = list(COLUNAS_ENVIADAS)
+TABELAS_OPCIONAIS_DOS_ALUNOS = (TABELA_DE_ACESSOS,)
 TABELAS_DOS_TREINOS = list(COLUNAS_DOS_TREINOS)  # (PESSOA entra nas duas listas)
 
 
@@ -558,7 +577,7 @@ def executar(
                 continue
             # (monta um pacote por vez: o de treinos ocupa memória e só nasce depois de os alunos terem ido)
             if chave_da_etapa == "alunos":
-                pacote, _ = montar_pacote(ler_arquivos_do_zip(caminho, TABELAS_DOS_ALUNOS))
+                pacote, _ = montar_pacote(ler_arquivos_do_zip(caminho, TABELAS_DOS_ALUNOS, TABELAS_OPCIONAIS_DOS_ALUNOS))
             else:
                 pacote, _ = montar_pacote_de_treinos(ler_arquivos_do_zip(caminho, TABELAS_DOS_TREINOS))
             status, corpo = enviar_com_tentativas(enviar, endereco, rota, pacote, chave, registro, dormir)
@@ -713,7 +732,7 @@ def conferir(pasta: Path, registro=print, ler_fotos=ler_fotos_do_cache) -> int:
         registro(f"Não achei o {NOME_DO_ZIP} em {pasta}.")
         return 1
     try:
-        pacote_a, resumo_a = montar_pacote(ler_arquivos_do_zip(caminho, TABELAS_DOS_ALUNOS))
+        pacote_a, resumo_a = montar_pacote(ler_arquivos_do_zip(caminho, TABELAS_DOS_ALUNOS, TABELAS_OPCIONAIS_DOS_ALUNOS))
         pacote_t, resumo_t = montar_pacote_de_treinos(ler_arquivos_do_zip(caminho, TABELAS_DOS_TREINOS))
     except CopiaInvalida as erro:
         registro(f"A cópia não serve: {erro}")
@@ -728,7 +747,8 @@ def conferir(pasta: Path, registro=print, ler_fotos=ler_fotos_do_cache) -> int:
     registro(
         f"Alunos: {resumo_a['linhas']['PESSOA']} pessoas, {resumo_a['linhas']['PESSOA_STATUS']} períodos de situação, "
         f"{resumo_a['linhas']['CONTATO_PESSOA']} contatos ({celulares} celulares, {emails} e-mails), "
-        f"endereço {'incluído' if 'NR_CEP' in pacote_a['tabelas']['PESSOA']['colunas'] else 'não encontrado na cópia'}. "
+        f"endereço {'incluído' if 'NR_CEP' in pacote_a['tabelas']['PESSOA']['colunas'] else 'não encontrado na cópia'}, "
+        f"{resumo_a['linhas'].get(TABELA_DE_ACESSOS, 'sem')} acessos pela catraca nos últimos {DIAS_DE_ACESSO} dias. "
         f"Pacote: {tamanho(pacote_a):.1f} MB."
     )
     registro(

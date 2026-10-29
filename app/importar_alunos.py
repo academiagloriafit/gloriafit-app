@@ -43,6 +43,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.alunos import FUSO_DA_ACADEMIA, SITUACOES, WhatsappInvalido, validar_whatsapp
+from app.datas import ler_dia
 from app.db import conectar, criar_tabelas
 
 TABELAS_USADAS = ("PESSOA", "PESSOA_STATUS", "CONTATO_PESSOA")
@@ -61,6 +62,11 @@ COLUNAS_DO_ENDERECO = ("NR_CEP", "CD_UF", "DS_LOCALIDADE", "DS_BAIRRO", "DS_LOGR
 # E-mail e endereço só ficam guardados de quem está em uso (ativo, pendente, trancado): de ex-aluno o app não precisa (LGPD).
 SITUACOES_COM_PERFIL = ("A", "P", "T")
 CAMPOS_DO_PERFIL = ("email", "cep", "uf", "cidade", "bairro", "logradouro", "complemento")
+# Último acesso pela catraca (29/10/2026): decide quem tem foto mesmo inativo (app/fotos.py). Tabela opcional no pacote (o programa
+# antigo do PC não manda); só se guarda o dia, e só se foi nos últimos DIAS_DE_ACESSO_RECENTE dias.
+TABELA_DE_ACESSOS = "ACC_PESSOA"
+COLUNAS_DE_ACESSOS = ("ID_PESSOA", "DT_LAST_ACCESS")
+DIAS_DE_ACESSO_RECENTE = 60
 # Teto de tamanho de cada tabela lida do .zip. As maiores têm ~8 MB; o teto só impede
 # que um arquivo estranho encha a memória.
 TAMANHO_MAXIMO_TABELA = 200 * 1024 * 1024
@@ -80,6 +86,7 @@ class Copia:
     periodos: dict[int, list[dict]]  # situação por pessoa (PESSOA_STATUS)
     contatos: dict[int, list[dict]]  # telefones e e-mails por pessoa (CONTATO_PESSOA)
     com_perfil: bool = False  # a cópia trouxe endereço e e-mail (programa novo do PC); sem isso, não se mexe neles
+    acessos: dict[int, str] | None = None  # último acesso pela catraca por pessoa; None = a cópia não trouxe (não se mexe)
 
     @property
     def dia(self) -> str:
@@ -159,7 +166,21 @@ def carregar_copia(origem: str | Path) -> Copia:
             )
         tabelas[nome] = linhas
 
-    return _montar_copia(extraido_em, tabelas, all(c in colunas["PESSOA"] for c in COLUNAS_DO_ENDERECO))
+    copia = _montar_copia(extraido_em, tabelas, all(c in colunas["PESSOA"] for c in COLUNAS_DO_ENDERECO))
+    dados_acessos = manifesto["tabelas"].get(TABELA_DE_ACESSOS)
+    if isinstance(dados_acessos, dict) and all(c in dados_acessos.get("colunas", []) for c in COLUNAS_DE_ACESSOS):
+        copia.acessos = _acessos(_linhas_json(_ler_bytes(origem, f"{TABELA_DE_ACESSOS}.jsonl"), TABELA_DE_ACESSOS))
+    return copia
+
+
+def _acessos(linhas: list[dict]) -> dict[int, str]:
+    """{pessoa: 'AAAA-MM-DD'} do último acesso. Data fora do formato fica de fora (não se adivinha)."""
+    saida = {}
+    for linha in linhas:
+        pessoa, momento = linha.get("ID_PESSOA"), linha.get("DT_LAST_ACCESS")
+        if isinstance(pessoa, int) and not isinstance(pessoa, bool) and isinstance(momento, str) and ler_dia(momento[:10]):
+            saida[pessoa] = momento[:10]
+    return saida
 
 
 def _montar_copia(extraido_em: datetime, tabelas: dict[str, list[dict]], com_perfil: bool = False) -> Copia:
@@ -234,7 +255,7 @@ def conferir_data_do_pacote(pacote, agora: datetime | None = None) -> datetime:
 def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
     """Valida o pacote enviado pelo navegador e o transforma em `Copia`. Nada é gravado aqui."""
     extraido_em = conferir_data_do_pacote(pacote, agora)
-    if set(pacote["tabelas"]) != set(TABELAS_USADAS):
+    if set(pacote["tabelas"]) not in (set(TABELAS_USADAS), set(TABELAS_USADAS) | {TABELA_DE_ACESSOS}):
         raise CopiaInvalida("O pacote precisa ter exatamente as tabelas " + ", ".join(TABELAS_USADAS) + ".")
 
     tabelas: dict[str, list[dict]] = {}
@@ -265,7 +286,19 @@ def copia_de_pacote(pacote, agora: datetime | None = None) -> Copia:
             convertidas.append(registro)
         tabelas[nome] = convertidas
     com_perfil = all(c in pacote["tabelas"]["PESSOA"]["colunas"] for c in COLUNAS_DO_ENDERECO)
-    return _montar_copia(extraido_em, tabelas, com_perfil)
+    copia = _montar_copia(extraido_em, tabelas, com_perfil)
+    if TABELA_DE_ACESSOS in pacote["tabelas"]:
+        bloco = pacote["tabelas"][TABELA_DE_ACESSOS]
+        colunas = bloco.get("colunas") if isinstance(bloco, dict) else None
+        linhas = bloco.get("linhas") if isinstance(bloco, dict) else None
+        if colunas != list(COLUNAS_DE_ACESSOS) or not isinstance(linhas, list) or len(linhas) > LIMITE_DE_LINHAS_POR_TABELA:
+            raise CopiaInvalida(f"{TABELA_DE_ACESSOS}: as colunas enviadas precisam ser exatamente {', '.join(COLUNAS_DE_ACESSOS)}.")
+        for numero, linha in enumerate(linhas, start=1):
+            if (not isinstance(linha, list) or len(linha) != 2 or not valor_serve(linha[0], int, False)
+                    or not valor_serve(linha[1], str, True)):
+                raise CopiaInvalida(f"{TABELA_DE_ACESSOS}, linha {numero}: formato inesperado.")
+        copia.acessos = _acessos([dict(zip(COLUNAS_DE_ACESSOS, linha)) for linha in linhas])
+    return copia
 
 
 # ------------------------------------------------------------------ regras (funções puras)
@@ -415,6 +448,7 @@ class Relatorio:
     em_uso_com_email: int = 0
     em_uso_com_endereco: int = 0
     em_uso: int = 0
+    com_acesso_recente: int | None = None  # None: a cópia não trouxe os acessos
     # já estavam no app com matrícula, mas não vieram nesta cópia (ficam como estão)
     no_app_e_fora_da_copia: int = 0
     # alunos provisórios (cadastrados no app antes de chegarem pelo Data4U)
@@ -455,6 +489,11 @@ class Relatorio:
             f"    situação ambígua: {self.fora_situacao_ambigua}",
             f"    sem nome: {self.fora_sem_nome}",
         ]
+        linhas.append(
+            f"  Passaram pela catraca nos últimos {DIAS_DE_ACESSO_RECENTE} dias: {self.com_acesso_recente}"
+            if self.com_acesso_recente is not None
+            else "  Acessos pela catraca: não vieram nesta cópia (programa antigo no PC da recepção); ficaram como estavam"
+        )
         for letra, quantos in sorted(self.fora_situacao_desconhecida.items()):
             linhas.append(f"    situação desconhecida '{letra}': {quantos}")
         linhas += [
@@ -485,9 +524,13 @@ def _inserir(conn, aluno: dict, cadastrado_em: str) -> None:
         " :email, :cep, :uf, :cidade, :bairro, :logradouro, :complemento)",
         {**PERFIL_VAZIO, **aluno, "criado_em": cadastrado_em},
     )
+    if "ultimo_acesso" in aluno:
+        conn.execute("UPDATE aluno SET ultimo_acesso = ? WHERE data4u_id = ?", (aluno["ultimo_acesso"], aluno["data4u_id"]))
 
 
 def _gravar_perfil(conn, aluno_id: int, aluno: dict) -> None:
+    if "ultimo_acesso" in aluno:  # só quando a cópia trouxe os acessos
+        conn.execute("UPDATE aluno SET ultimo_acesso = ? WHERE id = ?", (aluno["ultimo_acesso"], aluno_id))
     if "email" in aluno:  # só quando a cópia trouxe e-mail e endereço
         conn.execute(
             "UPDATE aluno SET email = ?, cep = ?, uf = ?, cidade = ?, bairro = ?, logradouro = ?, complemento = ? WHERE id = ?",
@@ -518,6 +561,9 @@ def importar(conn, copia: Copia, agora: datetime | None = None) -> Relatorio:
     agora = agora or datetime.now(timezone.utc)
     cadastrado_em = agora.strftime("%Y-%m-%d %H:%M:%S")  # UTC, como o banco guarda
     relatorio = Relatorio(extraido_em=copia.extraido_em, pessoas_na_copia=len(copia.pessoas), com_perfil=copia.com_perfil)
+    if copia.acessos is not None:
+        relatorio.com_acesso_recente = 0
+        desde = (copia.extraido_em - timedelta(days=DIAS_DE_ACESSO_RECENTE)).strftime("%Y-%m-%d")
 
     alunos_da_copia: list[dict] = []
     for pessoa in sorted(copia.pessoas, key=lambda p: p["ID"]):
@@ -554,6 +600,10 @@ def importar(conn, copia: Copia, agora: datetime | None = None) -> Relatorio:
         relatorio.celular_que_nao_serve += zap.tinha_celular and zap.numero is None
         relatorio.whatsapp_varios += zap.varios_validos
         aluno = {"data4u_id": pessoa["ID"], "nome": nome, "cpf": cpf, "whatsapp": zap.numero, "situacao": letra}
+        if copia.acessos is not None:
+            dia = copia.acessos.get(pessoa["ID"])
+            aluno["ultimo_acesso"] = dia if dia is not None and desde <= dia <= copia.dia else None
+            relatorio.com_acesso_recente += aluno["ultimo_acesso"] is not None
         if copia.com_perfil:
             em_uso = letra in SITUACOES_COM_PERFIL
             perfil = perfil_da_pessoa(pessoa, copia.contatos.get(pessoa["ID"], [])) if em_uso else PERFIL_VAZIO
@@ -570,7 +620,7 @@ def importar(conn, copia: Copia, agora: datetime | None = None) -> Relatorio:
             linha["data4u_id"]: linha
             for linha in conn.execute(
                 "SELECT id, data4u_id, nome, cpf, whatsapp, whatsapp_corrigido_no_app, situacao,"
-                " email, cep, uf, cidade, bairro, logradouro, complemento"
+                " email, cep, uf, cidade, bairro, logradouro, complemento, ultimo_acesso"
                 " FROM aluno WHERE data4u_id IS NOT NULL"
             )
         }
@@ -610,7 +660,9 @@ def importar(conn, copia: Copia, agora: datetime | None = None) -> Relatorio:
                 whatsapp = atual["whatsapp"]  # o número do app prevalece (decisão de 07/10/2026)
                 relatorio.whatsapp_mantido_do_app += 1
             novos_valores = (aluno["nome"], aluno["cpf"], whatsapp, aluno["situacao"])
-            perfil_igual = "email" not in aluno or all(aluno[c] == atual[c] for c in CAMPOS_DO_PERFIL)
+            perfil_igual = ("email" not in aluno or all(aluno[c] == atual[c] for c in CAMPOS_DO_PERFIL)) and (
+                "ultimo_acesso" not in aluno or aluno["ultimo_acesso"] == atual["ultimo_acesso"]
+            )
             if novos_valores == (atual["nome"], atual["cpf"], atual["whatsapp"], atual["situacao"]) and perfil_igual:
                 relatorio.iguais += 1
                 continue

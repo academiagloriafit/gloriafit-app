@@ -12,7 +12,7 @@ ARQUIVO_SCHEMA = Path(__file__).with_name("schema.sql")
 # Número do desenho do banco (o mesmo que está em "PRAGMA user_version" no
 # schema.sql). Sobe sempre que o desenho muda de um jeito que arquivos antigos
 # não acompanham.
-VERSAO_DO_BANCO = 21
+VERSAO_DO_BANCO = 22
 
 # Pasta (ao lado do banco) onde fica a cópia tirada automaticamente antes de uma migração.
 PASTA_ANTES_DA_MIGRACAO = "antes-da-migracao"
@@ -532,10 +532,17 @@ CREATE INDEX IF NOT EXISTS ix_foto_propria_troca ON foto_propria_troca(aluno_id,
 
 
 # versão de partida -> o que leva à versão seguinte. Cada passo muda só o necessário.
+def _de_21_para_22(conn: sqlite3.Connection) -> None:
+    """Foto pela catraca: o `aluno` ganha `ultimo_acesso` (vazio; a próxima importação do Data4U preenche). Só acrescenta."""
+    if "ultimo_acesso" not in {linha[1] for linha in conn.execute("PRAGMA table_info(aluno)")}:
+        conn.execute("ALTER TABLE aluno ADD COLUMN ultimo_acesso TEXT CHECK (ultimo_acesso IS NULL OR length(ultimo_acesso) = 10)")
+
+
 MIGRACOES = {
     4: _de_4_para_5, 5: _de_5_para_6, 6: _de_6_para_7, 7: _de_7_para_8, 8: _de_8_para_9, 9: _de_9_para_10,
     10: _de_10_para_11, 11: _de_11_para_12, 12: _de_12_para_13, 13: _de_13_para_14, 14: _de_14_para_15,
     15: _de_15_para_16, 16: _de_16_para_17, 17: _de_17_para_18, 18: _de_18_para_19, 19: _de_19_para_20, 20: _de_20_para_21,
+    21: _de_21_para_22,
 }
 
 

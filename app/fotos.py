@@ -3,15 +3,17 @@ reconhecer o aluno nas telas do computador autorizado.
 
 DE ONDE VEM: o Data4U guarda as fotos num banco à parte, o CACHE.D4U (tabela BLOB_CACHE, chave "foto/<id da pessoa>_im_foto").
 O envio diário do PC da recepção (static/recepcao/enviar_alunos.py) lê esse cache e manda só as fotos dos alunos que o servidor pede:
-  1. POST /api/fotos/estado    -> o servidor diz quais alunos estão em uso (situação A ou P) e o "resumo" (sha256) da foto que já tem.
+  1. POST /api/fotos/estado    -> o servidor diz de quais alunos quer a foto (ver QUEM TEM FOTO) e o "resumo" (sha256) da que já tem.
   2. POST /api/fotos/importar  -> o PC manda, em pacotes, só as fotos novas ou trocadas, mais a lista de quem tem foto no cache hoje.
 
 O QUE O SERVIDOR GUARDA: uma miniatura quadrada (LADO x LADO, JPEG) para as listas e, desde a versão 20 do banco, a foto inteira reduzida
 (no máximo LADO_GRANDE no lado maior) para abrir quando o professor clica. As duas são refeitas aqui; a original é descartada.
 Nada de reconhecimento facial: o dado de biometria do Data4U nunca sai do PC.
 
-QUANTO TEMPO: a cada envio, quem continua ativo e com foto é "visto". Foto que passa DIAS_SEM_CONFIRMACAO dias sem ser vista (o aluno
-saiu, ou a foto foi apagada no Data4U) é apagada. Decisão do Thiago (29/10/2026): 90 dias, caso o aluno volte.
+QUEM TEM FOTO (regra do Thiago, 29/10/2026): quem está ativo ou pendente no Data4U, OU passou pela catraca nos últimos DIAS_DE_ACESSO dias
+(mesmo inativo, trancado ou desistente; o dia do último acesso vem da tabela ACC_PESSOA, ver app/importar_alunos.py). Quem sai da regra
+perde a foto no envio seguinte; quem volta a vir ou reativa recebe a foto de novo no outro dia. Foto que some do cache do Data4U e passa
+DIAS_SEM_CONFIRMACAO dias sem ser vista também é apagada.
 
 QUEM VÊ: computador autorizado (rota /alunos/<id>/foto, protegida pela guarda da área do professor) e, desde 29/10/2026, o próprio aluno
 no app dele (rota /aluno/foto: só a foto DELE, pelo cookie do aluno; nunca a de outra pessoa).
@@ -29,6 +31,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from PIL import Image, ImageOps, UnidentifiedImageError
+from app.datas import FUSO_DA_ACADEMIA
 
 LADO_GRANDE = 640  # pixels no lado maior da foto que abre ao clicar (ver quem é a pessoa)
 QUALIDADE_GRANDE = 84
@@ -40,9 +43,12 @@ FOTOS_POR_PACOTE = 150  # o PC manda em pacotes; 150 fotos de 50 KB em base64 ~ 
 PRESENTES_MAXIMOS = 20_000
 DIAS_SEM_CONFIRMACAO = 90
 SITUACOES_COM_FOTO = ("A", "P")  # ativo e pendente (plano vencido, ainda treinando)
+# Regra do Thiago (29/10/2026): tem foto também quem passou pela catraca nos últimos DIAS_DE_ACESSO dias, mesmo inativo, trancado ou
+# desistente. Passou disso sem vir e sem matrícula ativa: a foto sai do servidor; voltou a vir ou reativou: volta no dia seguinte.
+DIAS_DE_ACESSO = 60
 FORMATOS_ACEITOS = ("JPEG", "PNG")
 TROCAS_POR_DIA = 10  # trocas da foto pelo próprio aluno em 24 horas (contra abuso; ninguém troca a foto 10 vezes num dia)
-SITUACOES_EM_USO_DA_PROPRIA = ("A", "P", "T")  # a foto do aluno continua "vista" enquanto ele estiver ativo, pendente ou trancado
+SITUACOES_EM_USO_DA_PROPRIA = ("A", "P", "T")  # a foto escolhida pelo aluno também fica enquanto ele estiver trancado (volta depois)
 
 
 class PacoteInvalido(Exception):
@@ -96,17 +102,27 @@ def _refazer(original: bytes, grande: bool) -> bytes:
         raise PacoteInvalido(f"não deu para abrir a foto ({type(erro).__name__})") from None
 
 
-def estado(conn: sqlite3.Connection) -> dict:
+def _limite_de_acesso(agora: datetime | None) -> str:
+    """O dia ('AAAA-MM-DD', horário de Vila Velha) a partir do qual um acesso pela catraca ainda conta."""
+    return (_agora(agora).astimezone(FUSO_DA_ACADEMIA) - timedelta(days=DIAS_DE_ACESSO)).strftime("%Y-%m-%d")
+
+
+def _sql_quem_tem_foto(situacoes: tuple[str, ...], tabela: str = "aluno") -> str:
+    """O pedaço de SQL da regra: situação na lista OU acesso recente pela catraca (o limite entra como último parâmetro)."""
+    return f"({tabela}.situacao IN ({','.join('?' * len(situacoes))}) OR {tabela}.ultimo_acesso >= ?)"
+
+
+def estado(conn: sqlite3.Connection, agora: datetime | None = None) -> dict:
     """O que o PC da recepção precisa saber: os alunos em uso (pelo id do Data4U) e o resumo da foto que o servidor já tem.
     Foto sem a versão grande (gravada antes da versão 20) volta sem resumo: o PC entende que precisa mandar de novo."""
     linhas = conn.execute(
         f"""
         SELECT a.data4u_id, CASE WHEN f.grande IS NOT NULL THEN f.origem_sha256 END
         FROM aluno a LEFT JOIN foto_aluno f ON f.aluno_id = a.id
-        WHERE a.data4u_id IS NOT NULL AND a.situacao IN ({",".join("?" * len(SITUACOES_COM_FOTO))})
+        WHERE a.data4u_id IS NOT NULL AND {_sql_quem_tem_foto(SITUACOES_COM_FOTO, "a")}
         ORDER BY a.data4u_id
         """,
-        SITUACOES_COM_FOTO,
+        (*SITUACOES_COM_FOTO, _limite_de_acesso(agora)),
     ).fetchall()
     return {
         "alunos": [{"id": linha[0], "sha256": linha[1]} for linha in linhas],
@@ -187,14 +203,20 @@ def importar(conn: sqlite3.Connection, pacote, agora: datetime | None = None) ->
             relatorio["vistas"] += conn.execute(
                 f"UPDATE foto_aluno SET vista_em = ? WHERE aluno_id IN ({','.join('?' * len(parte))})", [momento, *parte]
             ).rowcount
-        relatorio["apagadas"] = conn.execute("DELETE FROM foto_aluno WHERE vista_em < ?", (limite,)).rowcount
-        # a foto escolhida pelo aluno: "vista" enquanto ele estiver em uso; 90 dias depois de sair, apagada como a da catraca
-        conn.execute(
-            f"""UPDATE foto_propria SET vista_em = ? WHERE aluno_id IN (
-                    SELECT id FROM aluno WHERE provisorio = 1 OR situacao IN ({",".join("?" * len(SITUACOES_EM_USO_DA_PROPRIA))}))""",
-            (momento, *SITUACOES_EM_USO_DA_PROPRIA),
-        )
-        relatorio["apagadas"] += conn.execute("DELETE FROM foto_propria WHERE vista_em < ?", (limite,)).rowcount
+        relatorio["apagadas"] = conn.execute("DELETE FROM foto_aluno WHERE vista_em < ?", (limite,)).rowcount  # sumiu do Data4U
+        acesso = _limite_de_acesso(agora)
+        # quem saiu da regra (sem matrícula ativa e sem passar pela catraca há mais de DIAS_DE_ACESSO dias): a foto sai na hora
+        relatorio["apagadas"] += conn.execute(
+            f"DELETE FROM foto_aluno WHERE aluno_id NOT IN (SELECT id FROM aluno WHERE {_sql_quem_tem_foto(SITUACOES_COM_FOTO)})",
+            (*SITUACOES_COM_FOTO, acesso),
+        ).rowcount
+        # a foto escolhida pelo aluno segue a mesma regra (e fica também enquanto ele estiver trancado, ou se é provisório)
+        relatorio["apagadas"] += conn.execute(
+            f"""DELETE FROM foto_propria WHERE aluno_id NOT IN (
+                    SELECT id FROM aluno WHERE provisorio = 1 OR {_sql_quem_tem_foto(SITUACOES_EM_USO_DA_PROPRIA)})""",
+            (*SITUACOES_EM_USO_DA_PROPRIA, acesso),
+        ).rowcount
+        conn.execute("UPDATE foto_propria SET vista_em = ?", (momento,))
     return relatorio
 
 

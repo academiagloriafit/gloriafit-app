@@ -789,3 +789,51 @@ def test_pacote_do_navegador_com_e_sem_endereco(conn):
                                                                  "linhas": [[1, "ANA", "F", None, "F", "1", 5, None, None, None, None]]}}}
     with pytest.raises(CopiaInvalida):
         imp.copia_de_pacote(errado, agora=AGORA)
+
+
+# ------------------------------------------------------------------ último acesso pela catraca (29/10/2026)
+
+
+def _copia_com_acessos(tmp_path, pessoas, periodos, acessos):
+    tabelas_manifesto = {
+        "PESSOA": {"linhas": len(pessoas), "colunas": COLUNAS["PESSOA"]},
+        "PESSOA_STATUS": {"linhas": len(periodos), "colunas": COLUNAS["PESSOA_STATUS"]},
+        "CONTATO_PESSOA": {"linhas": 0, "colunas": COLUNAS["CONTATO_PESSOA"]},
+        "ACC_PESSOA": {"linhas": len(acessos), "colunas": ["ID_PESSOA", "DT_LAST_ACCESS", "ID_ACC_LOCAL"]},
+    }
+    caminho = escrever_copia(tmp_path, pessoas, periodos, (), manifesto={"extracao": "07/10/2026 05:00:17", "tabelas": tabelas_manifesto},
+                             sobrescrever={"ACC_PESSOA.jsonl": _jsonl(acessos)})
+    return carregar_copia(caminho)
+
+
+def test_ultimo_acesso_so_dos_ultimos_60_dias(conn, tmp_path):
+    copia = _copia_com_acessos(
+        tmp_path, [pessoa(1), pessoa(2), pessoa(3), pessoa(4)], [periodo(i, "I") for i in (1, 2, 3, 4)],
+        [{"ID_PESSOA": 1, "DT_LAST_ACCESS": "2026-10-06 21:10:09", "ID_ACC_LOCAL": -1},
+         {"ID_PESSOA": 2, "DT_LAST_ACCESS": "2026-07-01 08:00:00", "ID_ACC_LOCAL": -1},
+         {"ID_PESSOA": 3, "DT_LAST_ACCESS": None, "ID_ACC_LOCAL": -1},
+         {"ID_PESSOA": 4, "DT_LAST_ACCESS": "lixo", "ID_ACC_LOCAL": -1}],
+    )
+    relatorio = importar(conn, copia, agora=AGORA)
+    assert [por_matricula(conn, i)["ultimo_acesso"] for i in (1, 2, 3, 4)] == ["2026-10-06", None, None, None]
+    assert relatorio.com_acesso_recente == 1 and "últimos 60 dias: 1" in relatorio.texto()
+
+
+def test_copia_sem_acessos_nao_apaga_o_que_ja_estava(conn, tmp_path):
+    importar(conn, _copia_com_acessos(tmp_path, [pessoa(1)], [periodo(1, "I")], [{"ID_PESSOA": 1, "DT_LAST_ACCESS": "2026-10-06 21:10:09", "ID_ACC_LOCAL": -1}]), agora=AGORA)
+    relatorio = importar_de(conn, tmp_path, [pessoa(1)], [periodo(1, "I")])
+    assert por_matricula(conn, 1)["ultimo_acesso"] == "2026-10-06" and "não vieram nesta cópia" in relatorio.texto()
+
+
+def test_pacote_com_acessos(conn):
+    pacote = {"extracao": "07/10/2026 05:00:17", "tabelas": {
+        "PESSOA": {"colunas": list(imp.COLUNAS_NECESSARIAS["PESSOA"]), "linhas": [[1, "ANA", "F", None, "F"]]},
+        "PESSOA_STATUS": {"colunas": COLUNAS["PESSOA_STATUS"], "linhas": [[1, "2026-01-01", "2026-12-31", "I"]]},
+        "CONTATO_PESSOA": {"colunas": COLUNAS["CONTATO_PESSOA"], "linhas": []},
+        "ACC_PESSOA": {"colunas": ["ID_PESSOA", "DT_LAST_ACCESS"], "linhas": [[1, "2026-10-05 07:00:00"]]},
+    }}
+    importar(conn, imp.copia_de_pacote(pacote, agora=AGORA), agora=AGORA)
+    assert por_matricula(conn, 1)["ultimo_acesso"] == "2026-10-05"
+    pacote["tabelas"]["ACC_PESSOA"] = {"colunas": ["ID_PESSOA", "DT_LAST_ACCESS", "NR_ACCESS_DAY"], "linhas": [[1, "2026-10-05", 1]]}
+    with pytest.raises(CopiaInvalida):
+        imp.copia_de_pacote(pacote, agora=AGORA)

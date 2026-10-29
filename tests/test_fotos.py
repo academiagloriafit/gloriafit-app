@@ -373,3 +373,37 @@ def test_menu_lateral_mostra_a_miniatura_ou_as_iniciais(caminho):
         assert 'id="menu-foto" class="gaveta-foto" src="/aluno/foto" alt="" width="48" height="48">' in com_foto, tela
         sem_foto = _aluno_logado(caminho, 2).get(tela).get_data(as_text=True)
         assert 'height="48" hidden>' in sem_foto and ">BL</span>" in sem_foto, tela
+
+
+# ------------------------------------------------------------------ regra da catraca: acesso nos últimos 60 dias (29/10/2026)
+
+
+def test_inativo_que_passou_na_catraca_ha_pouco_tem_foto_e_o_que_sumiu_perde(conn):
+    # Carla (D) passou ontem; Ana (A) nunca passou; Bruno (P) passou há 70 dias
+    conn.execute("UPDATE aluno SET ultimo_acesso = '2026-10-28' WHERE id = 3")
+    conn.execute("UPDATE aluno SET ultimo_acesso = '2026-08-20' WHERE id = 2")
+    assert [a["id"] for a in fotos.estado(conn, agora=AGORA)["alunos"]] == [501, 502, 503]
+    fotos.importar(conn, {"fotos": [{"id": 503, "jpg": _b64(_jpeg())}], "presentes": [503]}, agora=AGORA)
+    assert fotos.ler(conn, 3) is not None
+
+    # dois meses depois sem voltar (e ainda desistente): a foto sai
+    depois = AGORA + timedelta(days=fotos.DIAS_DE_ACESSO)
+    assert 503 not in [a["id"] for a in fotos.estado(conn, agora=depois)["alunos"]]
+    relatorio = fotos.importar(conn, {"fotos": [], "presentes": [503]}, agora=depois)
+    assert relatorio["apagadas"] == 1 and fotos.ler(conn, 3) is None
+
+    # voltou a passar na catraca: entra de novo na lista do PC
+    conn.execute("UPDATE aluno SET ultimo_acesso = ? WHERE id = 3", ((depois.date()).isoformat(),))
+    assert 503 in [a["id"] for a in fotos.estado(conn, agora=depois)["alunos"]]
+
+
+def test_foto_escolhida_segue_a_regra_da_catraca_e_fica_no_trancamento(conn):
+    conn.execute("UPDATE aluno SET situacao = 'I', ultimo_acesso = '2026-10-28' WHERE id = 1")
+    conn.execute("UPDATE aluno SET situacao = 'T' WHERE id = 2")
+    fotos.trocar_pela_do_aluno(conn, 1, _jpeg(), agora=AGORA)
+    fotos.trocar_pela_do_aluno(conn, 2, _jpeg(), agora=AGORA)
+    fotos.importar(conn, {"fotos": []}, agora=AGORA)
+    assert fotos.situacao_da_foto(conn, 1)["propria"] and fotos.situacao_da_foto(conn, 2)["propria"]
+    fotos.importar(conn, {"fotos": []}, agora=AGORA + timedelta(days=fotos.DIAS_DE_ACESSO + 1))
+    assert not fotos.situacao_da_foto(conn, 1)["propria"]  # inativo e sem vir há mais de 2 meses
+    assert fotos.situacao_da_foto(conn, 2)["propria"]  # trancado: a foto que ele escolheu espera a volta

@@ -59,7 +59,7 @@
 -- Fora desta versão, de propósito: pendências da recepção e mensalidade/produtos.
 -- Entram em versões seguintes, quando forem desenhados.
 
-PRAGMA user_version = 21;
+PRAGMA user_version = 22;
 
 -- ---------------------------------------------------------------- exercícios
 
@@ -137,7 +137,10 @@ CREATE TABLE IF NOT EXISTS aluno (
     cidade                     TEXT    CHECK (cidade IS NULL OR length(cidade) <= 120),
     bairro                     TEXT    CHECK (bairro IS NULL OR length(bairro) <= 120),
     logradouro                 TEXT    CHECK (logradouro IS NULL OR length(logradouro) <= 200),
-    complemento                TEXT    CHECK (complemento IS NULL OR length(complemento) <= 120)
+    complemento                TEXT    CHECK (complemento IS NULL OR length(complemento) <= 120),
+    -- Dia do último acesso pela catraca (Data4U ACC_PESSOA.DT_LAST_ACCESS, 29/10/2026). Só guardado se foi nos últimos
+    -- 60 dias (app/importar_alunos.py): é o que decide quem tem foto mesmo inativo (app/fotos.py).
+    ultimo_acesso              TEXT    CHECK (ultimo_acesso IS NULL OR length(ultimo_acesso) = 10)
 );
 CREATE INDEX IF NOT EXISTS ix_aluno_cpf ON aluno(cpf);
 
