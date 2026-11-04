@@ -4,6 +4,11 @@ import {
   DICA_DO_COMENTARIO_DO_TREINO,
   LIMITE_DO_COMENTARIO,
   MENSAGEM_SEM_REDE,
+  SEGUNDOS_DA_FAIXA_DE_CONCLUIDO,
+  TEXTO_AVISO_CONCLUIDO,
+  TEXTO_VOLTAR_AO_INICIO,
+  textoDaFaixaDeConcluido,
+  textoDaFichaConcluida,
   MINIMO_DA_SENHA,
   TAMANHO_DO_CODIGO,
   TEXTO_COMENTARIO_ENVIADO,
@@ -740,5 +745,31 @@ describe("descreverMarcacao com a ficha do dia", () => {
     expect("fichaDoDia" in descreverMarcacao(200, { ok: true, feitas: 1 })).toBe(false);
     expect("fichaDoDia" in descreverMarcacao(200, { ok: true, feitas: 1, ficha_do_dia: "2" })).toBe(false);
     expect("fichaDoDia" in descreverMarcacao(200, { ok: true, feitas: 1, ficha_do_dia: null })).toBe(false);
+  });
+});
+
+describe("aviso de treino concluído (04/11/2026)", () => {
+  const ficha = (nome, n) => ({ nome, grupos: [{ exercicios: Array.from({ length: n }, (_, i) => ({ nome: `E${i}` })) }] });
+
+  it("mostra o nome da ficha e quantos exercícios", () => {
+    expect(textoDaFichaConcluida(ficha("A PEITO", 3))).toBe("A PEITO · 3 exercícios");
+    expect(textoDaFichaConcluida(ficha("B COSTAS", 1))).toBe("B COSTAS · 1 exercício");
+  });
+
+  it("sem exercícios ou sem nome, não deixa pedaço vazio", () => {
+    expect(textoDaFichaConcluida(ficha("A PEITO", 0))).toBe("A PEITO");
+    expect(textoDaFichaConcluida(ficha("  ", 2))).toBe("2 exercícios");
+    expect(textoDaFichaConcluida(null)).toBe("");
+  });
+
+  it("a faixa da lista de treinos cita a ficha", () => {
+    expect(textoDaFaixaDeConcluido({ nome: "A PEITO" })).toBe("✓ A PEITO concluído. Bom treino!");
+    expect(textoDaFaixaDeConcluido({ nome: "" })).toBe("✓ Treino concluído. Bom treino!");
+  });
+
+  it("textos fixos do aviso", () => {
+    expect(TEXTO_AVISO_CONCLUIDO).toBe("Treino concluído!");
+    expect(TEXTO_VOLTAR_AO_INICIO).toBe("Voltar ao início");
+    expect(SEGUNDOS_DA_FAIXA_DE_CONCLUIDO).toBeGreaterThan(0);
   });
 });

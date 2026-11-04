@@ -2141,3 +2141,23 @@ img.avatar-foto { cursor: zoom-in; }
 /* símbolo com halteres no menu do professor (29/10/2026): mais largo que alto, sem o recorte redondo */
 .marca-halteres img, .tema-grafite .marca-halteres img { width: 64px; height: 32px; border-radius: 0; }  /* também no app do aluno e nas telas de entrar */
 @media (min-width: 641px) { .tema-grafite .marca-halteres img { width: 68px; height: 34px; } }
+
+/* ---------- Aviso de "Treino concluído" no celular do aluno (pedido do Thiago em 04/11/2026) ----------
+   Sobe de baixo, como uma folha. A nota (Leve/Ideal/Pesado) usa os estilos de .meu-esforco. */
+.meu-aviso-concluido { position: fixed; inset: auto 0 0 0; margin: 0; width: 100%; max-width: 560px; margin-inline: auto; max-height: 92vh; overflow-y: auto;
+  padding: 28px max(20px, env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  border: 1px solid var(--linha); border-bottom: 0; border-radius: 22px 22px 0 0; background: var(--papel); color: var(--texto); text-align: center; }
+.meu-aviso-concluido[open] { display: flex; flex-direction: column; gap: 6px; animation: aviso-sobe 0.22s ease-out; }
+.meu-aviso-concluido::backdrop { background: rgba(0, 0, 0, 0.62); }
+@keyframes aviso-sobe { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .meu-aviso-concluido[open] { animation: none; } }
+.meu-aviso-check { width: 84px; height: 84px; margin: 0 auto 8px; border-radius: 50%; background: var(--verde-fundo); display: grid; place-items: center; }
+.meu-aviso-check span { width: 56px; height: 56px; border-radius: 50%; background: var(--verde-ponto); color: #0d0d0d; font-size: 32px; font-weight: 800; display: grid; place-items: center; }
+.meu-aviso-titulo { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
+.meu-aviso-ficha { margin: 0; color: var(--texto-suave); font-size: 16px; }
+.meu-aviso-andamento { align-self: center; margin: 6px 0 12px; padding: 6px 12px; border-radius: 999px; background: var(--laranja-leve-forte); color: var(--laranja-texto); font-size: 14px; font-weight: 700; }
+.meu-aviso-concluido .meu-esforco { text-align: center; margin-bottom: 10px; }
+.meu-aviso-inicio { min-height: 54px; font-size: 17px; }
+.meu-aviso-desfazer { align-self: center; margin-top: 6px; padding: 10px; border: 0; background: none; color: var(--texto-suave); font: inherit; font-size: 14px; text-decoration: underline; cursor: pointer; }
+.meu-aviso-desfazer:focus-visible { outline: 2px solid var(--laranja); outline-offset: 2px; }
+.meu-faixa-concluido { margin: 0 0 14px; padding: 13px 16px; border-radius: 14px; background: var(--verde-fundo-forte); color: var(--verde); font-weight: 700; }

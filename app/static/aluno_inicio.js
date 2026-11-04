@@ -6,6 +6,10 @@ import { iniciarDescanso } from "./aluno_descanso.js";
 import { el } from "./dom.js";
 import {
   ESFORCOS,
+  SEGUNDOS_DA_FAIXA_DE_CONCLUIDO,
+  TEXTO_AVISO_CONCLUIDO,
+  TEXTO_DESFAZER_SEM_QUERER,
+  TEXTO_VOLTAR_AO_INICIO,
   MENSAGEM_FEITO_NAO_SALVOU,
   MENSAGEM_SEM_REDE,
   TEXTO_COMENTARIO_ENVIADO,
@@ -45,6 +49,8 @@ import {
   proximoEsforco,
   proximoSemFazer,
   temDose,
+  textoDaFaixaDeConcluido,
+  textoDaFichaConcluida,
   textoDaPosicao,
   textoDaUltimaCarga,
   textoDasDatas,
@@ -580,6 +586,7 @@ async function marcarFicha(treino, indice, rota, botao) {
   const ficha = treino.fichas[indice];
   let mensagem = "";
   let deuErro = false;
+  let abrirAvisoDeConcluido = false;
   try {
     await terminarSalvamentos(); // a carga que o aluno acabou de digitar é salva ANTES de a ficha ser desenhada de novo
     const resposta = await enviarJson(`/api/aluno/treino/${rota}`, { ficha: ficha.ordem });
@@ -594,6 +601,7 @@ async function marcarFicha(treino, indice, rota, botao) {
       if (rota === "desfazer") ficha.esforco_hoje = null; // a nota ficava na marcação de hoje, que o servidor apagou
       if (Number.isInteger(resultado.fichaDoDia)) treino.ficha_do_dia = resultado.fichaDoDia; // o servidor decide quem fica circulada
       mensagem = rota === "feito" ? (resultado.jaMarcada ? TEXTO_JA_MARCADA : TEXTO_FICHA_FEITA_HOJE) : "";
+      if (rota === "feito") abrirAvisoDeConcluido = true;
     } else {
       mensagem = resultado.mensagem;
       deuErro = true;
@@ -603,11 +611,73 @@ async function marcarFicha(treino, indice, rota, botao) {
     deuErro = true;
   }
   mostrarFicha(treino, indice, mensagem, deuErro);
+  if (abrirAvisoDeConcluido) mostrarAvisoDeConcluido(treino, indice);
+}
+
+// ------------------------------------------------------------------ aviso de "Treino concluído" (pedido do Thiago em 04/11/2026)
+// Ao concluir sobe um aviso (um <dialog>, que prende o foco e fecha com o voltar/Esc) com a nota opcional e "Voltar ao início".
+// Fechar sem tocar no botão deixa o aluno na ficha, já marcada: o treino concluído não depende do aviso.
+const avisoDeConcluido = el("dialog", { classe: "meu-aviso-concluido", "aria-labelledby": "aviso-concluido-titulo" });
+document.body.append(avisoDeConcluido);
+let faixaPendente = ""; // a frase que a lista de treinos mostra depois de "Voltar ao início"
+
+function mostrarAvisoDeConcluido(treino, indice) {
+  const ficha = treino.fichas[indice];
+  const desfazer = el("button", {
+    type: "button",
+    classe: "meu-aviso-desfazer",
+    texto: TEXTO_DESFAZER_SEM_QUERER,
+    aoClicar: (evento) => {
+      const botao = evento.currentTarget;
+      avisoDeConcluido.close();
+      marcarFicha(treino, indice, "desfazer", botao);
+    },
+  });
+  avisoDeConcluido.replaceChildren(
+    el("div", { classe: "meu-aviso-check", "aria-hidden": "true" }, el("span", { texto: "✓" })),
+    el("h2", { id: "aviso-concluido-titulo", classe: "meu-aviso-titulo", texto: TEXTO_AVISO_CONCLUIDO }),
+    el("p", { classe: "meu-aviso-ficha", texto: textoDaFichaConcluida(ficha) }),
+    el("p", { classe: "meu-aviso-andamento", texto: textoDoAndamento(ficha, treino.meta_por_ficha) }),
+    desenharEsforco(ficha, "aviso"),
+    el("button", {
+      type: "button",
+      classe: "botao-principal botao-largo meu-aviso-inicio",
+      texto: TEXTO_VOLTAR_AO_INICIO,
+      aoClicar: () => {
+        faixaPendente = textoDaFaixaDeConcluido(ficha);
+        avisoDeConcluido.close();
+        voltarParaALista();
+      },
+    }),
+    desfazer,
+  );
+  avisoDeConcluido.showModal();
+  avisoDeConcluido.querySelector(".meu-aviso-inicio")?.focus();
+}
+
+// Fechou (por qualquer caminho): a ficha é desenhada de novo, para a nota escolhida no aviso aparecer também no rodapé dela.
+avisoDeConcluido.addEventListener("close", () => {
+  if (treinoNaTela && tela === "ficha") mostrarFicha(treinoNaTela, fichaNaTela);
+});
+
+// A faixa verde no alto da lista de treinos, por alguns segundos.
+let faixaNaTela = null;
+function mostrarFaixaDeConcluido(texto) {
+  faixaNaTela?.remove();
+  const faixa = el("p", { classe: "meu-faixa-concluido", role: "status", texto });
+  areaDoTreino.prepend(faixa);
+  faixaNaTela = faixa;
+  setTimeout(() => {
+    faixa.remove();
+    if (faixaNaTela === faixa) faixaNaTela = null;
+  }, SEGUNDOS_DA_FAIXA_DE_CONCLUIDO * 1000);
 }
 
 // "Como foi o treino?": Leve / Ideal / Pesado, opcional, só depois de "Treino concluído". Tocar na nota escolhida tira a escolha.
-function desenharEsforco(ficha) {
-  const raiz = el("div", { classe: "meu-esforco", role: "group", "aria-labelledby": `esforco-titulo-${ficha.ordem}` });
+// `onde`: separa os ids quando a pergunta aparece em dois lugares ao mesmo tempo (rodapé da ficha e aviso de concluído).
+function desenharEsforco(ficha, onde = "ficha") {
+  const idDoTitulo = `esforco-titulo-${onde}-${ficha.ordem}`;
+  const raiz = el("div", { classe: "meu-esforco", role: "group", "aria-labelledby": idDoTitulo });
   let enviando = false;
   let mensagem = "";
   let deuErro = false;
@@ -647,7 +717,7 @@ function desenharEsforco(ficha) {
   function redesenhar(foco = null) {
     const tinhaFoco = foco !== null && raiz.contains(document.activeElement);
     raiz.replaceChildren(
-      el("p", { id: `esforco-titulo-${ficha.ordem}`, classe: "meu-esforco-titulo", texto: TEXTO_PERGUNTA_DO_ESFORCO }),
+      el("p", { id: idDoTitulo, classe: "meu-esforco-titulo", texto: TEXTO_PERGUNTA_DO_ESFORCO }),
       el(
         "div",
         { classe: "meu-esforco-botoes" },
@@ -795,6 +865,7 @@ function trocarTela(nova) {
 
 // O aluno tocou numa ficha. O "estado" no histórico faz o botão voltar do celular voltar para a lista (em vez de sair do app).
 function abrirFicha(treino, indice) {
+  faixaNaTela?.remove();
   history.pushState({ tela: "ficha" }, "");
   mostrarFicha(treino, indice);
   trocarTela("ficha");
@@ -860,6 +931,10 @@ function irParaALista() {
   desenharCartoes(treinoNaTela); // pode ter mudado: "concluído hoje" e quem é a ficha do dia
   trocarTela("fichas");
   window.scrollTo(0, 0);
+  if (faixaPendente) {
+    mostrarFaixaDeConcluido(faixaPendente);
+    faixaPendente = "";
+  }
   botoesDasFichas.children[fichaNaTela]?.focus({ preventScroll: true });
 }
 
@@ -873,6 +948,7 @@ function voltarParaALista() {
 botaoVoltar.addEventListener("click", voltarParaALista);
 window.addEventListener("popstate", () => {
   voltando = false;
+  if (avisoDeConcluido.open) avisoDeConcluido.close(); // o voltar do celular com o aviso aberto: o aviso não fica por cima da lista
   document.activeElement?.blur?.(); // o gesto de voltar do celular também salva a carga que estava sendo digitada
   const aviso = avisoDoFimPendente;
   avisoDoFimPendente = "";

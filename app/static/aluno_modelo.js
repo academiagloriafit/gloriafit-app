@@ -201,6 +201,26 @@ export function descreverMarcacao(status, corpo) {
 export const TEXTO_FICHA_FEITA_HOJE = "Anotado. Parabéns!";
 export const TEXTO_JA_MARCADA = "Você já tinha marcado esta ficha hoje.";
 
+// Aviso de "Treino concluído" (pedido do Thiago em 04/11/2026): ao concluir, sobe um aviso com a nota opcional e o botão que leva
+// de volta à lista de treinos; lá aparece por alguns segundos uma faixa confirmando.
+export const TEXTO_AVISO_CONCLUIDO = "Treino concluído!";
+export const TEXTO_VOLTAR_AO_INICIO = "Voltar ao início";
+export const TEXTO_DESFAZER_SEM_QUERER = "Marquei sem querer, desfazer";
+export const SEGUNDOS_DA_FAIXA_DE_CONCLUIDO = 5;
+
+// A linha de baixo do título do aviso: "A PEITO · 3 exercícios" (sem o número quando a ficha não tem exercícios).
+export function textoDaFichaConcluida(ficha) {
+  const nome = String(ficha?.nome ?? "").trim();
+  const exercicios = quantosExercicios(ficha) > 0 ? textoDosExercicios(ficha) : "";
+  return [nome, exercicios].filter(Boolean).join(" · ");
+}
+
+// A faixa que aparece na lista de treinos depois de "Voltar ao início".
+export function textoDaFaixaDeConcluido(ficha) {
+  const nome = String(ficha?.nome ?? "").trim();
+  return nome ? `✓ ${nome} concluído. Bom treino!` : "✓ Treino concluído. Bom treino!";
+}
+
 // ------------------------------------------------------------------ durante o treino: exercício feito, carga e descanso
 // Pedido do Thiago (22/10/2026). Tudo vale por DIA (amanhã o treino volta limpo): quem guarda é o servidor (app/execucao.py).
 
