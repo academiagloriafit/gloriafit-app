@@ -387,7 +387,7 @@ def test_cinco_codigos_errados_seguidos_dao_429_mesmo_com_o_codigo_certo(cliente
     resposta = cliente.post("/api/aluno/primeiro-acesso", json={"cpf": CPF_ANA, "codigo": codigo, "senha": SENHA})
 
     assert resposta.status_code == 429 and int(resposta.headers["Retry-After"]) > 0
-    assert "Tente de novo em" in resposta.get_json()["erro"]
+    assert "Tente de novo às" in resposta.get_json()["erro"]
 
 
 def test_primeiro_acesso_de_cpf_que_nao_existe_da_o_mesmo_erro_do_codigo_errado(cliente):

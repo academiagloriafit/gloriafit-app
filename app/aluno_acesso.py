@@ -24,7 +24,8 @@ A conferência se repete a CADA pedido, com o cadastro de hoje.
 Cuidados de segurança que este arquivo tem (o endereço é aberto à internet inteira):
 - Código e token são sorteados com `secrets`. O banco guarda só hash. O código tem só 1 milhão de possibilidades, então a
   defesa é o LIMITE de tentativas (5 por código, 5 erros por CPF e 50 por endereço a cada 15 min), não o hash. Contas: cada
-  CPF pode pedir no máximo 5 códigos por dia, 5 tentativas cada = 25 palpites por dia em 1.000.000.
+  CPF pode pedir no máximo 5 códigos por hora, mas quem segura os palpites é a trava de erros: 5 a cada 15 min = 480 palpites
+  por dia em 1.000.000 (cerca de 1 chance em 2 mil por dia, tentando sem parar).
 - Os limites contam também CPF que não existe, com a mesma regra: o bloqueio não revela quem é aluno. CPF e endereço entram
   na tabela como hash (SHA-256), e os registros somem depois de 1 dia.
 - Senha errada, CPF que não existe e aluno sem senha dão a MESMA resposta e demoram o mesmo (o hash lento roda nos três casos).
@@ -48,7 +49,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from app import administrador, db, provisorios
+from app import administrador, datas, db, provisorios
 
 NOME_DO_COOKIE = "gloriafit_aluno"
 
@@ -65,7 +66,8 @@ TAMANHO_DO_CODIGO = 6
 VALIDADE_DO_CODIGO = timedelta(minutes=10)
 TENTATIVAS_POR_CODIGO = 5
 INTERVALO_ENTRE_PEDIDOS = timedelta(seconds=60)  # entre dois pedidos de código do mesmo CPF
-PEDIDOS_POR_CPF_POR_DIA = 5
+PEDIDOS_POR_CPF = 5  # pedidos de código por CPF dentro de JANELA_DE_PEDIDOS...
+JANELA_DE_PEDIDOS = timedelta(hours=1)  # ...(era 24 h; o Thiago reduziu para 1 h em 04/11/2026: aluno que se enrolou não fica um dia sem entrar)
 PEDIDOS_POR_ENDERECO_POR_HORA = 60  # alto de propósito: a academia inteira usa o mesmo wi-fi
 CODIGOS_POR_DIA = 500  # no app todo; cada um é uma mensagem paga (cerca de R$ 0,035)
 FALHAS_POR_CPF = 5  # senhas ou códigos errados permitidos por CPF...
@@ -105,10 +107,10 @@ class LoginInvalido(Exception):
 class MuitasTentativas(Exception):
     """Limite estourado (pedidos de código, senhas ou códigos errados). `mensagem` já vem pronta para a tela."""
 
-    def __init__(self, segundos: int):
+    def __init__(self, segundos: int, agora: datetime | None = None, motivo: str | None = None):
         super().__init__(f"Tente de novo em {segundos} segundos.")
         self.segundos = segundos
-        self.mensagem = _frase_de_espera(segundos)
+        self.mensagem = _frase_de_espera(segundos, agora, motivo)
 
 
 class LimiteDoDia(Exception):
@@ -166,10 +168,13 @@ def _hash_do_codigo(aluno_id: int, codigo: str) -> str:
     return _hash(f"{aluno_id}:{codigo}")
 
 
-def _frase_de_espera(segundos: int) -> str:
+def _frase_de_espera(segundos: int, agora: datetime | None = None, motivo: str | None = None) -> str:
+    """Espera curta: em segundos. Longa: o motivo e o HORÁRIO (de Vila Velha) em que libera, que é o que o aluno precisa saber."""
     if segundos < 90:
         return f"Muitas tentativas. Espere {segundos} segundos e tente de novo."
-    return f"Muitas tentativas. Tente de novo em {math.ceil(segundos / 60)} minutos."
+    minutos = math.ceil(segundos / 60)
+    libera = (_agora(agora) + timedelta(seconds=segundos)).astimezone(datas.FUSO_DA_ACADEMIA)
+    return f"{motivo or 'Muitas tentativas.'} Tente de novo às {libera:%H:%M} (daqui a {minutos} minutos)."
 
 
 _hash_de_mentira: str | None = None
@@ -217,13 +222,12 @@ def _chave_do_endereco(endereco: str | None) -> str:
     return "ip:" + _hash(endereco or "?")
 
 
-def _conferir_limites(
-    conn: sqlite3.Connection, tipo: str, regras: list[tuple[str, int, timedelta]], agora: datetime
-) -> None:
+def _conferir_limites(conn: sqlite3.Connection, tipo: str, regras: list[tuple], agora: datetime) -> None:
     """Levanta MuitasTentativas se alguma regra (chave, limite, janela) já estourou. Não registra nada (quem bloqueia
     não alimenta o próprio bloqueio: senão ele nunca terminaria)."""
-    espera = 0
-    for chave, limite, janela in regras:
+    espera, motivo = 0, None
+    for regra in regras:
+        chave, limite, janela = regra[:3]
         momentos = [
             _momento(linha[0])
             for linha in conn.execute(
@@ -234,9 +238,11 @@ def _conferir_limites(
         if len(momentos) >= limite:
             # Libera quando o evento que deixa a conta em "limite - 1" sai da janela.
             libera_em = momentos[len(momentos) - limite] + janela
-            espera = max(espera, 1, math.ceil((libera_em - agora).total_seconds()))
+            esta = max(1, math.ceil((libera_em - agora).total_seconds()))
+            if esta > espera:
+                espera, motivo = esta, (regra[3] if len(regra) > 3 else None)
     if espera:
-        raise MuitasTentativas(espera)
+        raise MuitasTentativas(espera, agora, motivo)
 
 
 def _registrar(conn: sqlite3.Connection, tipo: str, chaves: list[str], agora: datetime) -> None:
@@ -292,7 +298,7 @@ def pedir_codigo(
         "pedido_codigo",
         [
             (chave_cpf, 1, INTERVALO_ENTRE_PEDIDOS),
-            (chave_cpf, PEDIDOS_POR_CPF_POR_DIA, timedelta(days=1)),
+            (chave_cpf, PEDIDOS_POR_CPF, JANELA_DE_PEDIDOS, f"Você já pediu {PEDIDOS_POR_CPF} códigos na última hora."),
             (chave_endereco, PEDIDOS_POR_ENDERECO_POR_HORA, timedelta(hours=1)),
         ],
         agora,

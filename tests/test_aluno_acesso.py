@@ -244,14 +244,27 @@ def test_o_limite_de_um_pedido_por_minuto_vale_tambem_para_cpf_que_nao_existe(co
         _pedir(conn, CPF_INEXISTENTE, quando=_mais(seconds=10))
 
 
-def test_cinco_pedidos_por_dia_por_cpf(conn):
+def test_cinco_pedidos_por_hora_por_cpf_e_a_mensagem_diz_o_horario(conn):
+    # 04/11/2026: a janela era de 24 h e prendeu uma aluna um dia inteiro; o Thiago escolheu 1 hora.
     for i in range(5):
         assert _pedir(conn, quando=_mais(minutes=2 * i)) is not None
 
     with pytest.raises(MuitasTentativas) as erro:
         _pedir(conn, quando=_mais(minutes=11))
-    assert erro.value.segundos > 3600  # só libera quando o primeiro pedido do dia sair da janela de 24 h
-    assert _pedir(conn, quando=_mais(days=1, minutes=1)) is not None
+    assert 48 * 60 < erro.value.segundos <= 49 * 60  # libera quando o 1º pedido (minuto 0) faz 1 hora
+    # AGORA = 15:00 UTC = 12:00 em Vila Velha; libera às 13:00 de lá
+    assert erro.value.mensagem == "Você já pediu 5 códigos na última hora. Tente de novo às 13:00 (daqui a 49 minutos)."
+    assert _pedir(conn, quando=_mais(minutes=60, seconds=1)) is not None
+
+
+def test_a_janela_de_pedidos_nao_e_mais_de_um_dia(conn):
+    assert aluno_acesso.JANELA_DE_PEDIDOS == timedelta(hours=1)
+    assert aluno_acesso.PEDIDOS_POR_CPF == 5
+
+
+def test_espera_longa_sem_motivo_mostra_o_horario_em_vila_velha():
+    erro = MuitasTentativas(15 * 60, agora=AGORA)
+    assert erro.mensagem == "Muitas tentativas. Tente de novo às 12:15 (daqui a 15 minutos)."
 
 
 def test_limite_por_endereco_pega_quem_testa_muitos_cpfs(conn, monkeypatch):
