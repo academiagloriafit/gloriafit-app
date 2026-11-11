@@ -49,15 +49,32 @@ def foto_do_exercicio(nome: object) -> str | None:
     return foto if foto and _NOME_VALIDO.fullmatch(foto) else None
 
 
-def fotos_por_id(conn: sqlite3.Connection) -> dict[str, str]:
-    """{id do exercício (texto): nome do par de fotos} de todos os exercícios que têm foto.
+PASTA_DAS_ILUSTRACOES = Path(__file__).resolve().parent / "static" / "ilustracoes"
 
-    A tela de lançar treino (visual novo, 11/11/2026) põe a foto pequena ao lado de cada exercício da ficha. Os exercícios
-    chegam lá por vários caminhos (lista, importar, IA, fila, editar), mas todos trazem o id: por isso o mapa é por id.
+
+def miniatura_do_exercicio(nome: object) -> str | None:
+    """A imagem pequena do exercício, como caminho dentro de /static, ou None.
+
+    Lançar treino, visual novo (11/11/2026): primeiro a ilustração (gerada no Canva, homem e mulher alternando, em
+    static/ilustracoes/<par>.jpg); se o exercício ainda não tem ilustração, a foto inicial de "como fazer".
+    """
+    foto = foto_do_exercicio(nome)
+    if not foto:
+        return None
+    if (PASTA_DAS_ILUSTRACOES / f"{foto}.jpg").is_file():
+        return f"ilustracoes/{foto}.jpg"
+    return f"exercicios/{foto}_0.jpg"
+
+
+def fotos_por_id(conn: sqlite3.Connection) -> dict[str, str]:
+    """{id do exercício (texto): caminho da miniatura} de todos os exercícios que têm imagem.
+
+    A tela de lançar treino põe a imagem pequena ao lado de cada exercício da ficha. Os exercícios chegam lá por vários
+    caminhos (lista, importar, IA, fila, editar), mas todos trazem o id: por isso o mapa é por id.
     """
     fotos = {}
     for exercicio_id, nome in conn.execute("SELECT id, nome FROM exercicio"):
-        foto = foto_do_exercicio(nome)
-        if foto:
-            fotos[str(exercicio_id)] = foto
+        caminho = miniatura_do_exercicio(nome)
+        if caminho:
+            fotos[str(exercicio_id)] = caminho
     return fotos

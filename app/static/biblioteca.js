@@ -46,7 +46,7 @@ export function iniciarBiblioteca(raiz, opcoes = {}) {
 
     texto.appendChild(nome);
     texto.appendChild(detalhe);
-    if (pastaDasFotos) li.appendChild(criarMiniatura(pastaDasFotos, ex.foto));
+    if (pastaDasFotos) li.appendChild(criarMiniatura(pastaDasFotos, ex.miniatura));
     li.appendChild(texto);
 
     if (aoAdicionar) {

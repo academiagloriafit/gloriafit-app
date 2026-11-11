@@ -14,7 +14,7 @@
 
   {# data-grupos: os grupos de cada exercício (resumo da semana). data-cargas: a última carga que o aluno anotou no celular em cada exercício ({id: {carga, dia}}); aparece embaixo do exercício
      na montagem. Vai num atributo (e não num <script>) porque a página não aceita script embutido. O tojson escapa as aspas. #}
-  <main class="pagina pagina-larga tela-treino montador-novo" data-aluno="{{ aluno.id }}" data-hoje="{{ hoje }}"{% if treino_ativo %} data-treino-ativo="{{ treino_ativo.nome }}"{% endif %} data-cargas='{{ cargas_do_aluno | tojson }}' data-grupos='{{ grupos_dos_exercicios | tojson }}' data-fotos='{{ fotos_dos_exercicios | tojson }}' data-pasta-fotos="{{ url_for('static', filename='exercicios/') }}">
+  <main class="pagina pagina-larga tela-treino montador-novo" data-aluno="{{ aluno.id }}" data-hoje="{{ hoje }}"{% if treino_ativo %} data-treino-ativo="{{ treino_ativo.nome }}"{% endif %} data-cargas='{{ cargas_do_aluno | tojson }}' data-grupos='{{ grupos_dos_exercicios | tojson }}' data-fotos='{{ fotos_dos_exercicios | tojson }}' data-pasta-fotos="{{ url_for('static', filename='') }}">
     <div class="titulo-tela">
       <h1 class="titulo-pagina">Lançar treino</h1>
       <p class="aluno-nome">Aluno: <strong>{{ aluno.nome }}</strong></p>

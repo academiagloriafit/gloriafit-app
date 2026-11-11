@@ -2487,3 +2487,8 @@ img.avatar-foto { cursor: zoom-in; }
 @media (max-width: 700px) { .montador-novo .cabecalho-treino { grid-template-columns: minmax(0, 1fr); } }
 .montador-novo .linhas .miniatura-exercicio { width: 48px; height: 36px; }
 .montador-novo .linha-nome { gap: 8px; font-size: 14.5px; }
+.miniatura-exercicio:has(img[src*="/ilustracoes/"]) { background: #fff; border: 1px solid var(--linha); }
+.miniatura-exercicio img[src*="/ilustracoes/"] { object-fit: contain; }
+.montador-novo .linhas .miniatura-exercicio, .montador-novo .painel-biblioteca .miniatura-exercicio { width: 60px; height: 45px; }
+.montador-novo .linhas .miniatura-exercicio { width: 52px; height: 39px; }
+.montador-novo .linha-nome-texto { overflow-wrap: break-word; hyphens: manual; }

@@ -104,13 +104,24 @@ def test_fotos_por_id_e_a_api_da_lista_trazem_a_foto(tmp_path):
     c.execute("INSERT INTO exercicio (id, nome, origem) VALUES (1, '(7) VOADOR', 'app'), (2, 'CORRIDA NA ESTEIRA', 'app')")
     c.execute("INSERT INTO aluno (id, nome, cpf, situacao, data4u_id) VALUES (1, 'ANA', '00000000001', 'A', 1)")
     c.commit()
-    assert fotos_exercicios.fotos_por_id(c) == {"1": "Butterfly"}  # sem foto: fica de fora
+    assert fotos_exercicios.fotos_por_id(c) == {"1": "ilustracoes/Butterfly.jpg"}  # sem imagem: fica de fora
     token = acesso.autorizar(c, acesso.gerar_codigo(c, "Teste").codigo).token
     c.close()
     navegador = criar_app(caminho).test_client()
     navegador.set_cookie(acesso.NOME_DO_COOKIE, token)
-    lista = {e["nome"]: e["foto"] for e in navegador.get("/api/exercicios").get_json()["exercicios"]}
-    assert lista == {"VOADOR": "Butterfly", "CORRIDA NA ESTEIRA": None}
+    lista = {e["nome"]: e["miniatura"] for e in navegador.get("/api/exercicios").get_json()["exercicios"]}
+    assert lista == {"VOADOR": "ilustracoes/Butterfly.jpg", "CORRIDA NA ESTEIRA": None}
     html = navegador.get("/alunos/1/montar").get_data(as_text=True)
-    assert "data-fotos='{\"1\": \"Butterfly\"}'" in html and 'data-pasta-fotos="/static/exercicios/"' in html
+    assert "data-fotos='{\"1\": \"ilustracoes/Butterfly.jpg\"}'" in html and 'data-pasta-fotos="/static/"' in html
     assert "montador-novo" in html
+
+
+def test_todo_par_de_fotos_tem_ilustracao_e_ela_e_preferida(monkeypatch, tmp_path):
+    """As 51 ilustrações do Canva (11/11/2026): uma para cada par do mapa; sem ilustração, volta para a foto."""
+    pares = set(json.loads(ARQUIVO_DO_MAPA.read_text(encoding="utf-8")).values())
+    for par in pares:
+        assert (fotos_exercicios.PASTA_DAS_ILUSTRACOES / f"{par}.jpg").is_file(), par
+    assert fotos_exercicios.miniatura_do_exercicio("VOADOR") == "ilustracoes/Butterfly.jpg"
+    assert fotos_exercicios.miniatura_do_exercicio("CORRIDA NA ESTEIRA") is None
+    monkeypatch.setattr(fotos_exercicios, "PASTA_DAS_ILUSTRACOES", tmp_path)  # pasta vazia: sem ilustração
+    assert fotos_exercicios.miniatura_do_exercicio("VOADOR") == "exercicios/Butterfly_0.jpg"
