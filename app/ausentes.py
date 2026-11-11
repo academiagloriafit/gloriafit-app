@@ -38,14 +38,14 @@ def _link_do_whatsapp(digitos: str | None) -> str | None:
     return f"https://wa.me/55{digitos}"
 
 
-def listar(conn: sqlite3.Connection, dias: int = PRAZO_PADRAO, agora: datetime | None = None) -> dict:
+def listar(conn: sqlite3.Connection, dias: int = PRAZO_PADRAO, agora: datetime | None = None, limite: int | None = None) -> dict:
     """Os que estão há `dias` dias ou mais sem treinar, os mais sumidos primeiro, em duas listas.
 
     {"dias", "total_com_treino" (alunos com treino ativo: a base da conta),
      "total" e "alunos": quem já registrou treino e parou, "total_sem_registro" e "sem_registro": quem nunca registrou nenhum}.
     Cada aluno: {"id", "nome", "provisorio", "treino", "ultima" ('22/10/2026' ou None), "dias" (inteiro), "nunca" (bool: nenhuma
     marcação ainda; "dias" conta desde "desde"), "desde" (início do treino, só se nunca), "whatsapp", "whatsapp_link"}.
-    As duas listas mostram no máximo `LIMITE_DA_LISTA` cada; os totais são os reais.
+    As duas listas mostram no máximo `limite` (padrão `LIMITE_DA_LISTA`) cada; os totais são os reais.
     """
     dia_de_hoje = ler_dia(hoje(agora))
     linhas = conn.execute(
@@ -84,11 +84,12 @@ def listar(conn: sqlite3.Connection, dias: int = PRAZO_PADRAO, agora: datetime |
         )
     for lista in (com_registro, sem_registro):
         lista.sort(key=lambda a: (-a["dias"], a["nome"], a["id"]))
+    corte = LIMITE_DA_LISTA if limite is None else limite
     return {
         "dias": dias,
         "total_com_treino": len(linhas),
         "total": len(com_registro),
-        "alunos": com_registro[:LIMITE_DA_LISTA],
+        "alunos": com_registro[:corte],
         "total_sem_registro": len(sem_registro),
-        "sem_registro": sem_registro[:LIMITE_DA_LISTA],
+        "sem_registro": sem_registro[:corte],
     }

@@ -2,6 +2,7 @@
 // digitação e desenha as linhas. Cada linha é um link para a ficha do aluno.
 import { MENSAGEM_NAO_AUTORIZADO } from "./api.js";
 import { iniciais, nomeDePessoa } from "./nomes.js";
+import { andamentoDoAluno, filtroValido, parametrosDaBusca, textoDoUltimoTreino, ultimoTreinoEmAlerta } from "./painel_alunos_modelo.js";
 
 const campo = document.getElementById("busca-aluno");
 const lista = document.getElementById("lista-alunos");
@@ -9,6 +10,8 @@ const resumo = document.getElementById("resumo-alunos");
 
 let temporizador = null;
 let pedidoAtual = null; // para cancelar a busca anterior se o usuário digitar mais
+let filtroAtual = ""; // (11/11/2026) o cartão ou a aba escolhida: só aqueles alunos aparecem na lista
+const botoesDeFiltro = [...document.querySelectorAll("[data-filtro]")];
 
 // valor ausente: a célula mostra "—" e ganha a classe "sem-valor" (no celular ela some)
 function celula(classe, texto, ausente = false) {
@@ -57,7 +60,33 @@ function celulaDoNome(aluno) {
     circulo = celula("avatar-aluno", iniciais(aluno.nome));
     circulo.setAttribute("aria-hidden", "true");
   }
-  caixa.append(circulo, document.createTextNode(nomeDePessoa(aluno.nome)));
+  const texto = celula("aluno-nome-texto", "");
+  texto.append(celula("aluno-nome-principal", nomeDePessoa(aluno.nome)));
+  texto.append(celula("aluno-nome-matricula", Number.isInteger(aluno.matricula) ? `Matrícula ${aluno.matricula}` : aluno.provisorio ? "Provisório" : "Sem matrícula"));
+  caixa.append(circulo, texto);
+  return caixa;
+}
+
+// A barra "18 de 30 sessões" do treino ativo (a largura vai pelo CSSOM: a política de segurança não bloqueia).
+function celulaDoAndamento(aluno) {
+  const andamento = andamentoDoAluno(aluno);
+  if (!andamento.texto) return celula("aluno-andamento", "—", true);
+  const caixa = celula("aluno-andamento", "");
+  if (andamento.fracao !== null) {
+    const barra = celula("aluno-barra", "");
+    barra.append(celula("aluno-barra-cheia", ""));
+    barra.style.setProperty("--progresso", String(andamento.fracao));
+    caixa.append(barra);
+  }
+  caixa.append(celula("aluno-andamento-texto", andamento.texto));
+  return caixa;
+}
+
+// "Há 9 dias" em laranja quando o aluno está sumindo; só aparece para quem tem treino.
+function celulaDoUltimo(aluno) {
+  if (!aluno.treino_atual && !Number.isInteger(aluno.dias_sem_treinar)) return celula("aluno-ultimo", "—", true);
+  const caixa = celula("aluno-ultimo", textoDoUltimoTreino(aluno.dias_sem_treinar));
+  if (ultimoTreinoEmAlerta(aluno.dias_sem_treinar)) caixa.classList.add("aluno-ultimo-alerta");
   return caixa;
 }
 
@@ -71,12 +100,11 @@ function desenharLinha(aluno) {
 
   link.append(
     celulaDoNome(aluno),
-    Number.isInteger(aluno.matricula)
-      ? celula("aluno-matricula", String(aluno.matricula))
-      : celula("aluno-matricula", "—", true),
-    celula("aluno-treino", aluno.ultimo_treino || "Sem treino"),
-    aluno.atualizado_em ? celula("aluno-data", aluno.atualizado_em) : celula("aluno-data", "—", true),
+    aluno.treino_atual ? celula("aluno-treino", aluno.treino_atual) : celula("aluno-treino", "Sem treino ativo", true),
+    celulaDoAndamento(aluno),
+    celulaDoUltimo(aluno),
     celulaDaSituacao(aluno),
+    celula("aluno-abrir", "Abrir ficha"),
   );
   li.append(link);
   return li;
@@ -102,16 +130,14 @@ function buscar() {
   if (pedidoAtual) pedidoAtual.abort();
   pedidoAtual = new AbortController();
   const texto = campo.value.trim();
-  const parametros = new URLSearchParams();
-  if (texto) parametros.set("q", texto);
 
-  fetch("/api/alunos?" + parametros.toString(), { signal: pedidoAtual.signal })
+  fetch("/api/alunos?" + parametrosDaBusca(texto, filtroAtual), { signal: pedidoAtual.signal })
     .then((resposta) => {
       if (resposta.status === 401) throw new Error("nao-autorizado");
       if (!resposta.ok) throw new Error("Erro " + resposta.status);
       return resposta.json();
     })
-    .then((resultado) => desenhar(resultado, texto !== ""))
+    .then((resultado) => desenhar(resultado, texto !== "" || filtroAtual !== ""))
     .catch((erro) => {
       if (erro.name === "AbortError") return; // busca antiga cancelada: normal
       lista.textContent = "";
@@ -125,5 +151,13 @@ campo.addEventListener("input", () => {
   clearTimeout(temporizador);
   temporizador = setTimeout(buscar, 200);
 });
+
+// Cartões do alto e abas: um clique filtra; clicar de novo no mesmo cartão volta para "Todos".
+function escolherFiltro(filtro) {
+  filtroAtual = filtro === filtroAtual ? "" : filtroValido(filtro);
+  for (const botao of botoesDeFiltro) botao.setAttribute("aria-pressed", String(botao.dataset.filtro === filtroAtual));
+  buscar();
+}
+for (const botao of botoesDeFiltro) botao.addEventListener("click", () => escolherFiltro(botao.dataset.filtro));
 
 buscar();

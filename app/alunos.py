@@ -70,7 +70,9 @@ def data_local(texto_utc: str | None) -> str | None:
 # ------------------------------------------------------------------ busca
 
 
-def buscar_alunos(conn: sqlite3.Connection, texto: str = "", limite: int = LIMITE_PADRAO) -> dict:
+def buscar_alunos(
+    conn: sqlite3.Connection, texto: str = "", limite: int = LIMITE_PADRAO, *, so_ids: set[int] | None = None, so_ativos: bool = False
+) -> dict:
     """Busca alunos por nome, CPF ou matrícula.
 
     - Só números (com ou sem pontos e traço): procura esses números no CPF e também
@@ -114,10 +116,19 @@ def buscar_alunos(conn: sqlite3.Connection, texto: str = "", limite: int = LIMIT
         for termo in normalizar(texto).split():
             condicoes.append("sem_acento(a.nome) LIKE ? ESCAPE '\\'")
             parametros_onde.append(f"%{_escapar_like(termo)}%")
+    # Filtros da tela nova (11/11/2026): `so_ids` = só estes alunos (o filtro já foi calculado em app/painel_alunos.py);
+    # `so_ativos` = só situação Ativo. Os ids são inteiros que o próprio servidor calculou e vão nos "?".
+    if so_ativos:
+        condicoes.append("a.situacao = 'A'")
+    if so_ids is not None:
+        ids = sorted(i for i in so_ids if isinstance(i, int))
+        condicoes.append(f"a.id IN ({','.join('?' * len(ids))})" if ids else "0 = 1")
+        parametros_onde.extend(ids)
+    filtrou_so_por_lista = bool(condicoes) and not texto.strip()
     onde = " AND ".join(condicoes) if condicoes else "1 = 1"
 
     em_uso = "CASE WHEN a.provisorio = 1 OR a.situacao IN ('A', 'T', 'P') THEN 0 ELSE 1 END"
-    if condicoes:
+    if condicoes and not filtrou_so_por_lista:
         partes_da_ordem = []
         if matricula_digitada is not None:
             partes_da_ordem.append("CASE WHEN a.data4u_id = ? THEN 0 ELSE 1 END")

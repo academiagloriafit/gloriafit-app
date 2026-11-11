@@ -5,7 +5,9 @@
   <div class="topo-conteudo">
     <div class="topo-esquerda">
       {# símbolo oficial com os halteres (PDF da marca), halteres em cinza-claro para o fundo grafite (opção A, Thiago 29/10/2026) #}
-      <div class="marca marca-halteres"><img src="{{ url_for('static', filename='marca/simbolo-halteres-fundo-escuro.png') }}" alt="" width="68" height="34"><span>Glória Fit</span></div>
+      <div class="marca marca-halteres"><img class="marca-simbolo" src="{{ url_for('static', filename='marca/simbolo-halteres-fundo-escuro.png') }}" alt="" width="68" height="34"><span>Glória Fit</span></div>
+      {# 11/11/2026: a coluna do menu ficou clara e larga (tela "Alunos" nova); nela vai o logo OFICIAL completo, versão para fundo claro #}
+      <img class="marca-completa" src="{{ url_for('static', filename='marca/logo-completo-fundo-claro.png') }}" alt="Academia Glória Fit" width="384" height="278">
       <nav class="topo-menu" aria-label="Principal">
         <a class="menu-alunos{% if menu_ativo == 'alunos' %} ativo{% endif %}" href="{{ url_for('pagina_alunos') }}"{% if menu_ativo == "alunos" %} aria-current="page"{% endif %}>Alunos</a>
         <a class="menu-pendencias{% if menu_ativo == 'pendencias' %} ativo{% endif %}" href="{{ url_for('pagina_pendencias') }}"{% if menu_ativo == "pendencias" %} aria-current="page"{% endif %}>Pendências{% set pend = pendencias_total() %}{% if pend %}<span class="contador-menu contador-pendencias">{{ pend }}<span class="so-leitor"> para resolver</span></span>{% endif %}</a>

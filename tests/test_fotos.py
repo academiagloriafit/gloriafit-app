@@ -411,7 +411,9 @@ def test_foto_escolhida_segue_a_regra_da_catraca_e_fica_no_trancamento(conn):
 
 def test_menu_do_professor_tem_o_simbolo_com_halteres(caminho):
     html = _autorizado(caminho).get("/alunos").get_data(as_text=True)
-    assert 'class="marca marca-halteres"><img src="/static/marca/simbolo-halteres-fundo-escuro.png"' in html
+    # (11/11/2026) a coluna do menu ficou clara e larga com o logo oficial COMPLETO; o símbolo continua para a faixa do celular
+    assert 'class="marca marca-halteres"><img class="marca-simbolo" src="/static/marca/simbolo-halteres-fundo-escuro.png"' in html
+    assert 'class="marca-completa" src="/static/marca/logo-completo-fundo-claro.png"' in html
     assert _autorizado(caminho).get("/static/marca/simbolo-halteres-fundo-escuro.png").status_code == 200
 
 

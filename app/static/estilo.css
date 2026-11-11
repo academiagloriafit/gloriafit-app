@@ -2322,3 +2322,75 @@ img.avatar-foto { cursor: zoom-in; }
 .entrar-link:hover { background: none; text-decoration: underline; }
 .entrar-ajuda { margin: 0; text-align: center; font-size: 14px; color: var(--texto-suave); }
 .pagina-entrar .aviso-campo:empty { display: none; }
+
+/* ---------- Portal do professor, visual novo (11/11/2026): mescla das opções C e E do Canva ----------
+   O menu vira uma coluna clara e larga com o logo oficial completo; a tela "Alunos" ganha os números do alto (que são filtros),
+   abas, e a lista com treino atual, andamento e último treino feito. */
+.marca-completa { display: none; }
+@media (min-width: 641px) {
+  .tema-grafite body:has(> .topo) { padding-left: 228px; }
+  .tema-grafite .topo { width: 228px; background: #ffffff; color: #3c3e40; border-right: 1px solid #e6e8eb; }
+  .tema-grafite .topo-conteudo { padding: 22px 14px 16px; align-items: stretch; }
+  .tema-grafite .topo-esquerda { align-items: stretch; gap: 26px; }
+  .tema-grafite .marca-halteres { display: none; }
+  .tema-grafite .marca-completa { display: block; width: 150px; height: auto; margin: 0 auto; }
+  .tema-grafite .topo-menu { align-items: stretch; gap: 4px; }
+  .tema-grafite .topo-menu a { width: auto; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 14px; font-size: 15px; font-weight: 600; text-align: left; color: #3c3e40; }
+  .tema-grafite .topo-menu a:hover { background: #f3f4f5; color: #0d0d0d; }
+  .tema-grafite .topo-menu a.ativo { background: #fff1ea; color: #c4400d; font-weight: 800; }
+  .tema-grafite .topo-menu a.ativo::before { background: #f25420; }
+  .tema-grafite .topo-menu .contador-menu { position: static; margin-left: auto; }
+  .tema-grafite .topo-nota { color: #8f9398; }
+}
+
+/* a tela "Alunos" */
+.painel-alunos { display: flex; flex-direction: column; gap: 18px; }
+.painel-alunos-topo { display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; align-items: end; gap: 12px 20px; }
+.painel-saudacao { margin: 0 0 2px; font-size: 14px; font-weight: 600; color: var(--texto-suave); }
+.painel-alunos .titulo-grande { margin: 0; }
+.painel-alunos .campo-busca-aluno { margin: 0; }
+.painel-alunos .campo-busca-aluno input { height: 48px; padding-left: 42px; background: var(--papel) url("menu/busca.svg") 14px center / 18px no-repeat; }
+.painel-provisorio { min-height: 48px; white-space: nowrap; }
+.painel-numeros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.painel-numero { display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 16px 18px; border: 1px solid var(--linha); border-radius: 16px; background: var(--papel); color: var(--texto); font: inherit; text-align: left; cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; }
+.painel-numero::before { content: ""; grid-row: span 2; width: 44px; height: 44px; border-radius: 50%; background: #f3f4f5 var(--icone-numero) center / 22px no-repeat; }
+.painel-numero:hover { border-color: var(--contorno-suave); }
+.painel-numero[aria-pressed="true"] { border-color: #f25420; box-shadow: 0 0 0 3px rgba(242, 84, 32, 0.15); }
+.painel-numero[aria-pressed="true"]::before { background-color: #fff1ea; }
+.painel-numero:focus-visible, .painel-aba:focus-visible { outline: 2px solid #f25420; outline-offset: 2px; }
+.painel-numero-valor { font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 32px; line-height: 1; font-variant-numeric: tabular-nums; }
+.painel-numero-rotulo { font-size: 13.5px; font-weight: 600; color: var(--texto-suave); }
+.numero-ativos { --icone-numero: url("menu/alunos.svg"); }
+.numero-hoje { --icone-numero: url("menu/halter.svg"); }
+.numero-trocar { --icone-numero: url("menu/atualizar.svg"); }
+.numero-comentarios { --icone-numero: url("menu/comentarios.svg"); }
+.painel-lista { padding: 0; overflow: hidden; }
+.painel-abas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--linha); }
+.painel-aba { min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: none; color: var(--texto-suave); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.painel-aba:hover { background: #f3f4f5; color: var(--texto); }
+.painel-aba[aria-pressed="true"] { background: #fff1ea; color: #c4400d; }
+.painel-aba-contador { margin-left: 4px; color: #f25420; }
+.painel-abas .resumo { margin: 0 0 0 auto; }
+/* as colunas da lista: aluno | treino atual | andamento | último treino | situação | abrir */
+.painel-alunos .titulos-painel, .painel-alunos .linha-aluno { display: grid; grid-template-columns: minmax(220px, 2.2fr) minmax(120px, 1.3fr) minmax(150px, 1.4fr) minmax(110px, 1fr) minmax(90px, 0.8fr) 92px; column-gap: 16px; align-items: center; }
+.painel-alunos .titulos-painel { padding: 10px 20px; font-size: 12.5px; font-weight: 700; color: var(--texto-suave); background: #fafafb; border-bottom: 1px solid var(--linha); }
+.painel-alunos .linha-aluno { padding: 12px 20px; }
+.aluno-nome-texto { display: flex; flex-direction: column; min-width: 0; }
+.aluno-nome-principal { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aluno-nome-matricula { font-size: 12.5px; color: var(--texto-suave); }
+.aluno-andamento { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.aluno-barra { --progresso: 0; display: block; width: 100%; max-width: 160px; height: 7px; border-radius: 999px; background: #eceef0; overflow: hidden; }
+.aluno-barra-cheia { display: block; height: 100%; width: calc(var(--progresso) * 100%); border-radius: inherit; background: #f25420; }
+.aluno-andamento-texto { font-size: 12.5px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+.aluno-ultimo { font-size: 14px; font-weight: 600; }
+.aluno-ultimo-alerta { color: #c4400d; }
+.aluno-abrir { justify-self: end; font-size: 14px; font-weight: 700; color: #c4400d; }
+.linha-aluno:hover .aluno-abrir { text-decoration: underline; }
+@media (max-width: 1100px) {
+  .painel-numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .painel-alunos .titulos-painel { display: none; }
+  .painel-alunos .linha-aluno { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .painel-alunos .linha-aluno .aluno-treino, .painel-alunos .linha-aluno .aluno-andamento, .painel-alunos .linha-aluno .aluno-ultimo { grid-column: 1; }
+  .painel-alunos .linha-aluno .aluno-abrir { display: none; }
+}
+@media (max-width: 760px) { .painel-alunos-topo { grid-template-columns: 1fr; } }

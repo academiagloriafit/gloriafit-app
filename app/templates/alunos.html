@@ -12,38 +12,45 @@
   {% set menu_ativo = "alunos" %}
   {% include "_topo.html" %}
 
-  <main class="pagina pagina-larga">
-    <h1 class="titulo-grande">Buscar aluno</h1>
+  {# Visual novo (11/11/2026): mescla das opções C e E do Canva. No alto, os números (cada um é também um filtro da lista);
+     embaixo, abas pequenas e a lista com o treino atual, o andamento (sessões feitas / meta) e há quantos dias o aluno treinou. #}
+  <main class="pagina pagina-larga painel-alunos">
+    <div class="painel-alunos-topo">
+      <div>
+        <p class="painel-saudacao">{{ saudacao }}!</p>
+        <h1 class="titulo-grande">Alunos</h1>
+      </div>
+      <div class="campo campo-busca-aluno">
+        <label for="busca-aluno" class="so-leitor">Nome, CPF ou matrícula</label>
+        <input id="busca-aluno" type="search" placeholder="Buscar por nome, CPF ou matrícula" autocomplete="off" maxlength="100" autofocus>
+      </div>
+      <a class="botao-link botao-link-forte painel-provisorio" href="{{ url_for('pagina_novo_aluno') }}" title="Quem acabou de se matricular só aparece no dia seguinte: cadastre como provisório para montar o treino agora.">+ Aluno provisório</a>
+    </div>
 
     {% for aviso in avisos_de_atraso %}
     <p class="aviso-importado aviso-importado-atencao" role="status">{{ aviso }}</p>
     {% endfor %}
 
-    <div class="campo campo-busca-aluno">
-      <label for="busca-aluno">Nome, CPF ou matrícula</label>
-      <input id="busca-aluno" type="search" placeholder="Digite para buscar" autocomplete="off" maxlength="100" autofocus>
+    <div class="painel-numeros" role="group" aria-label="Resumo e filtros">
+      <button type="button" class="painel-numero numero-ativos" data-filtro="ativos" aria-pressed="false"><span class="painel-numero-valor">{{ numeros.ativos }}</span><span class="painel-numero-rotulo">Alunos ativos</span></button>
+      <button type="button" class="painel-numero numero-hoje" data-filtro="hoje" aria-pressed="false"><span class="painel-numero-valor">{{ numeros.hoje }}</span><span class="painel-numero-rotulo">Treinaram hoje</span></button>
+      <button type="button" class="painel-numero numero-trocar" data-filtro="trocar" aria-pressed="false"><span class="painel-numero-valor">{{ numeros.trocar }}</span><span class="painel-numero-rotulo">Hora de trocar o treino</span></button>
+      <button type="button" class="painel-numero numero-comentarios" data-filtro="comentarios" aria-pressed="false"><span class="painel-numero-valor">{{ numeros.comentarios }}</span><span class="painel-numero-rotulo">Comentários novos</span></button>
     </div>
 
-    <div class="montagem-grade">
-      <section class="cartao-lista painel-treinos" aria-labelledby="titulo-resultados">
-        <div class="cabecalho-lista">
-          <h2 id="titulo-resultados">Alunos encontrados</h2>
-          <p class="resumo" id="resumo-alunos" aria-live="polite"></p>
-        </div>
-        <div class="titulos-alunos" aria-hidden="true">
-          <span>Aluno</span><span>Matrícula</span><span>Último treino</span><span>Atualizado</span><span>Situação</span>
-        </div>
-        <ul class="linhas" id="lista-alunos"></ul>
-      </section>
-
-      <aside class="coluna-lateral aluno-novo" aria-labelledby="titulo-aluno-novo">
-        <section class="painel">
-          <h2 id="titulo-aluno-novo">Aluno novo?</h2>
-          <p class="dica">Quem acabou de se matricular só aparece aqui no dia seguinte. Cadastre como provisório para montar o treino agora.</p>
-          <a class="botao-link botao-link-forte botao-largo botao-centro" href="{{ url_for('pagina_novo_aluno') }}">Cadastrar aluno provisório</a>
-        </section>
-      </aside>
-    </div>
+    <section class="cartao-lista painel-treinos painel-lista" aria-labelledby="titulo-resultados">
+      <div class="painel-abas" role="group" aria-label="Mostrar">
+        <button type="button" class="painel-aba" data-filtro="" aria-pressed="true">Todos</button>
+        <button type="button" class="painel-aba" data-filtro="sumiram" aria-pressed="false">Sumiram há {{ numeros.dias_sumido }}+ dias <span class="painel-aba-contador">{{ numeros.sumiram }}</span></button>
+        <button type="button" class="painel-aba" data-filtro="sem_treino" aria-pressed="false">Sem treino <span class="painel-aba-contador">{{ numeros.sem_treino }}</span></button>
+        <h2 id="titulo-resultados" class="so-leitor">Alunos encontrados</h2>
+        <p class="resumo" id="resumo-alunos" aria-live="polite"></p>
+      </div>
+      <div class="titulos-alunos titulos-painel" aria-hidden="true">
+        <span>Aluno</span><span>Treino atual</span><span>Andamento</span><span>Último treino feito</span><span>Situação</span><span></span>
+      </div>
+      <ul class="linhas" id="lista-alunos"></ul>
+    </section>
   </main>
 
   <script type="module" src="{{ url_for('static', filename='alunos.js') }}"></script>

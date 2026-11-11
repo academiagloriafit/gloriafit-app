@@ -41,6 +41,7 @@ from app import (
     importar_treinos,
     modelos,
     nomes,
+    painel_alunos,
     perfil_aluno,
     pendencias,
     provisorios,
@@ -795,15 +796,34 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     @app.get("/alunos")
     def pagina_alunos():
         """Tela de buscar aluno."""
-        return render_template("alunos.html", avisos_de_atraso=importacoes.avisos_de_atraso(conexao()))
+        return render_template(
+            "alunos.html",
+            avisos_de_atraso=importacoes.avisos_de_atraso(conexao()),
+            numeros=painel_alunos.numeros(conexao()),  # os cartões do alto (visual novo, 11/11/2026)
+            saudacao=perfil_aluno.saudacao_da_hora(),
+        )
 
     @app.get("/api/alunos")
     def api_alunos():
+        # `filtro` (11/11/2026): um dos cartões/abas da tela. Texto desconhecido = sem filtro.
+        filtro = request.args.get("filtro", "")
+        filtro = filtro if filtro in painel_alunos.FILTROS else ""
         resultado = alunos.buscar_alunos(
             conexao(),
             texto=request.args.get("q", ""),
             limite=inteiro_opcional("limite") or alunos.LIMITE_PADRAO,
+            so_ids=painel_alunos.ids_do_filtro(conexao(), filtro) if filtro and filtro != "ativos" else None,
+            so_ativos=filtro == "ativos",
         )
+        andamento = painel_alunos.andamento(conexao(), [aluno["id"] for aluno in resultado["alunos"]])
+        for aluno in resultado["alunos"]:
+            dados = andamento.get(aluno["id"], {})
+            aluno["treino_atual"] = dados.get("treino_atual")
+            aluno["sessoes_feitas"] = dados.get("feitas", 0)
+            aluno["sessoes_meta"] = dados.get("meta_total")
+            aluno["progresso"] = dados.get("progresso")
+            aluno["dias_sem_treinar"] = dados.get("dias_sem_treinar")
+        resultado["filtro"] = filtro
         return jsonify(resultado)
 
     @app.get("/alunos/atualizar")

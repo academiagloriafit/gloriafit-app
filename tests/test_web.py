@@ -545,7 +545,9 @@ def test_busca_api_sem_texto_lista_todos_e_nao_expoe_cpf(cliente_busca):
     dados = cliente_busca.get("/api/alunos").get_json()
 
     assert dados["total"] == 3
-    chaves = {"id", "nome", "provisorio", "matricula", "situacao", "situacao_nome", "ultimo_treino", "atualizado_em", "foto"}
+    chaves = {"id", "nome", "provisorio", "matricula", "situacao", "situacao_nome", "ultimo_treino", "atualizado_em", "foto",
+              # (11/11/2026) tela "Alunos" nova: treino ativo, andamento e há quantos dias o aluno treinou
+              "treino_atual", "sessoes_feitas", "sessoes_meta", "progresso", "dias_sem_treinar"}
     assert all(set(a) == chaves for a in dados["alunos"])
     assert "00000000001" not in cliente_busca.get("/api/alunos").get_data(as_text=True)
 

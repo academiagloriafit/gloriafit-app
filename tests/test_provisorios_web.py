@@ -97,9 +97,9 @@ def test_a_tela_nova_nao_atrapalha_a_ficha_de_aluno(cliente):
 def test_busca_de_alunos_tem_o_cartao_de_aluno_novo(cliente):
     html = cliente.get("/alunos").get_data(as_text=True)
 
-    assert "Aluno novo?" in html
+    # (11/11/2026) o cartão virou o botão "+ Aluno provisório" no alto da tela; a explicação ficou na dica do botão
     assert 'href="/alunos/novo"' in html
-    assert "Cadastrar aluno provisório" in html
+    assert "+ Aluno provisório" in html and "só aparece no dia seguinte" in html
 
 
 def test_sem_autorizacao_a_tela_e_a_api_ficam_fechadas(caminho):
