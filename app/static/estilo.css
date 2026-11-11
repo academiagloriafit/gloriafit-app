@@ -2232,3 +2232,46 @@ img.avatar-foto { cursor: zoom-in; }
 [data-tela="ficha"] .meu-grupo-bloco { padding: 10px 0 0 12px; border-top: 0; }
 [data-tela="ficha"] .meu-ficha-rodape { border-top: 0; padding-top: 6px; }
 [data-tela="ficha"] .meu-ficha-rodape .botao-link-forte { min-height: 60px; border-radius: 16px; font-size: 19px; }
+
+/* ---------- Tela do exercício do aluno, visual novo (opção B do Canva, escolhida pelo Thiago em 11/11/2026) ----------
+   Bloco laranja no alto com o nome e os números grandes; carga e descanso em cartões escuros; "Marcar como feito" branco. */
+.pagina-aluno.modo-ficha .meu-painel-treino[data-tela="exercicio"] { background: none; border: 0; padding: 0; }
+.meu-exercicio-tela { display: flex; flex-direction: column; gap: 12px; }
+.meu-exercicio-tela > p { margin: 0; }
+.meu-exercicio-topo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 20px 18px; border-radius: 22px; background: var(--laranja); color: #0d0d0d; }
+.meu-exercicio-topo p { margin: 0; }
+.meu-topo-voltar { min-height: 40px; margin-left: -6px; padding: 0 6px; border: 0; background: none; color: #0d0d0d; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer; }
+.meu-topo-voltar:focus-visible { outline: 3px solid #0d0d0d; outline-offset: 2px; border-radius: 8px; }
+.meu-exercicio-topo .meu-exercicio-posicao { color: #0d0d0d; font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.meu-topo-grupo { font-size: 13px; font-weight: 800; }
+.meu-exercicio-topo .meu-exercicio-titulo { color: #0d0d0d; font-size: 46px; line-height: 0.98; font-stretch: 78%; }
+.meu-exercicio-topo .meu-exercicio-titulo::after { color: #0d0d0d !important; }
+.meu-numeros-grandes { width: 100%; margin: 10px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+.meu-numero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 4px; min-width: 0; }
+.meu-numero + .meu-numero { border-left: 2px solid rgba(13, 13, 13, 0.28); }
+.meu-numero-valor { margin: 0; font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 54px; line-height: 1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.meu-numero-longo .meu-numero-valor { font-size: 30px; line-height: 1.15; }
+.meu-numero-rotulo { font-size: 14px; font-weight: 700; }
+/* cartões escuros da carga e do descanso */
+[data-tela="exercicio"] .meu-acoes { margin-top: 0; gap: 12px; }
+[data-tela="exercicio"] .meu-campo-carga, [data-tela="exercicio"] .meu-campo-descanso { padding: 16px; border: 1px solid var(--linha); border-radius: 18px; background: var(--papel); gap: 10px; }
+[data-tela="exercicio"] .meu-campo-carga .meu-campo-rotulo { font-size: 15px; font-weight: 700; color: var(--texto); }
+[data-tela="exercicio"] .meu-campo-descanso .meu-campo-rotulo { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--laranja-texto); }
+[data-tela="exercicio"] .meu-carga-campo { min-height: 60px; font-size: 26px; font-weight: 800; }
+[data-tela="exercicio"] .meu-campo-descanso .meu-carga-campo { width: 140px; font-family: var(--fonte-titulo); font-stretch: 78%; font-size: 40px; }
+[data-tela="exercicio"] .meu-campo-linha .meu-descansar { min-height: 56px; border: 2px solid var(--laranja); color: var(--laranja-texto); background: none; }
+.meu-pilulas { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.meu-pilula { padding: 5px 12px; border-radius: 999px; background: var(--cinza-leve); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.meu-pilula-ultima { background: var(--laranja); color: #0d0d0d; }
+.meu-pilula-seta { font-size: 14px; color: var(--texto-suave); }
+/* "Marcar como feito" branco (feito: continua verde, como antes) */
+[data-tela="exercicio"] .meu-feito:not([aria-pressed="true"]) { border-color: #f4f4f5; background: #f4f4f5; color: #0d0d0d; }
+[data-tela="exercicio"] .meu-feito:not([aria-pressed="true"]):hover:not(:disabled) { border-color: #ffffff; background: #ffffff; }
+/* "Próximo: VOADOR ›" */
+[data-tela="exercicio"] .meu-exercicio-navegar { padding-top: 4px; border-top: 0; }
+.meu-proximo { width: 100%; min-height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border: 1px solid var(--linha); border-radius: 16px; background: var(--papel); color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.meu-proximo:hover { background: var(--realce); }
+.meu-proximo-rotulo { flex: none; font-size: 15px; color: var(--texto-suave); }
+.meu-proximo-nome { flex: 1; min-width: 0; font-size: 16px; font-weight: 800; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meu-proximo-seta { flex: none; font-size: 28px; line-height: 1; color: var(--laranja-texto); }
+@media (max-width: 360px) { .meu-numero-valor { font-size: 44px; } .meu-exercicio-topo .meu-exercicio-titulo { font-size: 38px; } }

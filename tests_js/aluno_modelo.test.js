@@ -4,6 +4,8 @@ import {
   DICA_DO_COMENTARIO_DO_TREINO,
   LIMITE_DO_COMENTARIO,
   MENSAGEM_SEM_REDE,
+  numerosDoExercicio,
+  pilulasDasCargas,
   progressoDosExercicios,
   fichaDoDestaque,
   letraDaFicha,
@@ -831,5 +833,29 @@ describe("barra de exercícios feitos da ficha (11/11/2026)", () => {
   it("ficha vazia ou de um exercício só", () => {
     expect(progressoDosExercicios({ grupos: [] })).toEqual({ feitos: 0, total: 0, fracao: 0, texto: "0 de 0 exercícios feitos" });
     expect(progressoDosExercicios({ grupos: [{ exercicios: [{ feito: false }] }] }).texto).toBe("0 de 1 exercício feito");
+  });
+});
+
+describe("tela do exercício nova (11/11/2026)", () => {
+  it("separa séries, repetições e carga", () => {
+    expect(numerosDoExercicio({ dose: "4 × 12", carga: "20 kg" })).toEqual([
+      { valor: "4", rotulo: "séries" },
+      { valor: "12", rotulo: "repetições" },
+      { valor: "20", rotulo: "kg" },
+    ]);
+    expect(numerosDoExercicio({ dose: "3 × 10-12", carga: "12,5 KG" })[2]).toEqual({ valor: "12,5", rotulo: "kg" });
+    expect(numerosDoExercicio({ dose: "1 × 1", carga: "" })).toEqual([{ valor: "1", rotulo: "série" }, { valor: "1", rotulo: "repetição" }]);
+    expect(numerosDoExercicio({ dose: "4 × FALHA", carga: "livre" })[2]).toEqual({ valor: "livre", rotulo: "carga" });
+  });
+  it("dose fora do padrão não vira número", () => {
+    expect(numerosDoExercicio({ dose: "4", carga: "20 kg" })).toEqual([]);
+    expect(numerosDoExercicio({ dose: "", carga: "20 kg" })).toEqual([]);
+    expect(numerosDoExercicio(null)).toEqual([]);
+  });
+  it("pílulas das últimas cargas", () => {
+    expect(pilulasDasCargas({ cargas_recentes: ["18", "20", "20"], ultima_carga: "20" })).toEqual(["18", "20", "20"]);
+    expect(pilulasDasCargas({ cargas_recentes: ["20"], ultima_carga: "20" })).toEqual(["20"]);
+    expect(pilulasDasCargas({ cargas_recentes: [], ultima_carga: "" })).toEqual([]);
+    expect(pilulasDasCargas({})).toEqual([]);
   });
 });

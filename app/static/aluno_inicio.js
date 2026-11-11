@@ -6,6 +6,8 @@ import { iniciarDescanso } from "./aluno_descanso.js";
 import { el } from "./dom.js";
 import {
   ESFORCOS,
+  numerosDoExercicio,
+  pilulasDasCargas,
   progressoDosExercicios,
   fichaDoDestaque,
   letraDaFicha,
@@ -467,20 +469,30 @@ function desenharAcoesDoExercicio(exercicio, ficha, raiz, aoFicarFeito) {
 
   campo.value = exercicio.carga_hoje;
   const ultima = textoDaUltimaCarga(exercicio);
+  const pilulas = pilulasDasCargas(exercicio);
   pintar();
   return el(
     "div",
     { classe: "meu-acoes" },
-    ultima && el("p", { classe: "meu-ultima-carga", texto: ultima }),
     el(
       "div",
-      { classe: "meu-campo" },
-      el("label", { for: idDaCarga, classe: "meu-campo-rotulo", texto: "Carga que usei (kg)" }),
+      { classe: "meu-campo meu-campo-carga" },
+      el("label", { for: idDaCarga, classe: "meu-campo-rotulo", texto: "Carga que usei hoje (kg)" }),
       el("div", { classe: "meu-campo-linha" }, campo, nota),
+      // as últimas cargas em pílulas (18 → 20 → 20 kg); o leitor de tela lê a frase inteira
+      ultima &&
+        el(
+          "p",
+          { classe: "meu-pilulas", "aria-label": ultima },
+          pilulas.flatMap((carga, i) => [
+            i > 0 && el("span", { classe: "meu-pilula-seta", texto: "→", "aria-hidden": "true" }),
+            el("span", { classe: i === pilulas.length - 1 ? "meu-pilula meu-pilula-ultima" : "meu-pilula", texto: i === pilulas.length - 1 ? `${carga} kg` : carga, "aria-hidden": "true" }),
+          ]).filter(Boolean),
+        ),
     ),
     el(
       "div",
-      { classe: "meu-campo" },
+      { classe: "meu-campo meu-campo-descanso" },
       el("label", { for: idDoDescanso, classe: "meu-campo-rotulo", texto: "Descanso (segundos)" }),
       el("div", { classe: "meu-campo-linha" }, campoDoDescanso, botaoDescansar),
       notaDoDescanso,
@@ -510,41 +522,58 @@ function desenharTelaDoExercicio(treino, indiceDaFicha, posicao, mensagemInicial
     else voltarParaAFicha(textoDeTodosFeitos(ficha));
   };
 
+  // Visual novo (opção B do Canva, 11/11/2026): o alto é um bloco laranja com o nome e os números grandes (séries, repetições, kg),
+  // para ler de longe com o celular apoiado no aparelho. Dose fora do padrão "séries × repetições" fica na linha de texto de sempre.
+  const numeros = numerosDoExercicio(exercicio);
+  const linhas = linhasDoExercicio(exercicio);
+  const linhasDeBaixo = numeros.length && temDose(exercicio) ? linhas.slice(1) : linhas;
   // (`append` direto escreveria "false" e "null" na tela e não aceita lista: por isso `flat` e `filter`)
   const filhos = [
     el(
       "div",
-      { classe: "meu-ficha-topo" },
-      el("button", { type: "button", classe: "botao-link meu-voltar", texto: "‹ Lista de exercícios", aoClicar: () => voltarParaAFicha() }),
-      el("p", { classe: "meu-exercicio-posicao", texto: `${ficha.nome} · ${textoDaPosicao(posicao, exercicios.length)}` }),
+      { classe: "meu-exercicio-topo" },
+      el("button", { type: "button", classe: "meu-topo-voltar", texto: "‹ Lista", "aria-label": "Voltar para a lista de exercícios", aoClicar: () => voltarParaAFicha() }),
+      el("p", { classe: "meu-exercicio-posicao", texto: textoDaPosicao(posicao, exercicios.length) }),
+      grupo && el("p", { classe: "meu-topo-grupo", texto: `${grupo.nome} · ${exercicio.etiqueta}` }),
+      el("h3", { id: "exercicio-titulo", classe: "meu-ficha-titulo meu-exercicio-titulo", tabindex: "-1", texto: exercicio.exercicio }),
+      numeros.length > 0 &&
+        el(
+          "dl",
+          { classe: "meu-numeros-grandes" },
+          numeros.map((numero) =>
+            el(
+              "div",
+              { classe: numero.valor.length > 4 ? "meu-numero meu-numero-longo" : "meu-numero" },
+              el("dd", { classe: "meu-numero-valor", texto: numero.valor }),
+              el("dt", { classe: "meu-numero-rotulo", texto: numero.rotulo }),
+            ),
+          ),
+        ),
     ),
     mensagemInicial && el("p", { classe: "meu-aviso-ok", role: "status", texto: mensagemInicial }),
-    grupo &&
-      el(
-        "div",
-        { classe: "meu-exercicio-grupo" },
-        el("p", { classe: "meu-bloco-titulo", texto: `${grupo.nome} · ${exercicio.etiqueta}` }),
-        el("p", { classe: "meu-bloco-instrucao", texto: grupo.instrucao }),
-      ),
-    el("h3", { id: "exercicio-titulo", classe: "meu-ficha-titulo meu-exercicio-titulo", tabindex: "-1", texto: exercicio.exercicio }),
-    linhasDoExercicio(exercicio).map((linha, i) =>
-      el("p", { classe: i === 0 && temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: linha }),
+    grupo && grupo.instrucao && el("p", { classe: "meu-bloco-instrucao", texto: grupo.instrucao }),
+    linhasDeBaixo.map((linha, i) =>
+      el("p", { classe: !numeros.length && i === 0 && temDose(exercicio) ? "meu-exercicio-dose" : "meu-exercicio-detalhe", texto: linha }),
     ),
     desenharAcoesDoExercicio(exercicio, ficha, raiz, aoFicarFeito),
     desenharComentario(treino, ficha, exercicio),
-    el(
-      "div",
-      { classe: "meu-exercicio-navegar" },
-      el("button", { type: "button", classe: "botao-link", texto: "Lista de exercícios", aoClicar: () => voltarParaAFicha() }),
-      proximo >= 0 &&
-        el("button", {
-          type: "button",
-          classe: "botao-link",
-          texto: "Próximo exercício ›",
-          "aria-label": `Próximo exercício: ${exercicios[proximo].exercicio}`,
-          aoClicar: () => abrirExercicio(treino, indiceDaFicha, proximo),
-        }),
-    ),
+    proximo >= 0 &&
+      el(
+        "div",
+        { classe: "meu-exercicio-navegar" },
+        el(
+          "button",
+          {
+            type: "button",
+            classe: "meu-proximo",
+            "aria-label": `Próximo exercício: ${exercicios[proximo].exercicio}`,
+            aoClicar: () => abrirExercicio(treino, indiceDaFicha, proximo),
+          },
+          el("span", { classe: "meu-proximo-rotulo", texto: "Próximo:" }),
+          el("span", { classe: "meu-proximo-nome", texto: exercicios[proximo].exercicio }),
+          el("span", { classe: "meu-proximo-seta", texto: "›", "aria-hidden": "true" }),
+        ),
+      ),
   ];
   raiz.append(...filhos.flat().filter(Boolean));
   return raiz;

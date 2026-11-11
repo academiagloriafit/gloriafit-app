@@ -612,3 +612,31 @@ export function progressoDosExercicios(ficha) {
   const texto = total === 1 ? `${feitos} de 1 exercício feito` : `${feitos} de ${total} exercícios feitos`;
   return { feitos, total, fracao: total ? feitos / total : 0, texto };
 }
+
+// ------------------------------------------------------------------ tela do exercício, visual novo (opção B do Canva, 11/11/2026)
+// Os números grandes do bloco laranja: "4 × 12" e "20 kg" -> [{valor: "4", rotulo: "séries"}, {valor: "12", rotulo: "repetições"},
+// {valor: "20", rotulo: "kg"}]. Dose fora do padrão "séries × repetições" volta vazia: a tela mostra a linha de texto de sempre.
+export function numerosDoExercicio(exercicio) {
+  const dose = String(exercicio?.dose ?? "").trim();
+  const partes = dose.split("×").map((parte) => parte.trim());
+  if (partes.length !== 2 || !partes[0] || !partes[1]) return [];
+  const numeros = [
+    { valor: partes[0], rotulo: partes[0] === "1" ? "série" : "séries" },
+    { valor: partes[1], rotulo: partes[1] === "1" ? "repetição" : "repetições" },
+  ];
+  const carga = String(exercicio?.carga ?? "").trim();
+  if (carga) {
+    const kg = carga.match(/^(.+?)\s*kg$/i);
+    numeros.push(kg ? { valor: kg[1], rotulo: "kg" } : { valor: carga, rotulo: "carga" });
+  }
+  return numeros;
+}
+
+// As últimas cargas em "pílulas" (18 → 20 → 20 kg): da mais antiga para a mais nova; só a última, se só há ela.
+export function pilulasDasCargas(exercicio) {
+  const recentes = Array.isArray(exercicio?.cargas_recentes)
+    ? exercicio.cargas_recentes.filter((c) => typeof c === "string" && c.trim() !== "").map((c) => c.trim())
+    : [];
+  if (recentes.length >= 2) return recentes;
+  return exercicio?.ultima_carga ? [String(exercicio.ultima_carga).trim()] : [];
+}
