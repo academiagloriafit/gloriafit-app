@@ -419,4 +419,8 @@ def test_app_do_aluno_e_telas_de_entrar_tem_o_simbolo_com_halteres(caminho):
     for navegador, tela in [(_aluno_logado(caminho, 1), "/aluno"), (_aluno_logado(caminho, 1), "/aluno/perfil"),
                             (criar_app(caminho).test_client(), "/aluno/entrar"), (criar_app(caminho).test_client(), "/autorizar")]:
         html = navegador.get(tela).get_data(as_text=True)
+        if tela == "/aluno/entrar":
+            # 11/11/2026: a tela de entrar ganhou o logo oficial COMPLETO (símbolo com halteres + "Academia Glória Fit") no centro
+            assert "logo-completo-fundo-escuro.png" in html and "logo-gloria-fit.png" not in html, tela
+            continue
         assert "marca-halteres" in html and "simbolo-halteres-fundo-escuro.png" in html and "logo-gloria-fit.png" not in html, tela
