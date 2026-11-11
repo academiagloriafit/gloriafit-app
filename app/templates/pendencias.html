@@ -13,23 +13,40 @@
   {% set menu_ativo = "pendencias" %}
   {% include "_topo.html" %}
 
-  <main class="pagina pagina-larga" id="tela-pendencias">
+  <main class="pagina pagina-larga pendencias-nova" id="tela-pendencias">
     <h1 class="titulo-grande">Pendências</h1>
     <p class="texto-apoio">O que precisa da atenção de um professor. Conta só quem está ativo no Data4U ou é aluno provisório. A tela só mostra: nada muda até você abrir o aluno.</p>
 
-    {# Faixa grafite com os números (visual novo, 28/10/2026): cada número leva à sua lista, mais abaixo. #}
-    <nav class="faixa-resumo" aria-label="Resumo das pendências">
-      <a class="faixa-item{% if p.trocar.total %} faixa-alerta{% endif %}" href="#titulo-trocar"><span class="faixa-numero">{{ p.trocar.total }}</span><span class="faixa-rotulo">Hora de trocar o treino</span></a>
-      <a class="faixa-item{% if p.comentarios.total %} faixa-alerta{% endif %}" href="#titulo-comentarios-pendentes"><span class="faixa-numero">{{ p.comentarios.total }}</span><span class="faixa-rotulo">Comentários sem ler</span></a>
-      <a class="faixa-item{% if p.sem_treino.total %} faixa-alerta{% endif %}" href="#titulo-sem-treino"><span class="faixa-numero">{{ p.sem_treino.total }}</span><span class="faixa-rotulo">Ativos sem treino</span></a>
-      <a class="faixa-item faixa-agendada" href="#titulo-agendados"><span class="faixa-numero">{{ p.agendados.total }}</span><span class="faixa-rotulo">Trocas agendadas</span></a>
+    {# Visual novo (opção C do Canva, escolhida pelo Thiago em 11/11/2026): uma faixa "Comece por aqui" com o que resolver
+       primeiro, os quatro números com ícone (cada um leva à sua lista) e as listas em blocos que abrem e fecham. #}
+    {% set precisam_treino = p.trocar.alunos | rejectattr("agendado") | list | length + (p.trocar.total - p.trocar.alunos | length) %}
+    {% set sem_treino_sem_agenda = p.sem_treino.alunos | rejectattr("agendado") | list | length + (p.sem_treino.total - p.sem_treino.alunos | length) %}
+    <section class="comece-por-aqui{% if not (precisam_treino or sem_treino_sem_agenda or p.comentarios.total) %} tudo-em-dia{% endif %}" aria-labelledby="titulo-comece">
+      <span class="comece-icone" aria-hidden="true"></span>
+      <p class="comece-texto" id="titulo-comece">
+        {%- if precisam_treino %}Comece por aqui: {{ precisam_treino }} {{ "aluno precisa" if precisam_treino == 1 else "alunos precisam" }} de treino novo
+        {%- elif sem_treino_sem_agenda %}Comece por aqui: {{ sem_treino_sem_agenda }} {{ "aluno ativo está" if sem_treino_sem_agenda == 1 else "alunos ativos estão" }} sem treino
+        {%- elif p.comentarios.total %}Comece por aqui: {{ p.comentarios.total }} {{ "comentário espera" if p.comentarios.total == 1 else "comentários esperam" }} leitura
+        {%- else %}Tudo em dia: nenhuma pendência agora{% endif -%}
+      </p>
+      {% if precisam_treino %}<a class="botao-link botao-link-forte" href="#titulo-trocar">Ver alunos</a>
+      {% elif sem_treino_sem_agenda %}<a class="botao-link botao-link-forte" href="#titulo-sem-treino">Ver alunos</a>
+      {% elif p.comentarios.total %}<a class="botao-link botao-link-forte" href="#titulo-comentarios-pendentes">Ver comentários</a>{% endif %}
+    </section>
+
+    <nav class="painel-numeros faixa-resumo" aria-label="Resumo das pendências">
+      <a class="painel-numero numero-trocar{% if p.trocar.total %} faixa-alerta{% endif %}" href="#titulo-trocar"><span class="painel-numero-valor">{{ p.trocar.total }}</span><span class="painel-numero-rotulo">Hora de trocar o treino</span></a>
+      <a class="painel-numero numero-comentarios{% if p.comentarios.total %} faixa-alerta{% endif %}" href="#titulo-comentarios-pendentes"><span class="painel-numero-valor">{{ p.comentarios.total }}</span><span class="painel-numero-rotulo">Comentários sem ler</span></a>
+      <a class="painel-numero numero-sem-treino{% if p.sem_treino.total %} faixa-alerta{% endif %}" href="#titulo-sem-treino"><span class="painel-numero-valor">{{ p.sem_treino.total }}</span><span class="painel-numero-rotulo">Ativos sem treino</span></a>
+      <a class="painel-numero numero-agendadas" href="#titulo-agendados"><span class="painel-numero-valor">{{ p.agendados.total }}</span><span class="painel-numero-rotulo">Trocas agendadas</span></a>
     </nav>
 
-    <section class="cartao-lista" aria-labelledby="titulo-trocar">
-      <div class="cabecalho-lista">
+    <div class="pendencias-grade">
+    <section class="cartao-lista bloco-pendencia" aria-labelledby="titulo-trocar">
+      <details class="bloco-recolhivel" open><summary class="cabecalho-lista">
         <h2 id="titulo-trocar">Hora de trocar o treino</h2>
         <p class="resumo">{{ p.trocar.total }} {{ "aluno" if p.trocar.total == 1 else "alunos" }}{% if p.trocar.total > p.trocar.alunos|length %} (mostrando {{ p.limite }}){% endif %}</p>
-      </div>
+      </summary>
       {% if p.trocar.alunos %}
       <ul class="linhas" id="lista-trocar">
         {% for a in p.trocar.alunos %}
@@ -43,13 +60,13 @@
       {% else %}
       <p class="lista-vazia">Nenhum treino ativo cumpriu a meta ou passou do fim.</p>
       {% endif %}
-    </section>
+    </details></section>
 
-    <section class="cartao-lista" aria-labelledby="titulo-comentarios-pendentes">
-      <div class="cabecalho-lista">
+    <section class="cartao-lista bloco-pendencia" aria-labelledby="titulo-comentarios-pendentes">
+      <details class="bloco-recolhivel" open><summary class="cabecalho-lista">
         <h2 id="titulo-comentarios-pendentes">Comentários sem ler</h2>
         <p class="resumo">{{ p.comentarios.total }} {{ "comentário" if p.comentarios.total == 1 else "comentários" }}</p>
-      </div>
+      </summary>
       {% if p.comentarios.comentarios %}
       <ul class="linhas" id="lista-comentarios-pendentes">
         {% for c in p.comentarios.comentarios %}
@@ -63,13 +80,13 @@
       {% else %}
       <p class="lista-vazia">Nenhum comentário esperando leitura.</p>
       {% endif %}
-    </section>
+    </details></section>
 
-    <section class="cartao-lista" aria-labelledby="titulo-sem-treino">
-      <div class="cabecalho-lista">
+    <section class="cartao-lista bloco-pendencia" aria-labelledby="titulo-sem-treino">
+      <details class="bloco-recolhivel" open><summary class="cabecalho-lista">
         <h2 id="titulo-sem-treino">Ativos sem treino</h2>
         <p class="resumo">{{ p.sem_treino.total }} {{ "aluno" if p.sem_treino.total == 1 else "alunos" }}{% if p.sem_treino.total > p.sem_treino.alunos|length %} (mostrando {{ p.limite }}){% endif %}</p>
-      </div>
+      </summary>
       {% if p.sem_treino.alunos %}
       <ul class="linhas" id="lista-sem-treino">
         {% for a in p.sem_treino.alunos %}
@@ -83,13 +100,13 @@
       {% else %}
       <p class="lista-vazia">Todo aluno ativo tem treino.</p>
       {% endif %}
-    </section>
+    </details></section>
 
-    <section class="cartao-lista" aria-labelledby="titulo-agendados">
-      <div class="cabecalho-lista">
+    <section class="cartao-lista bloco-pendencia" aria-labelledby="titulo-agendados">
+      <details class="bloco-recolhivel" open><summary class="cabecalho-lista">
         <h2 id="titulo-agendados">Trocas agendadas</h2>
         <p class="resumo">{{ p.agendados.total }} {{ "treino" if p.agendados.total == 1 else "treinos" }}</p>
-      </div>
+      </summary>
       {% if p.agendados.alunos %}
       <ul class="linhas" id="lista-agendados">
         {% for a in p.agendados.alunos %}
@@ -103,7 +120,8 @@
       {% else %}
       <p class="lista-vazia">Nenhum treino agendado. Para agendar, monte o treino e coloque o Início numa data depois de hoje.</p>
       {% endif %}
-    </section>
+    </details></section>
+    </div>
   </main>
   <script type="module" src="{{ url_for('static', filename='foto_grande.js') }}"></script>
 </body>

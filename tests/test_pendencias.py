@@ -160,3 +160,24 @@ def test_o_menu_de_todas_as_telas_do_professor_tem_pendencias(app, caminho):
     navegador = _autorizado(app, caminho)
     for url in ("/alunos", "/ausentes", "/comentarios", "/alunos/1"):
         assert ">Pendências" in navegador.get(url).get_data(as_text=True), url
+
+
+def test_visual_novo_tem_o_comece_por_aqui_e_os_blocos(app, caminho):
+    """Pendências, opção C (11/11/2026): a faixa aponta o que resolver primeiro; as listas abrem e fecham."""
+    html = _autorizado(app, caminho).get("/pendencias").get_data(as_text=True)
+    assert 'class="comece-por-aqui"' in html and "precisa" in html and 'href="#titulo-trocar">Ver alunos' in html
+    assert html.count('<details class="bloco-recolhivel" open>') == 4
+    for id_ in ("titulo-trocar", "titulo-comentarios-pendentes", "titulo-sem-treino", "titulo-agendados"):
+        assert f'id="{id_}"' in html and f'href="#{id_}"' in html
+
+
+def test_sem_nada_pendente_a_faixa_diz_tudo_em_dia(tmp_path):
+    from app.web import criar_app
+    from app.db import conectar, criar_tabelas
+
+    vazio = tmp_path / "vazio.db"
+    c = conectar(vazio)
+    criar_tabelas(c)
+    c.close()
+    html = _autorizado(criar_app(vazio), vazio).get("/pendencias").get_data(as_text=True)
+    assert "tudo-em-dia" in html and "Tudo em dia: nenhuma pendência agora" in html

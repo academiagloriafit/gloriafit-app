@@ -2492,3 +2492,33 @@ img.avatar-foto { cursor: zoom-in; }
 .montador-novo .linhas .miniatura-exercicio, .montador-novo .painel-biblioteca .miniatura-exercicio { width: 60px; height: 45px; }
 .montador-novo .linhas .miniatura-exercicio { width: 52px; height: 39px; }
 .montador-novo .linha-nome-texto { overflow-wrap: break-word; hyphens: manual; }
+
+/* ---------- Pendências, visual novo (opção C do Canva, "resumo com prioridade", escolhida pelo Thiago em 11/11/2026) ---------- */
+.pendencias-nova .comece-por-aqui { display: flex; align-items: center; gap: 16px; padding: 18px 22px; border: 1px solid #ffd5c2; border-radius: 18px; background: #fff4ee; }
+.pendencias-nova .comece-icone { flex: none; width: 44px; height: 44px; border-radius: 50%; background: #fff url("menu/pendencias.svg") center / 22px no-repeat; }
+.pendencias-nova .comece-texto { flex: 1; margin: 0; font-size: 19px; font-weight: 750; color: #c4400d; }
+.pendencias-nova .comece-por-aqui .botao-link-forte { flex: none; min-height: 44px; }
+.pendencias-nova .tudo-em-dia { border-color: var(--linha); background: var(--papel); }
+.pendencias-nova .tudo-em-dia .comece-texto { color: var(--texto); }
+.pendencias-nova .tudo-em-dia .comece-icone { background-image: url("menu/alunos.svg"); }
+.pendencias-nova .faixa-resumo.painel-numeros { padding: 0; background: none; border-radius: 0; }
+.pendencias-nova a.painel-numero { text-decoration: none; background: var(--papel); color: var(--texto); }
+.pendencias-nova a.painel-numero:hover { border-color: #f25420; background: var(--papel); }
+.pendencias-nova .faixa-alerta .painel-numero-valor { color: #c4400d; }
+.numero-comentarios { --icone-numero: url("menu/comentarios.svg"); }
+.numero-sem-treino { --icone-numero: url("menu/halter.svg"); }
+.numero-agendadas { --icone-numero: url("menu/calendario.svg"); }
+.pendencias-nova .faixa-alerta::before { background-color: #fff1ea; }
+.pendencias-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.pendencias-nova .bloco-pendencia { border-radius: 18px; overflow: hidden; }
+.bloco-recolhivel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+.bloco-recolhivel > summary::-webkit-details-marker { display: none; }
+.bloco-recolhivel > summary::after { content: ""; margin-left: 4px; width: 9px; height: 9px; border-right: 2px solid var(--texto-suave); border-bottom: 2px solid var(--texto-suave); transform: rotate(225deg) translate(-2px, -2px); transition: transform 0.15s; }
+.bloco-recolhivel:not([open]) > summary::after { transform: rotate(45deg); }
+.bloco-recolhivel > summary h2 { flex: 1; }
+.bloco-recolhivel > summary:focus-visible { outline: 2px solid #f25420; outline-offset: -2px; }
+.pendencias-nova .linha-pendencia { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) auto; }
+.pendencias-nova .linha-pendencia .botao-link { border-color: #f25420; color: #c4400d; }
+@media (max-width: 1150px) { .pendencias-grade { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .pendencias-nova .comece-por-aqui { flex-wrap: wrap; } }
+@media (prefers-reduced-motion: reduce) { .bloco-recolhivel > summary::after { transition: none; } }
