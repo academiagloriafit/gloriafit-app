@@ -603,3 +603,12 @@ export function numeroDaSemana(treino) {
   const n = Number.isInteger(treino?.treinos_na_semana) && treino.treinos_na_semana > 0 ? treino.treinos_na_semana : 0;
   return { numero: String(n), palavra: n === 1 ? "treino" : "treinos" };
 }
+
+// Barra da tela da ficha (opção A do Canva, 11/11/2026): "1 de 3 exercícios feitos" e quanto dela fica laranja.
+export function progressoDosExercicios(ficha) {
+  const lista = exerciciosDaFicha(ficha);
+  const total = lista.length;
+  const feitos = lista.filter((exercicio) => exercicio?.feito === true).length;
+  const texto = total === 1 ? `${feitos} de 1 exercício feito` : `${feitos} de ${total} exercícios feitos`;
+  return { feitos, total, fracao: total ? feitos / total : 0, texto };
+}

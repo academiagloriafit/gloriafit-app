@@ -4,6 +4,7 @@ import {
   DICA_DO_COMENTARIO_DO_TREINO,
   LIMITE_DO_COMENTARIO,
   MENSAGEM_SEM_REDE,
+  progressoDosExercicios,
   fichaDoDestaque,
   letraDaFicha,
   numeroDaSemana,
@@ -818,5 +819,17 @@ describe("tela inicial nova (11/11/2026)", () => {
     expect(numeroDaSemana({ treinos_na_semana: 2 })).toEqual({ numero: "2", palavra: "treinos" });
     expect(numeroDaSemana({ treinos_na_semana: 1 })).toEqual({ numero: "1", palavra: "treino" });
     expect(numeroDaSemana({})).toEqual({ numero: "0", palavra: "treinos" });
+  });
+});
+
+describe("barra de exercícios feitos da ficha (11/11/2026)", () => {
+  const ficha = (...feitos) => ({ grupos: [{ exercicios: feitos.slice(0, 2).map((f) => ({ feito: f })) }, { exercicios: feitos.slice(2).map((f) => ({ feito: f })) }] });
+  it("conta os feitos de todos os grupos", () => {
+    expect(progressoDosExercicios(ficha(true, false, false))).toEqual({ feitos: 1, total: 3, fracao: 1 / 3, texto: "1 de 3 exercícios feitos" });
+    expect(progressoDosExercicios(ficha(true, true, true)).fracao).toBe(1);
+  });
+  it("ficha vazia ou de um exercício só", () => {
+    expect(progressoDosExercicios({ grupos: [] })).toEqual({ feitos: 0, total: 0, fracao: 0, texto: "0 de 0 exercícios feitos" });
+    expect(progressoDosExercicios({ grupos: [{ exercicios: [{ feito: false }] }] }).texto).toBe("0 de 1 exercício feito");
   });
 });

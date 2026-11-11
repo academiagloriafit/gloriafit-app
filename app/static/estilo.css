@@ -2202,3 +2202,33 @@ img.avatar-foto { cursor: zoom-in; }
 .meu-quadrado-feita { margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--verde); }
 .meu-quadrado.meu-cartao-do-dia { box-shadow: 0 0 0 3px rgba(242, 84, 32, 0.25); }
 @media (max-width: 360px) { .meu-circulo { width: 112px; height: 112px; } .meu-semana-numero { font-size: 60px; } .meu-destaque-nome { font-size: 38px; } }
+
+/* ---------- Tela da ficha do aluno, visual novo (opção A do Canva, escolhida pelo Thiago em 11/11/2026) ----------
+   Solta sobre o fundo: "‹ Voltar" discreto, título grande, barra de feitos, um cartão por exercício e o botão laranja. */
+.pagina-aluno.modo-ficha .meu-painel-treino[data-tela="ficha"] { background: none; border: 0; padding: 0; gap: 14px; }
+[data-tela="ficha"] .meu-voltar { min-height: 40px; padding: 0 4px; border: 0; background: none; color: var(--texto-suave); font-size: 15px; }
+[data-tela="ficha"] .meu-voltar:hover { color: var(--texto); background: none; }
+[data-tela="ficha"] .meu-ficha-titulo { font-size: 46px; line-height: 0.98; font-stretch: 78%; }
+[data-tela="ficha"] .meu-ficha-atual { gap: 10px; }
+.meu-barra-ficha { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.meu-barra-texto { margin: 0; font-size: 14.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.meu-barra { --progresso: 0; height: 10px; border-radius: 999px; background: var(--cinza-leve); overflow: hidden; }
+.meu-barra-cheia { display: block; height: 100%; width: calc(var(--progresso) * 100%); border-radius: inherit; background: var(--laranja); transition: width 0.25s ease-out; }
+@media (prefers-reduced-motion: reduce) { .meu-barra-cheia { transition: none; } }
+[data-tela="ficha"] .meu-exercicios { gap: 10px; }
+[data-tela="ficha"] .meu-linha + .meu-linha { border-top: 0; }
+[data-tela="ficha"] .meu-grupo-simples { border-top: 0; }
+[data-tela="ficha"] .meu-linha-botao { min-height: 84px; padding: 14px 16px 14px 14px; grid-template-columns: 44px minmax(0, 1fr) auto; column-gap: 12px; border: 1px solid var(--linha); border-radius: 18px; background: var(--papel); }
+[data-tela="ficha"] .meu-linha-botao:hover { background: var(--realce); border-color: var(--contorno-suave); }
+[data-tela="ficha"] .meu-exercicio-etiqueta { font-size: 46px; font-stretch: 72%; color: var(--texto); text-align: center; }
+[data-tela="ficha"] .meu-linha-botao .meu-exercicio-dose { font-size: 18px; font-family: inherit; font-weight: 600; color: var(--texto-suave); }
+/* o exercício já feito hoje fica apagado, com o ✓ verde num círculo no lugar da seta */
+[data-tela="ficha"] .meu-exercicio-feito .meu-linha-botao { opacity: 0.55; }
+[data-tela="ficha"] .meu-exercicio-feito .meu-exercicio-etiqueta { color: var(--texto-suave); }
+[data-tela="ficha"] .meu-exercicio-feito .meu-exercicio-nome::after { content: none; }
+[data-tela="ficha"] .meu-exercicio-feito .meu-cartao-seta { width: 30px; height: 30px; border: 2px solid var(--verde-ponto); border-radius: 50%; display: grid; place-items: center; font-size: 0; }
+[data-tela="ficha"] .meu-exercicio-feito .meu-cartao-seta::before { content: "✓"; font-size: 17px; font-weight: 800; color: var(--verde-ponto); }
+/* bi-set: o fio laranja à esquerda continua ligando os exercícios do bloco */
+[data-tela="ficha"] .meu-grupo-bloco { padding: 10px 0 0 12px; border-top: 0; }
+[data-tela="ficha"] .meu-ficha-rodape { border-top: 0; padding-top: 6px; }
+[data-tela="ficha"] .meu-ficha-rodape .botao-link-forte { min-height: 60px; border-radius: 16px; font-size: 19px; }

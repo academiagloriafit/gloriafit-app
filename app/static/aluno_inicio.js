@@ -6,6 +6,7 @@ import { iniciarDescanso } from "./aluno_descanso.js";
 import { el } from "./dom.js";
 import {
   ESFORCOS,
+  progressoDosExercicios,
   fichaDoDestaque,
   letraDaFicha,
   numeroDaSemana,
@@ -778,7 +779,6 @@ function desenharRodape(treino, indice, mensagem, deuErro, avisoDoFim = "") {
     botaoFeito,
     botaoDesfazer,
     aviso,
-    el("button", { type: "button", classe: "botao-link botao-largo", texto: "Voltar aos treinos", aoClicar: voltarParaALista }),
   );
 }
 
@@ -796,7 +796,15 @@ function mostrarFicha(treino, indice, mensagem = "", deuErro = false, avisoDoFim
     primeira += grupo.exercicios.length;
     return desenhado;
   });
-  areaDaFicha.replaceChildren(...grupos, desenharRodape(treino, escolhida, mensagem, deuErro, avisoDoFim));
+  areaDaFicha.replaceChildren(desenharBarraDaFicha(ficha), ...grupos, desenharRodape(treino, escolhida, mensagem, deuErro, avisoDoFim));
+}
+
+// A barra "1 de 3 exercícios feitos" no alto da ficha (opção A do Canva, 11/11/2026).
+function desenharBarraDaFicha(ficha) {
+  const progresso = progressoDosExercicios(ficha);
+  const barra = el("div", { classe: "meu-barra", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(progresso.total), "aria-valuenow": String(progresso.feitos), "aria-label": progresso.texto }, el("span", { classe: "meu-barra-cheia" }));
+  barra.style.setProperty("--progresso", String(progresso.fracao)); // pelo CSSOM: a política de segurança (CSP) não bloqueia
+  return el("div", { classe: "meu-barra-ficha" }, el("p", { classe: "meu-barra-texto", texto: progresso.texto, "aria-hidden": "true" }), barra);
 }
 
 // Mostra a tela do exercício da posição pedida (sem mexer no histórico nem na rolagem: quem chama cuida disso).
@@ -897,6 +905,7 @@ function protegerOsToques() {
 function trocarTela(nova) {
   protegerOsToques();
   tela = nova;
+  areaDoTreino.dataset.tela = nova; // o CSS da tela da ficha (visual novo) usa isto
   const dentroDeUmaFicha = nova !== "fichas";
   cabecalhoDoTreino.hidden = dentroDeUmaFicha;
   botoesDasFichas.hidden = dentroDeUmaFicha;
