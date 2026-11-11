@@ -12,15 +12,16 @@
 </head>
 <body>
   {# Tela do CELULAR do aluno. Sem o menu do professor: o aluno não vê nada da área da academia. #}
-  <header class="topo">
-    <div class="topo-conteudo">
-      <div class="marca marca-halteres"><img src="{{ url_for('static', filename='marca/simbolo-halteres-fundo-escuro.png') }}" alt="" width="64" height="32"><span>Glória Fit</span></div>
+  {# Visual novo (opção B do Canva, escolhida pelo Thiago em 11/11/2026): tela centralizada com o logo OFICIAL completo da academia
+     (símbolo com os halteres + "Academia Glória Fit"), "Área do aluno" e os campos num cartão. Sem a faixa do topo: o logo já está aqui. #}
+  <main class="pagina pagina-aluno pagina-entrar">
+    <div class="entrar-marca">
+      <img class="entrar-logo" src="{{ url_for('static', filename='marca/logo-completo-fundo-escuro.png') }}" alt="Academia Glória Fit" width="384" height="278">
+      <p class="entrar-titulo">Área do aluno</p>
+      <p class="entrar-subtitulo">Seu treino no celular</p>
     </div>
-  </header>
-
-  <main class="pagina pagina-aluno">
     <section id="tela-entrar" class="painel painel-aluno" aria-labelledby="titulo-entrar">
-      <h1 id="titulo-entrar">Entrar</h1>
+      <h1 id="titulo-entrar">Entre com o seu CPF</h1>
       <form id="form-entrar" class="form-aluno" novalidate>
         <div class="campo">
           <label for="entrar-cpf">CPF</label>
@@ -35,7 +36,7 @@
         <button id="entrar-botao" class="botao-principal botao-largo" type="submit">Entrar</button>
         <p id="entrar-aviso" class="aviso-campo" role="status"></p>
       </form>
-      <button id="abrir-primeiro-acesso" class="botao-link botao-largo" type="button">Primeiro acesso ou esqueci a senha</button>
+      <button id="abrir-primeiro-acesso" class="botao-link botao-largo entrar-link" type="button">Primeiro acesso ou esqueci a senha</button>
     </section>
 
     <section id="tela-cpf" class="painel painel-aluno" aria-labelledby="titulo-cpf" hidden>
@@ -83,6 +84,7 @@
       <button id="codigo-reenviar" class="botao-link botao-largo" type="button" disabled>Enviar o código de novo</button>
       <button id="codigo-voltar" class="botao-link botao-largo" type="button">Voltar</button>
     </section>
+    <p class="entrar-ajuda">Problemas para entrar? Fale com a recepção.</p>
   </main>
 
   <script type="module" src="{{ url_for('static', filename='aluno_entrar.js') }}"></script>

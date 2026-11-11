@@ -2305,3 +2305,20 @@ img.avatar-foto { cursor: zoom-in; }
 .botao-whatsapp-verde:hover { border-color: #2bb84d; background: #2bb84d; color: #ffffff; }
 @media (max-width: 360px) { .carteirinha { gap: 12px; } .perfil-carteirinha .minha-foto-imagem { width: 76px; height: 76px; } }
 .perfil-carteirinha .aviso-campo:empty { display: none; }
+
+/* ---------- Tela de entrar do aluno, visual novo (opção B do Canva com o logo oficial, escolhida pelo Thiago em 11/11/2026) ---------- */
+.pagina-entrar { max-width: 460px; margin-inline: auto; padding-top: 28px; gap: 18px; }
+.entrar-marca { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; }
+/* um brilho laranja bem suave atrás do logo */
+.entrar-marca::before { content: ""; position: absolute; top: -20px; left: 50%; width: 280px; height: 220px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(242, 84, 32, 0.22), transparent); pointer-events: none; }
+.entrar-logo { position: relative; width: 220px; max-width: 70%; height: auto; margin-bottom: 14px; }
+.entrar-titulo { position: relative; margin: 0; font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 44px; line-height: 1; text-transform: uppercase; }
+.entrar-subtitulo { position: relative; margin: 4px 0 0; font-size: 16px; color: var(--texto-suave); }
+.pagina-entrar .painel-aluno { border-radius: 22px; padding: 22px 20px; }
+.pagina-entrar #titulo-entrar, .pagina-entrar .painel-aluno > h1 { font-family: inherit; font-size: 17px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.pagina-entrar .campo input { height: 54px; border-radius: 12px; background: var(--campo); border-color: var(--contorno-suave); }
+.pagina-entrar .botao-principal { min-height: 56px; border-radius: 14px; font-size: 18px; font-weight: 800; }
+.entrar-link { min-height: 44px; border: 0; background: none; color: var(--laranja-texto); font-weight: 700; }
+.entrar-link:hover { background: none; text-decoration: underline; }
+.entrar-ajuda { margin: 0; text-align: center; font-size: 14px; color: var(--texto-suave); }
+.pagina-entrar .aviso-campo:empty { display: none; }
