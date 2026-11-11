@@ -6,6 +6,7 @@ import { buscarJson, enviarJson, motivoDaSenha, textoDoErro } from "./api.js";
 import { iniciarAvaliacaoIa } from "./avaliacao_ia.js";
 import { iniciarBiblioteca } from "./biblioteca.js";
 import { el } from "./dom.js";
+import { criarMiniatura, lerMapaDeFotos } from "./foto_exercicio.js";
 import { ligarSeletorDeFila } from "./fila_padrao.js";
 import { iniciarImportacao } from "./importar_treino.js";
 import { iniciarSalvar } from "./salvar.js";
@@ -494,7 +495,8 @@ function desenharLinha(item, etiqueta, dentroDeBloco) {
     el(
       "span",
       { classe: "linha-nome", "data-uid": item.uid, "data-campo": "exercicio" },
-      item.nome,
+      criarMiniatura(pastaDasFotos, fotosDosExercicios[item.exercicioId]),
+      el("span", { classe: "linha-nome-texto", texto: item.nome }),
       // exercício que saiu da lista (veio de "Importar treino"): o professor precisa trocá-lo
       item.indisponivel && el("span", { classe: "selo", texto: "Fora da lista" }),
       // o que o aluno anotou da última vez neste exercício (ajuda a decidir o peso do treino novo)
@@ -705,6 +707,9 @@ function atualizarProblemas() {
 
 // Treino agendado (28/10/2026): treino NOVO com início depois de hoje fica agendado (o servidor decide de novo ao salvar).
 const hojeDaPagina = raiz.dataset.hoje;
+// a foto pequena de cada exercício (visual novo, 11/11/2026): {id do exercício: foto} e a pasta das fotos
+const fotosDosExercicios = lerMapaDeFotos(raiz.dataset.fotos);
+const pastaDasFotos = raiz.dataset.pastaFotos;
 const nomeDoTreinoAtivo = raiz.dataset.treinoAtivo || null;
 let editandoAgendado = false; // "Editar treino" de um treino agendado (ele continua agendado, ou entra na hora se o início virar hoje)
 const vaiFicarAgendado = () => (!editandoNoLugar || editandoAgendado) && M.ficaAgendado(campoInicio.value, hojeDaPagina);
@@ -1106,6 +1111,7 @@ async function guardarComoPadrao() {
 }
 
 iniciarBiblioteca(document.querySelector("[data-biblioteca]"), {
+  pastaDasFotos,
   aoAdicionar: (exercicio) => {
     const antes = estado;
     const novo = M.adicionarItem(estado, fichaAtual, exercicio);

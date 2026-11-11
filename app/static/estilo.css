@@ -2451,3 +2451,39 @@ img.avatar-foto { cursor: zoom-in; }
 .ficha-nova .ficha-perfil .botao-heroi, .tema-grafite .ficha-nova .ficha-perfil .botao-heroi { border: 1px solid #f25420; color: #c4400d; background: var(--papel); }
 .ficha-nova .ficha-conteudo .painel, .ficha-nova .ficha-conteudo .cartao-lista { max-width: none; width: 100%; }
 .ficha-nova .ficha-aba > * { flex: none; min-height: 0; }
+
+/* ---------- Lançar treino, visual novo (opção B do Canva, "montador em 2 colunas", escolhida pelo Thiago em 11/11/2026) ---------- */
+.montador-novo .titulo-tela { align-items: baseline; }
+.montador-novo .area-montagem { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.montador-novo .area-montagem > * { grid-column: 1 / -1; min-width: 0; }
+.montador-novo .area-montagem > .cartao-importar, .montador-novo .area-montagem > .cartao-ia { grid-column: auto; }
+/* com o painel aberto (escolher treino pronto / perguntas da IA) o cartão ocupa a largura toda */
+.montador-novo .area-montagem > .cartao-importar:has(> .painel-importar:not([hidden])),
+.montador-novo .area-montagem > .cartao-ia:has(> .painel-importar:not([hidden])) { grid-column: 1 / -1; }
+.montador-novo .cartao { border-radius: 18px; }
+.montador-novo .cartao-importar .barra-importar, .montador-novo .cartao-ia .barra-importar { flex-wrap: wrap; row-gap: 6px; }
+.montador-novo .cartao-importar h2, .montador-novo .cartao-ia h2 { font-size: 16px; }
+.montador-novo .barra-importar .dica { flex-basis: 100%; margin: 0; font-size: 13.5px; }
+/* os dados do treino numa linha só: Treino, Professor, Início, Fim e Treinos por ficha */
+.montador-novo .cabecalho-treino { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.3fr) repeat(3, minmax(0, 1fr)); gap: 10px 16px; }
+.montador-novo .campos-do-ciclo { display: contents; }
+.montador-novo .cabecalho-treino .dica { font-size: 12.5px; line-height: 1.35; }
+.montador-novo .cabecalho-treino .aviso-troca { grid-column: 1 / -1; margin: 0; }
+/* abas das fichas com o laranja da marca */
+.montador-novo .aba-ativa, .montador-novo .aba-ativa:hover { color: #c4400d; border-bottom-color: #f25420; }
+.montador-novo .coluna-ficha .painel-montagem { border-radius: 0 0 18px 18px; }
+/* a foto pequena do exercício (na ficha e na lista) */
+.miniatura-exercicio { flex: none; width: 56px; height: 42px; border-radius: 8px; overflow: hidden; background: #fff4ee; display: inline-grid; place-items: center; }
+.miniatura-exercicio img { width: 100%; height: 100%; object-fit: cover; }
+.miniatura-exercicio.sem-foto { background: #fff4ee url("menu/halter.svg") center / 24px no-repeat; }
+.montador-novo .linha-nome { display: flex; align-items: center; gap: 10px; }
+.montador-novo .linha-nome-texto { min-width: 0; }
+.montador-novo .painel-biblioteca .item { justify-content: flex-start; }
+.montador-novo .painel-biblioteca .item-texto { flex: 1; min-width: 0; }
+.montador-novo .painel-biblioteca .miniatura-exercicio { width: 48px; height: 36px; }
+.montador-novo .painel-biblioteca .grupo[aria-pressed="true"] { background: #f25420; border-color: #f25420; color: #0d0d0d; }
+@media (max-width: 1150px) { .montador-novo .cabecalho-treino { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .montador-novo .area-montagem > .cartao-importar, .montador-novo .area-montagem > .cartao-ia { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .montador-novo .cabecalho-treino { grid-template-columns: minmax(0, 1fr); } }
+.montador-novo .linhas .miniatura-exercicio { width: 48px; height: 36px; }
+.montador-novo .linha-nome { gap: 8px; font-size: 14.5px; }

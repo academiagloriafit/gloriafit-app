@@ -90,3 +90,27 @@ def test_exercicio_apagado_no_data4u_acha_a_foto_do_exercicio_de_mesmo_nome():
 
 def test_apagado_sem_exercicio_de_mesmo_nome_no_mapa_continua_sem_foto():
     assert foto_do_exercicio("EXERCICIO QUE NAO EXISTE APAGADO") is None
+
+
+def test_fotos_por_id_e_a_api_da_lista_trazem_a_foto(tmp_path):
+    """Lançar treino, visual novo (11/11/2026): a foto pequena de cada exercício vem do mapa por id e da /api/exercicios."""
+    from app import acesso
+    from app.db import conectar, criar_tabelas
+    from app.web import criar_app
+
+    caminho = tmp_path / "f.db"
+    c = conectar(caminho)
+    criar_tabelas(c)
+    c.execute("INSERT INTO exercicio (id, nome, origem) VALUES (1, '(7) VOADOR', 'app'), (2, 'CORRIDA NA ESTEIRA', 'app')")
+    c.execute("INSERT INTO aluno (id, nome, cpf, situacao, data4u_id) VALUES (1, 'ANA', '00000000001', 'A', 1)")
+    c.commit()
+    assert fotos_exercicios.fotos_por_id(c) == {"1": "Butterfly"}  # sem foto: fica de fora
+    token = acesso.autorizar(c, acesso.gerar_codigo(c, "Teste").codigo).token
+    c.close()
+    navegador = criar_app(caminho).test_client()
+    navegador.set_cookie(acesso.NOME_DO_COOKIE, token)
+    lista = {e["nome"]: e["foto"] for e in navegador.get("/api/exercicios").get_json()["exercicios"]}
+    assert lista == {"VOADOR": "Butterfly", "CORRIDA NA ESTEIRA": None}
+    html = navegador.get("/alunos/1/montar").get_data(as_text=True)
+    assert "data-fotos='{\"1\": \"Butterfly\"}'" in html and 'data-pasta-fotos="/static/exercicios/"' in html
+    assert "montador-novo" in html

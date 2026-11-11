@@ -10,6 +10,7 @@ Exercício que não está no mapa simplesmente não mostra o botão.
 
 import json
 import re
+import sqlite3
 from functools import lru_cache
 from pathlib import Path
 
@@ -46,3 +47,17 @@ def foto_do_exercicio(nome: object) -> str | None:
         return None
     foto = _mapa().get(_chave(nome))
     return foto if foto and _NOME_VALIDO.fullmatch(foto) else None
+
+
+def fotos_por_id(conn: sqlite3.Connection) -> dict[str, str]:
+    """{id do exercício (texto): nome do par de fotos} de todos os exercícios que têm foto.
+
+    A tela de lançar treino (visual novo, 11/11/2026) põe a foto pequena ao lado de cada exercício da ficha. Os exercícios
+    chegam lá por vários caminhos (lista, importar, IA, fila, editar), mas todos trazem o id: por isso o mapa é por id.
+    """
+    fotos = {}
+    for exercicio_id, nome in conn.execute("SELECT id, nome FROM exercicio"):
+        foto = foto_do_exercicio(nome)
+        if foto:
+            fotos[str(exercicio_id)] = foto
+    return fotos

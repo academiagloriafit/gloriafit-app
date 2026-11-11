@@ -3,12 +3,15 @@
 // Usada na página /exercicios (só consulta) e na tela de montar treino (com o
 // botão "Adicionar" em cada exercício).
 import { MENSAGEM_NAO_AUTORIZADO } from "./api.js";
+import { criarMiniatura } from "./foto_exercicio.js";
 
 // `raiz`: o bloco da página com os elementos marcados [data-busca], [data-grupos],
 // [data-resumo] e [data-lista] (veja _biblioteca.html).
 // `opcoes.aoAdicionar(exercicio)`: se vier, cada exercício ganha o botão "Adicionar".
 export function iniciarBiblioteca(raiz, opcoes = {}) {
   const aoAdicionar = opcoes.aoAdicionar || null;
+  // `opcoes.pastaDasFotos`: se vier, cada exercício ganha a foto pequena (tela de lançar treino)
+  const pastaDasFotos = opcoes.pastaDasFotos || null;
   const campoBusca = raiz.querySelector("[data-busca]");
   const blocoGrupos = raiz.querySelector("[data-grupos]");
   const resumo = raiz.querySelector("[data-resumo]");
@@ -43,6 +46,7 @@ export function iniciarBiblioteca(raiz, opcoes = {}) {
 
     texto.appendChild(nome);
     texto.appendChild(detalhe);
+    if (pastaDasFotos) li.appendChild(criarMiniatura(pastaDasFotos, ex.foto));
     li.appendChild(texto);
 
     if (aoAdicionar) {

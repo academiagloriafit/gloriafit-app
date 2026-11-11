@@ -33,6 +33,7 @@ from app import (
     exercicios,
     filas,
     fotos,
+    fotos_exercicios,
     ia_historico,
     ia_retorno,
     ia_treino,
@@ -791,6 +792,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             },
             ia_limite_das_observacoes=ia_treino.LIMITE_DAS_OBSERVACOES,
             ia_limite_do_motivo=ia_retorno.LIMITE_DO_MOTIVO,
+            fotos_dos_exercicios=fotos_exercicios.fotos_por_id(conn),  # a foto pequena de cada exercício da ficha
         )
 
     @app.get("/alunos")
