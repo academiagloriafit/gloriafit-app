@@ -15,14 +15,14 @@
   {% include "_topo_aluno.html" %}
 
   <main class="pagina pagina-aluno">
-    <section class="painel painel-aluno" aria-labelledby="titulo-inicio">
+    <section class="painel painel-aluno meu-saudacao" aria-labelledby="titulo-inicio">
       <h1 id="titulo-inicio">{{ saudacao }}, {{ primeiro_nome }}!</h1>
       <p id="aviso-treino" class="texto-apoio" role="status">Buscando o seu treino…</p>
       <button id="botao-de-novo" class="botao-link botao-largo" type="button" hidden>Tentar de novo</button>
       <button id="aviso-resposta-nova" class="botao-link botao-largo meu-aviso-resposta" type="button" hidden></button>
     </section>
 
-    <section id="treino" class="painel painel-aluno" aria-labelledby="titulo-treino" hidden>
+    <section id="treino" class="painel painel-aluno meu-painel-treino" aria-labelledby="titulo-treino" hidden>
       <!-- Tela 1 (ao entrar): o treino e um botão por ficha. Os exercícios só aparecem depois do toque. -->
       <div id="treino-cabecalho">
         <p id="treino-novo" class="meu-treino-novo" hidden></p>
@@ -31,7 +31,10 @@
         <p id="treino-semana" class="meu-treino-semana" hidden></p>
         <p id="treino-dica" class="texto-apoio meu-treino-dica"></p>
       </div>
-      <div id="fichas-botoes" class="meu-fichas-botoes" role="group" aria-label="Fichas do treino"></div>
+      <!-- Tela inicial nova (11/11/2026, opção 2 do Canva): o treino de hoje em laranja, o círculo da ficha e a semana. -->
+      <div id="treino-destaque" class="meu-destaque"></div>
+      <div id="treino-numeros" class="meu-numeros"></div>
+      <div id="fichas-botoes" class="meu-fichas-botoes meu-fichas-quadrados" role="group" aria-label="Fichas do treino"></div>
       <!-- Tela 2 (depois de tocar numa ficha): a lista dos exercícios dela. -->
       <div id="ficha-topo" class="meu-ficha-topo" hidden>
         <button id="botao-voltar" class="botao-link meu-voltar" type="button">&#8249; Voltar aos treinos</button>

@@ -192,6 +192,7 @@ export function descreverMarcacao(status, corpo) {
     // `fichaDoDia`: qual ficha fica circulada agora (o servidor decide; só vem se for um número)
     const resposta = { tipo: "ok", feitas: corpo.feitas, jaMarcada: corpo.ja_marcada === true };
     if (Number.isInteger(corpo.ficha_do_dia)) resposta.fichaDoDia = corpo.ficha_do_dia;
+    if (Number.isInteger(corpo.treinos_na_semana)) resposta.treinosNaSemana = corpo.treinos_na_semana;
     return resposta;
   }
   if (corpo && typeof corpo.erro === "string" && corpo.erro) return { tipo: "erro", mensagem: corpo.erro };
@@ -556,4 +557,49 @@ export function descreverVistos(status, corpo) {
     return { tipo: "ok", respostasNovas: corpo.respostas_novas };
   }
   return { tipo: "erro" };
+}
+
+// ------------------------------------------------------------------ tela inicial nova (opção 2 do Canva, escolhida pelo Thiago em 11/11/2026)
+// Bloco laranja com o treino de hoje, um círculo com quantas vezes a ficha foi feita, os treinos da semana e as fichas em quadrados.
+
+// Qual ficha vai no bloco laranja: a do dia; sem ficha do dia, a primeira. -1 quando não há ficha.
+export function fichaDoDestaque(treino) {
+  const fichas = Array.isArray(treino?.fichas) ? treino.fichas : [];
+  if (!fichas.length) return -1;
+  const doDia = fichas.findIndex((ficha) => ehFichaDoDia(treino, ficha));
+  return doDia >= 0 ? doDia : 0;
+}
+
+// Os textos do bloco laranja.
+export function textosDoDestaque(treino, ficha) {
+  const feita = Boolean(ficha?.feita_hoje);
+  return {
+    etiqueta: feita ? "✓ Concluído hoje" : ehFichaDoDia(treino, ficha) ? "Treino de hoje" : "Seu treino",
+    botao: feita ? "Ver treino" : "Começar treino",
+  };
+}
+
+// "A PEITO E TRI" -> { letra: "A", resto: "PEITO E TRI" }. Nome que não começa com uma letra solta usa a posição (A, B, C...).
+export function letraDaFicha(ficha, indice) {
+  const nome = String(ficha?.nome ?? "").trim();
+  const partes = nome.match(/^([A-Za-z0-9])\s+(.+)$/);
+  if (partes) return { letra: partes[1].toUpperCase(), resto: partes[2] };
+  if (/^[A-Za-z0-9]$/.test(nome)) return { letra: nome.toUpperCase(), resto: "" };
+  const n = Number.isInteger(indice) && indice >= 0 ? indice : 0;
+  return { letra: n < 26 ? String.fromCharCode(65 + n) : String(n + 1), resto: nome };
+}
+
+// O círculo: quanto dele fica laranja (0 a 1) e o texto do meio.
+export function progressoDaFicha(ficha, meta) {
+  const feitas = Number.isInteger(ficha?.feitas) && ficha.feitas > 0 ? ficha.feitas : 0;
+  if (Number.isInteger(meta) && meta > 0) {
+    return { fracao: Math.min(1, feitas / meta), texto: `${feitas} de ${meta} vezes` };
+  }
+  return { fracao: 0, texto: feitas === 1 ? "1 vez" : `${feitas} vezes` };
+}
+
+// O número grande da semana e a palavra embaixo dele.
+export function numeroDaSemana(treino) {
+  const n = Number.isInteger(treino?.treinos_na_semana) && treino.treinos_na_semana > 0 ? treino.treinos_na_semana : 0;
+  return { numero: String(n), palavra: n === 1 ? "treino" : "treinos" };
 }

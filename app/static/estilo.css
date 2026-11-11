@@ -2161,3 +2161,44 @@ img.avatar-foto { cursor: zoom-in; }
 .meu-aviso-desfazer { align-self: center; margin-top: 6px; padding: 10px; border: 0; background: none; color: var(--texto-suave); font: inherit; font-size: 14px; text-decoration: underline; cursor: pointer; }
 .meu-aviso-desfazer:focus-visible { outline: 2px solid var(--laranja); outline-offset: 2px; }
 .meu-faixa-concluido { margin: 0 0 14px; padding: 13px 16px; border-radius: 14px; background: var(--verde-fundo-forte); color: var(--verde); font-weight: 700; }
+
+/* ---------- Tela inicial do aluno, visual novo (opção 2 do Canva, escolhida pelo Thiago em 11/11/2026) ----------
+   Na lista (fora de uma ficha) o treino fica solto sobre o fundo: bloco laranja, quadro de números e as fichas em quadrados. */
+.pagina-aluno:not(.modo-ficha) .meu-painel-treino { background: none; border: 0; padding: 0; gap: 16px; }
+.pagina-aluno:not(.modo-ficha) #treino-cabecalho { display: flex; flex-direction: column; gap: 2px; }
+.pagina-aluno:not(.modo-ficha) .meu-treino-nome { font-size: 15px; font-family: inherit; font-weight: 700; letter-spacing: 0.04em; color: var(--texto-suave); }
+.pagina-aluno:not(.modo-ficha) .meu-treino-datas { margin: 0; font-size: 13px; }
+
+.meu-destaque { display: flex; flex-direction: column; gap: 4px; padding: 22px 20px 20px; border-radius: 22px; background: var(--laranja); color: #0d0d0d; }
+.meu-destaque p { margin: 0; }
+.meu-destaque-etiqueta { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.meu-destaque-nome { font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 44px; line-height: 0.98; text-transform: uppercase; overflow-wrap: anywhere; }
+.meu-destaque-detalhe { font-size: 16px; font-weight: 700; margin-bottom: 14px !important; }
+.meu-destaque-botao { min-height: 56px; border: 0; border-radius: 14px; background: #0d0d0d; color: #ffffff; font: inherit; font-size: 18px; font-weight: 800; cursor: pointer; }
+.meu-destaque-botao:hover { background: #26282b; }
+.meu-destaque-botao:focus-visible { outline: 3px solid #ffffff; outline-offset: 3px; }
+
+.meu-numeros { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 18px; padding: 18px 20px; border: 1px solid var(--linha); border-radius: 22px; background: var(--papel); }
+.meu-circulo {
+  --progresso: 0;
+  width: 132px; height: 132px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 2px;
+  background:
+    radial-gradient(closest-side, var(--papel) 82%, transparent 83%),
+    conic-gradient(var(--laranja) calc(var(--progresso) * 1turn), var(--cinza-leve) 0);
+}
+.meu-circulo-titulo { font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 26px; line-height: 1; text-transform: uppercase; }
+.meu-circulo-texto { max-width: 92px; font-size: 13px; font-weight: 700; color: var(--texto-suave); line-height: 1.2; }
+.meu-semana { display: flex; flex-direction: column; align-items: center; text-align: center; padding-left: 18px; border-left: 1px solid var(--linha); }
+.meu-semana-titulo { font-size: 14px; font-weight: 700; color: var(--texto-suave); }
+.meu-semana-numero { font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 72px; line-height: 0.95; font-variant-numeric: tabular-nums; }
+.meu-semana-palavra { font-size: 15px; font-weight: 700; }
+
+/* as fichas em quadrados lado a lado; com muitas fichas a fileira rola para o lado (só ela, a página não) */
+.meu-fichas-quadrados { flex-direction: row; gap: 10px; overflow-x: auto; padding: 4px 2px 8px; scroll-snap-type: x mandatory; }
+.meu-quadrado { flex: 0 0 auto; width: calc((100% - 20px) / 3); min-width: 100px; min-height: 124px; padding: 12px 8px; flex-direction: column; justify-content: center; align-items: center; gap: 2px; text-align: center; border-radius: 18px; scroll-snap-align: start; }
+.meu-quadrado-letra { font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 64px; line-height: 0.9; color: var(--laranja); }
+.meu-quadrado-nome { font-size: 12.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--laranja-texto); line-height: 1.15; overflow-wrap: anywhere; }
+.meu-quadrado-feita { margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--verde); }
+.meu-quadrado.meu-cartao-do-dia { box-shadow: 0 0 0 3px rgba(242, 84, 32, 0.25); }
+@media (max-width: 360px) { .meu-circulo { width: 112px; height: 112px; } .meu-semana-numero { font-size: 60px; } .meu-destaque-nome { font-size: 38px; } }

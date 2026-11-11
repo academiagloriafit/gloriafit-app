@@ -4,6 +4,11 @@ import {
   DICA_DO_COMENTARIO_DO_TREINO,
   LIMITE_DO_COMENTARIO,
   MENSAGEM_SEM_REDE,
+  fichaDoDestaque,
+  letraDaFicha,
+  numeroDaSemana,
+  progressoDaFicha,
+  textosDoDestaque,
   SEGUNDOS_DA_FAIXA_DE_CONCLUIDO,
   TEXTO_AVISO_CONCLUIDO,
   TEXTO_VOLTAR_AO_INICIO,
@@ -771,5 +776,47 @@ describe("aviso de treino concluído (04/11/2026)", () => {
     expect(TEXTO_AVISO_CONCLUIDO).toBe("Treino concluído!");
     expect(TEXTO_VOLTAR_AO_INICIO).toBe("Voltar ao início");
     expect(SEGUNDOS_DA_FAIXA_DE_CONCLUIDO).toBeGreaterThan(0);
+  });
+});
+
+describe("tela inicial nova (11/11/2026)", () => {
+  const treino = (fichaDoDia, fichas) => ({ ficha_do_dia: fichaDoDia, fichas });
+  const f = (ordem, nome, extra = {}) => ({ ordem, nome, grupos: [], ...extra });
+
+  it("o destaque é a ficha do dia; sem ela, a primeira; sem fichas, -1", () => {
+    expect(fichaDoDestaque(treino(2, [f(1, "A"), f(2, "B")]))).toBe(1);
+    expect(fichaDoDestaque(treino(null, [f(1, "A"), f(2, "B")]))).toBe(0);
+    expect(fichaDoDestaque(treino(1, []))).toBe(-1);
+    expect(fichaDoDestaque(null)).toBe(-1);
+  });
+
+  it("textos do destaque mudam quando a ficha já foi feita hoje", () => {
+    const t = treino(1, [f(1, "A")]);
+    expect(textosDoDestaque(t, f(1, "A"))).toEqual({ etiqueta: "Treino de hoje", botao: "Começar treino" });
+    expect(textosDoDestaque(t, f(1, "A", { feita_hoje: true }))).toEqual({ etiqueta: "✓ Concluído hoje", botao: "Ver treino" });
+    expect(textosDoDestaque(treino(null, [f(1, "A")]), f(1, "A")).etiqueta).toBe("Seu treino");
+  });
+
+  it("separa a letra do nome da ficha", () => {
+    expect(letraDaFicha({ nome: "A PEITO E TRI" }, 0)).toEqual({ letra: "A", resto: "PEITO E TRI" });
+    expect(letraDaFicha({ nome: "b costas" }, 1)).toEqual({ letra: "B", resto: "costas" });
+    expect(letraDaFicha({ nome: "C" }, 2)).toEqual({ letra: "C", resto: "" });
+    expect(letraDaFicha({ nome: "TREINO 1" }, 0)).toEqual({ letra: "A", resto: "TREINO 1" });
+    expect(letraDaFicha({ nome: "SUPERIORES" }, 3)).toEqual({ letra: "D", resto: "SUPERIORES" });
+    expect(letraDaFicha(null, 27).letra).toBe("28");
+  });
+
+  it("o círculo usa a meta quando existe e nunca passa de cheio", () => {
+    expect(progressoDaFicha({ feitas: 4 }, 15)).toEqual({ fracao: 4 / 15, texto: "4 de 15 vezes" });
+    expect(progressoDaFicha({ feitas: 20 }, 15).fracao).toBe(1);
+    expect(progressoDaFicha({ feitas: 0 }, null)).toEqual({ fracao: 0, texto: "0 vezes" });
+    expect(progressoDaFicha({ feitas: 1 }, null).texto).toBe("1 vez");
+    expect(progressoDaFicha({}, 10).texto).toBe("0 de 10 vezes");
+  });
+
+  it("número da semana com singular e plural", () => {
+    expect(numeroDaSemana({ treinos_na_semana: 2 })).toEqual({ numero: "2", palavra: "treinos" });
+    expect(numeroDaSemana({ treinos_na_semana: 1 })).toEqual({ numero: "1", palavra: "treino" });
+    expect(numeroDaSemana({})).toEqual({ numero: "0", palavra: "treinos" });
   });
 });

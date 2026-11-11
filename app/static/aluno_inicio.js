@@ -6,6 +6,11 @@ import { iniciarDescanso } from "./aluno_descanso.js";
 import { el } from "./dom.js";
 import {
   ESFORCOS,
+  fichaDoDestaque,
+  letraDaFicha,
+  numeroDaSemana,
+  progressoDaFicha,
+  textosDoDestaque,
   SEGUNDOS_DA_FAIXA_DE_CONCLUIDO,
   TEXTO_AVISO_CONCLUIDO,
   TEXTO_DESFAZER_SEM_QUERER,
@@ -15,7 +20,6 @@ import {
   TEXTO_COMENTARIO_ENVIADO,
   TEXTO_COMENTARIO_REPETIDO,
   TEXTO_CONCLUIDO_HOJE,
-  TEXTO_ESCOLHA_O_TREINO,
   TEXTO_ESFORCO_OPCIONAL,
   TEXTO_FICHA_FEITA_HOJE,
   TEXTO_JA_MARCADA,
@@ -54,14 +58,12 @@ import {
   textoDaPosicao,
   textoDaUltimaCarga,
   textoDasDatas,
-  textoDaSemana,
   textoDoTreinoNovo,
   textoDeTodosFeitos,
   textoDoAndamento,
   textoDoContador,
   textoDoExercicioFeito,
   textoDoFeito,
-  textoDoProgresso,
   textoDosExercicios,
 } from "./aluno_modelo.js";
 
@@ -73,6 +75,8 @@ const datasDoTreino = document.getElementById("treino-datas");
 const semanaDoTreino = document.getElementById("treino-semana");
 const treinoNovo = document.getElementById("treino-novo");
 const botoesDasFichas = document.getElementById("fichas-botoes");
+const destaqueDoTreino = document.getElementById("treino-destaque");
+const numerosDoTreino = document.getElementById("treino-numeros");
 const areaDaFicha = document.getElementById("ficha-atual");
 const areaDoExercicio = document.getElementById("exercicio-atual");
 const areaDoComentarioDoTreino = document.getElementById("comentario-treino");
@@ -600,6 +604,7 @@ async function marcarFicha(treino, indice, rota, botao) {
       ficha.feita_hoje = rota === "feito";
       if (rota === "desfazer") ficha.esforco_hoje = null; // a nota ficava na marcação de hoje, que o servidor apagou
       if (Number.isInteger(resultado.fichaDoDia)) treino.ficha_do_dia = resultado.fichaDoDia; // o servidor decide quem fica circulada
+      if (Number.isInteger(resultado.treinosNaSemana)) treino.treinos_na_semana = resultado.treinosNaSemana;
       mensagem = rota === "feito" ? (resultado.jaMarcada ? TEXTO_JA_MARCADA : TEXTO_FICHA_FEITA_HOJE) : "";
       if (rota === "feito") abrirAvisoDeConcluido = true;
     } else {
@@ -804,33 +809,76 @@ function mostrarExercicio(treino, indiceDaFicha, posicao, mensagem = "") {
 // A lista de botões (tela 1): um por ficha. A do dia vem circulada e com a etiqueta "Treino de hoje".
 // Os exercícios NÃO aparecem aqui: o aluno toca na ficha para vê-los.
 function desenharCartoes(treino) {
+  desenharDestaque(treino);
+  desenharNumeros(treino);
   botoesDasFichas.replaceChildren(
     ...treino.fichas.map((ficha, i) => {
       const doDia = ehFichaDoDia(treino, ficha);
+      const { letra, resto } = letraDaFicha(ficha, i);
       return el(
         "button",
         {
           type: "button",
-          classe: doDia ? "meu-cartao-ficha meu-cartao-do-dia" : "meu-cartao-ficha",
+          classe: doDia ? "meu-cartao-ficha meu-quadrado meu-cartao-do-dia" : "meu-cartao-ficha meu-quadrado",
           "aria-current": doDia ? "true" : null,
+          "aria-label": [ficha.nome, textoDosExercicios(ficha), ficha.feita_hoje ? TEXTO_CONCLUIDO_HOJE : ""].filter(Boolean).join(", "),
           aoClicar: () => abrirFicha(treino, i),
         },
-        el(
-          "span",
-          { classe: "meu-cartao-texto" },
-          doDia && el("span", { classe: "meu-etiqueta-hoje", texto: TEXTO_TREINO_DE_HOJE }),
-          el("span", { classe: "meu-cartao-nome", texto: ficha.nome }),
-          el(
-            "span",
-            { classe: "meu-cartao-detalhe" },
-            el("span", { texto: textoDosExercicios(ficha) }),
-            ficha.feita_hoje && el("span", { classe: "meu-cartao-feita", texto: TEXTO_CONCLUIDO_HOJE }),
-            textoDoProgresso(ficha) && el("span", { classe: "meu-cartao-progresso", texto: textoDoProgresso(ficha) }),
-          ),
-        ),
-        el("span", { classe: "meu-cartao-seta", texto: "\u203A", "aria-hidden": "true" }),
+        el("span", { classe: "meu-quadrado-letra", texto: letra, "aria-hidden": "true" }),
+        resto && el("span", { classe: "meu-quadrado-nome", texto: resto, "aria-hidden": "true" }),
+        ficha.feita_hoje && el("span", { classe: "meu-quadrado-feita", texto: "✓ hoje", "aria-hidden": "true" }),
       );
     }),
+  );
+}
+
+// O bloco laranja: a ficha do dia (ou a primeira), quantos exercícios e o botão que abre a ficha.
+function desenharDestaque(treino) {
+  const indice = fichaDoDestaque(treino);
+  if (indice < 0) {
+    destaqueDoTreino.replaceChildren();
+    destaqueDoTreino.hidden = true;
+    return;
+  }
+  const ficha = treino.fichas[indice];
+  const textos = textosDoDestaque(treino, ficha);
+  destaqueDoTreino.hidden = false;
+  destaqueDoTreino.replaceChildren(
+    el("p", { classe: "meu-destaque-etiqueta", texto: textos.etiqueta }),
+    el("p", { classe: "meu-destaque-nome", texto: ficha.nome }),
+    el("p", { classe: "meu-destaque-detalhe", texto: textoDosExercicios(ficha) }),
+    el("button", { type: "button", classe: "meu-destaque-botao", texto: textos.botao, aoClicar: () => abrirFicha(treino, indice) }),
+  );
+}
+
+// O círculo (vezes que a ficha do destaque foi feita) e o número de treinos da semana.
+function desenharNumeros(treino) {
+  const indice = fichaDoDestaque(treino);
+  if (indice < 0) {
+    numerosDoTreino.replaceChildren();
+    numerosDoTreino.hidden = true;
+    return;
+  }
+  const ficha = treino.fichas[indice];
+  const progresso = progressoDaFicha(ficha, treino.meta_por_ficha);
+  const semana = numeroDaSemana(treino);
+  const circulo = el(
+    "div",
+    { classe: "meu-circulo", role: "img", "aria-label": `Ficha ${letraDaFicha(ficha, indice).letra}: ${progresso.texto}` },
+    el("span", { classe: "meu-circulo-titulo", texto: `Ficha ${letraDaFicha(ficha, indice).letra}`, "aria-hidden": "true" }),
+    el("span", { classe: "meu-circulo-texto", texto: progresso.texto, "aria-hidden": "true" }),
+  );
+  circulo.style.setProperty("--progresso", String(progresso.fracao)); // pelo CSSOM: a política de segurança (CSP) não bloqueia
+  numerosDoTreino.hidden = false;
+  numerosDoTreino.replaceChildren(
+    circulo,
+    el(
+      "div",
+      { classe: "meu-semana", role: "img", "aria-label": `Esta semana: ${semana.numero} ${semana.palavra}` },
+      el("span", { classe: "meu-semana-titulo", texto: "Esta semana", "aria-hidden": "true" }),
+      el("span", { classe: "meu-semana-numero", texto: semana.numero, "aria-hidden": "true" }),
+      el("span", { classe: "meu-semana-palavra", texto: semana.palavra, "aria-hidden": "true" }),
+    ),
   );
 }
 
@@ -852,6 +900,8 @@ function trocarTela(nova) {
   const dentroDeUmaFicha = nova !== "fichas";
   cabecalhoDoTreino.hidden = dentroDeUmaFicha;
   botoesDasFichas.hidden = dentroDeUmaFicha;
+  destaqueDoTreino.hidden = dentroDeUmaFicha || !destaqueDoTreino.childElementCount;
+  numerosDoTreino.hidden = dentroDeUmaFicha || !numerosDoTreino.childElementCount;
   topoDaFicha.hidden = nova !== "ficha";
   areaDaFicha.hidden = nova !== "ficha";
   areaDoComentarioDoTreino.hidden = nova !== "ficha";
@@ -972,11 +1022,12 @@ function mostrarTreino(treino, indiceDaFicha = null, exercicioAberto = null) {
   tituloDoTreino.textContent = treino.nome;
   datasDoTreino.textContent = textoDasDatas(treino);
   datasDoTreino.hidden = !datasDoTreino.textContent;
-  semanaDoTreino.textContent = textoDaSemana(treino);
-  semanaDoTreino.hidden = !semanaDoTreino.textContent;
+  semanaDoTreino.textContent = ""; // (11/11/2026) a semana agora aparece no quadro de números, ao lado do círculo
+  semanaDoTreino.hidden = true;
   treinoNovo.textContent = textoDoTreinoNovo(treino);
   treinoNovo.hidden = !treinoNovo.textContent;
-  dicaDoTreino.textContent = TEXTO_ESCOLHA_O_TREINO;
+  dicaDoTreino.textContent = "";
+  dicaDoTreino.hidden = true; // (11/11/2026) o botão "Começar treino" já diz o que fazer
   desenharCartoes(treino);
   areaDoComentarioDoTreino.replaceChildren(desenharComentario(treino));
   if (indiceDaFicha === null) {

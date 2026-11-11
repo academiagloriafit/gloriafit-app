@@ -253,7 +253,7 @@ def test_o_numero_da_maquina_nao_aparece_no_nome_do_exercicio(conn):
 
 
 def test_nada_de_ids_professor_origem_ou_ciclo_na_resposta(conn):
-    _salvar(conn, sessoes_por_ficha=15, fim="2026-11-06")
+    _salvar(conn, sessoes_por_ficha=15, fim="2099-12-31")  # (11/11/2026) era 06/11/2026: o início é hoje, e o teste quebrou quando a data passou
 
     texto = repr(treino_do_aluno(conn, 1))
 
@@ -387,7 +387,7 @@ def test_marcar_grava_uma_sessao_com_o_momento_certo(conn):
 
     resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
 
-    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 1, "ficha_do_dia": 1}
+    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 1, "ficha_do_dia": 1, "treinos_na_semana": 1}
     assert _sessoes(conn) == [(1, "2026-10-15 15:00:00")]
 
 
@@ -397,7 +397,7 @@ def test_marcar_de_novo_no_mesmo_dia_nao_conta_duas_vezes(conn):
 
     resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA + timedelta(hours=3))
 
-    assert resposta == {"ficha": 1, "ja_marcada": True, "feitas": 1, "ficha_do_dia": 1}
+    assert resposta == {"ficha": 1, "ja_marcada": True, "feitas": 1, "ficha_do_dia": 1, "treinos_na_semana": 1}
     assert len(_sessoes(conn)) == 1
 
 
@@ -407,7 +407,7 @@ def test_no_dia_seguinte_conta_de_novo(conn):
 
     resposta = marcar_ficha_feita(conn, 1, 1, MEIO_DIA + timedelta(days=1))
 
-    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 2, "ficha_do_dia": 1}
+    assert resposta == {"ficha": 1, "ja_marcada": False, "feitas": 2, "ficha_do_dia": 1, "treinos_na_semana": 2}
 
 
 def test_o_dia_e_o_de_brasilia_e_nao_o_do_relogio_de_londres(conn):
@@ -514,6 +514,15 @@ def test_dois_toques_ao_mesmo_tempo_gravam_uma_vez_so(caminho):
     c.close()
 
 
+def test_duas_fichas_no_mesmo_dia_contam_um_treino_na_semana(conn):
+    """11/11/2026: a resposta do /feito traz os treinos da semana (o número grande da tela inicial nova)."""
+    _treino_abc(conn)
+    assert marcar_ficha_feita(conn, 1, 1, MEIO_DIA)["treinos_na_semana"] == 1
+    assert marcar_ficha_feita(conn, 1, 2, MEIO_DIA + timedelta(hours=1))["treinos_na_semana"] == 1
+    assert desfazer_marcacao_de_hoje(conn, 1, 2, MEIO_DIA + timedelta(hours=2))["treinos_na_semana"] == 1
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA + timedelta(hours=2))["treinos_na_semana"] == 0
+
+
 # ------------------------------------------------------------------ desfazer
 
 
@@ -521,7 +530,7 @@ def test_desfazer_apaga_a_marcacao_de_hoje_e_deixa_marcar_de_novo(conn):
     _treino_abc(conn)
     marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
 
-    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 0, "ficha_do_dia": 1}
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 0, "ficha_do_dia": 1, "treinos_na_semana": 0}
     assert marcar_ficha_feita(conn, 1, 1, MEIO_DIA)["ja_marcada"] is False
 
 
@@ -530,7 +539,7 @@ def test_desfazer_nunca_apaga_marcacao_de_outro_dia(conn):
     marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(days=1))
     marcar_ficha_feita(conn, 1, 1, MEIO_DIA)
 
-    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1, "ficha_do_dia": 2}
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1, "ficha_do_dia": 2, "treinos_na_semana": 1}
     assert _sessoes(conn) == [(1, "2026-10-14 15:00:00")]
 
 
@@ -538,7 +547,7 @@ def test_desfazer_sem_marcacao_hoje_nao_muda_nada(conn):
     _treino_abc(conn)
     marcar_ficha_feita(conn, 1, 1, MEIO_DIA - timedelta(days=1))
 
-    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1, "ficha_do_dia": 2}
+    assert desfazer_marcacao_de_hoje(conn, 1, 1, MEIO_DIA) == {"ficha": 1, "feitas": 1, "ficha_do_dia": 2, "treinos_na_semana": 1}
 
 
 def test_desfazer_so_mexe_na_ficha_pedida_e_no_proprio_aluno(conn):
@@ -620,10 +629,10 @@ def test_marcar_e_desfazer_pela_rota(caminho, cliente_da_ana):
     desfeita = _post(cliente_da_ana, "desfazer", {"ficha": 1})
     final = cliente_da_ana.get("/api/aluno/treino").get_json()["treino"]["fichas"][0]
 
-    assert primeira.status_code == 200 and primeira.get_json() == {"ok": True, "ficha": 1, "ja_marcada": False, "feitas": 1, "ficha_do_dia": 1}
+    assert primeira.status_code == 200 and primeira.get_json() == {"ok": True, "ficha": 1, "ja_marcada": False, "feitas": 1, "ficha_do_dia": 1, "treinos_na_semana": 1}
     assert segunda.get_json()["ja_marcada"] is True and segunda.get_json()["feitas"] == 1
     assert depois["feita_hoje"] is True and depois["feitas"] == 1
-    assert desfeita.get_json() == {"ok": True, "ficha": 1, "feitas": 0, "ficha_do_dia": 1}
+    assert desfeita.get_json() == {"ok": True, "ficha": 1, "feitas": 0, "ficha_do_dia": 1, "treinos_na_semana": 0}
     assert final["feita_hoje"] is False and final["feitas"] == 0
 
 
@@ -850,3 +859,4 @@ def test_treinos_na_semana_conta_dias_de_segunda_ate_hoje_em_brasilia():
     assert treinos_na_semana(c, 2, quarta) == 1
     assert treinos_na_semana(c, 1, datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)) == 0  # segunda seguinte: semana nova
     c.close()
+

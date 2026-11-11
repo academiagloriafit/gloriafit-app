@@ -280,7 +280,7 @@ def marcar_ficha_feita(
 ) -> dict:
     """O aluno marca "fiz esta ficha hoje". No máximo UMA vez por ficha por dia (decisão do Thiago, 15/10/2026).
 
-    Marcar de novo no mesmo dia não faz nada (`ja_marcada: True`). Devolve {"ficha", "ja_marcada", "feitas", "ficha_do_dia"}
+    Marcar de novo no mesmo dia não faz nada (`ja_marcada: True`). Devolve {"ficha", "ja_marcada", "feitas", "ficha_do_dia", "treinos_na_semana"}
     (`ficha_do_dia`: qual ficha fica circulada agora; quem decide é só o servidor, o celular não refaz a conta).
     A conferência e a gravação acontecem na mesma transação (`BEGIN IMMEDIATE`): dois toques ao mesmo tempo,
     ou o mesmo aluno em dois celulares, nunca gravam duas vezes.
@@ -295,7 +295,9 @@ def marcar_ficha_feita(
     except BaseException:
         conn.rollback()
         raise
-    return {"ficha": ficha_ordem, "ja_marcada": ja_marcada, "feitas": feitas, "ficha_do_dia": do_dia}
+    # treinos_na_semana (11/11/2026): o número grande da tela inicial nova se atualiza sem recarregar a página
+    return {"ficha": ficha_ordem, "ja_marcada": ja_marcada, "feitas": feitas, "ficha_do_dia": do_dia,
+            "treinos_na_semana": treinos_na_semana(conn, aluno_id, agora)}
 
 
 def desfazer_marcacao_de_hoje(
@@ -303,7 +305,7 @@ def desfazer_marcacao_de_hoje(
 ) -> dict:
     """O aluno desfaz a marcação de HOJE de uma ficha (toque errado). Só apaga as de hoje, nunca as de outros dias.
 
-    Devolve {"ficha", "feitas", "ficha_do_dia"} (quantas ficaram e qual ficha fica circulada agora). Se não havia
+    Devolve {"ficha", "feitas", "ficha_do_dia", "treinos_na_semana"} (quantas ficaram e qual ficha fica circulada agora). Se não havia
     marcação hoje, não muda nada.
     """
     agora = agora or agora_utc()
@@ -316,7 +318,7 @@ def desfazer_marcacao_de_hoje(
     except BaseException:
         conn.rollback()
         raise
-    return {"ficha": ficha_ordem, "feitas": feitas, "ficha_do_dia": do_dia}
+    return {"ficha": ficha_ordem, "feitas": feitas, "ficha_do_dia": do_dia, "treinos_na_semana": treinos_na_semana(conn, aluno_id, agora)}
 
 
 # ------------------------------------------------------------------ durante o treino: exercício feito, carga e nota
