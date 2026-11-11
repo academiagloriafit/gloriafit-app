@@ -1067,6 +1067,7 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
             dias_sem_treinar=ciclo.dias_desde_o_ultimo_treino(conexao(), aluno_id),  # o resumo no topo da ficha
             historicos_ia=ia_historico.do_aluno(conexao(), aluno_id),  # "Por que este treino foi montado assim" (só o professor vê)
             foto=fotos.situacao_da_foto(conexao(), aluno_id),  # a foto escolhida pelo aluno no app, com o botão de voltar à da catraca
+            frequencia=painel_alunos.frequencia(conexao(), aluno_id),  # o calendário da aba "Visão geral" (11/11/2026)
         )
 
     @app.get("/treinos/<int:treino_id>/imprimir")

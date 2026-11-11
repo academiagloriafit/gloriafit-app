@@ -2394,3 +2394,60 @@ img.avatar-foto { cursor: zoom-in; }
   .painel-alunos .linha-aluno .aluno-abrir { display: none; }
 }
 @media (max-width: 760px) { .painel-alunos-topo { grid-template-columns: 1fr; } }
+
+/* ---------- Ficha do aluno (professor), visual novo (opção B do Canva, escolhida pelo Thiago em 11/11/2026) ---------- */
+.ficha-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+.ficha-perfil { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px; }
+.ficha-identidade { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 22px 18px; border: 1px solid var(--linha); border-radius: 18px; background: var(--papel); }
+.ficha-identidade .voltar { align-self: flex-start; font-size: 14px; color: var(--texto-suave); }
+.ficha-identidade .cabecalho-ficha { flex-direction: column; align-items: center; gap: 8px; }
+.ficha-identidade .avatar-grande { width: 132px; height: 132px; font-size: 40px; }
+.ficha-identidade .titulo-grande { font-size: 26px; line-height: 1.1; }
+.ficha-identidade .heroi-linha { margin: 0; font-size: 13.5px; color: var(--texto-suave); }
+.ficha-identidade .heroi-acoes { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.ficha-identidade .heroi-acoes .botao-link { width: 100%; justify-content: center; min-height: 46px; }
+.ficha-identidade .botao-heroi { border-color: #f25420; color: #c4400d; background: none; }
+.ficha-perfil .painel { border-radius: 18px; }
+.ficha-abas { display: flex; gap: 4px; border-bottom: 1px solid var(--linha); margin-bottom: 16px; overflow-x: auto; }
+.ficha-abas [role="tab"] { min-height: 44px; padding: 0 16px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--texto-suave); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ficha-abas [role="tab"]:hover { color: var(--texto); }
+.ficha-abas [role="tab"][aria-selected="true"] { color: #c4400d; border-bottom-color: #f25420; }
+.ficha-abas [role="tab"]:focus-visible { outline: 2px solid #f25420; outline-offset: -2px; }
+.ficha-aba-contador { margin-left: 4px; padding: 1px 7px; border-radius: 999px; background: #eceef0; font-size: 12px; color: var(--texto-suave); }
+.ficha-aba-alerta { background: #f25420; color: #0d0d0d; }
+.ficha-aba { display: flex; flex-direction: column; gap: 16px; }
+.ficha-aba[hidden] { display: none; }
+/* o resumo de antes, agora em cartões claros */
+.ficha-nova .resumo-aluno { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.ficha-nova .resumo-item { padding: 14px 16px; border: 1px solid var(--linha); border-radius: 16px; background: var(--papel); color: var(--texto); }
+.ficha-nova .resumo-item .resumo-rotulo { color: var(--texto-suave); }
+.ficha-nova .resumo-alerta { border-color: #f25420; box-shadow: inset 3px 0 0 #f25420; }
+.ficha-visao-grade { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; }
+.ficha-visao-grade .painel { border-radius: 18px; gap: 12px; }
+.ficha-visao-grade h2 { margin: 0; font-size: 17px; }
+.ficha-anel-linha { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.ficha-anel { --progresso: 0; flex: none; width: 140px; height: 140px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(closest-side, var(--papel) 80%, transparent 81%), conic-gradient(#f25420 calc(var(--progresso) * 1turn), #eceef0 0); }
+.ficha-anel-numero { font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums; }
+.ficha-anel-rotulo { font-size: 13px; color: var(--texto-suave); }
+.ficha-fichas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 160px; }
+.ficha-fichas li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--linha); border-radius: 12px; font-size: 13.5px; color: var(--texto-suave); }
+.ficha-fichas strong { color: var(--texto); }
+.ficha-fichas-letra { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: #fff1ea; color: #c4400d; font-weight: 800; }
+.ficha-treino-datas { margin: 0; font-size: 13.5px; color: var(--texto-suave); }
+.texto-alerta { color: #c4400d; }
+.frequencia-grade { border-collapse: separate; border-spacing: 6px; margin: 0 -6px; }
+.frequencia-grade th { font-size: 12px; font-weight: 700; color: var(--texto-suave); text-align: center; }
+.frequencia-grade tbody th { text-align: left; font-weight: 600; padding-right: 4px; white-space: nowrap; }
+.frequencia-dia { display: block; width: 26px; height: 26px; margin: auto; border-radius: 50%; background: #eceef0; }
+.frequencia-dia.treinou { background: #f25420; }
+.frequencia-dia.futuro { background: none; border: 1px dashed #d5d8dc; }
+.frequencia-dia.hoje { box-shadow: 0 0 0 2px var(--papel), 0 0 0 4px #3c3e40; }
+.frequencia-media { margin: 0; padding: 8px 10px; border-radius: 10px; background: #fff7f2; font-size: 13.5px; font-weight: 700; color: #c4400d; text-align: center; }
+@media (max-width: 1150px) { .ficha-layout { grid-template-columns: 1fr; } .ficha-perfil { position: static; } .ficha-visao-grade, .ficha-nova .resumo-aluno { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) { .ficha-visao-grade, .ficha-nova .resumo-aluno { grid-template-columns: 1fr; } }
+.ficha-perfil .heroi-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ficha-perfil .heroi-acoes .botao-link { justify-content: center; min-height: 46px; }
+.ficha-perfil .heroi-acoes .botao-link:only-child { grid-column: 1 / -1; }
+.ficha-nova .ficha-perfil .botao-heroi, .tema-grafite .ficha-nova .ficha-perfil .botao-heroi { border: 1px solid #f25420; color: #c4400d; background: var(--papel); }
+.ficha-nova .ficha-conteudo .painel, .ficha-nova .ficha-conteudo .cartao-lista { max-width: none; width: 100%; }
+.ficha-nova .ficha-aba > * { flex: none; min-height: 0; }

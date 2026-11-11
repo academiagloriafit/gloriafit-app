@@ -102,3 +102,26 @@ def test_a_tela_tem_o_logo_oficial_e_os_numeros(caminho):
     assert "logo-completo-fundo-claro.png" in html and 'alt="Academia Glória Fit"' in html
     for pedaco in ('data-filtro="ativos"', 'data-filtro="hoje"', 'data-filtro="trocar"', 'data-filtro="comentarios"', 'data-filtro="sumiram"', "Alunos ativos"):
         assert pedaco in html, pedaco
+
+
+def test_frequencia_das_ultimas_4_semanas(conn):
+    f = painel_alunos.frequencia(conn, 1, AGORA)
+    assert len(f["semanas"]) == 4 and all(len(s) == 7 for s in f["semanas"])
+    # 11/11/2026 é quarta: a última semana vai de 09/11 (segunda) a 15/11 (domingo)
+    ultima = f["semanas"][-1]
+    assert ultima[0]["dia"] == "09/11" and ultima[2]["hoje"] and ultima[3]["futuro"] and not ultima[2]["futuro"]
+    assert f["dias_treinados"] == 5  # 07/11 a 11/11, um por dia
+    assert f["media_por_semana"] == "1,2"
+    nada = painel_alunos.frequencia(conn, 3, AGORA)
+    assert nada["dias_treinados"] == 0 and nada["media_por_semana"] == "0"
+
+
+def test_a_ficha_tem_as_abas_e_guarda_os_ids_de_antes(caminho):
+    html = _autorizado(criar_app(caminho), caminho).get("/alunos/1").get_data(as_text=True)
+    for pedaco in ('class="ficha-layout"', 'class="ficha-perfil"', 'role="tablist"', 'id="aba-visao"', 'id="aba-treinos"', 'id="aba-comentarios"',
+                   'id="aba-fila"', "ainda não escreveu nenhum comentário", 'id="painel-fila"', 'id="whatsapp"', 'class="ficha-anel"', "frequencia-grade", "ficha_abas.js"):
+        assert pedaco in html, pedaco
+    # só a Visão geral abre de cara; as outras abas começam escondidas
+    assert 'id="aba-visao" role="tabpanel" aria-labelledby="aba-btn-visao">' in html
+    for aba in ("treinos", "comentarios", "fila"):
+        assert f'id="aba-{aba}" role="tabpanel" aria-labelledby="aba-btn-{aba}" hidden>' in html

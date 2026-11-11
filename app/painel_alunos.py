@@ -103,3 +103,46 @@ def andamento(conn: sqlite3.Connection, aluno_ids: list[int], agora: datetime | 
             resultado[aluno_id]["ultimo_feito"] = dia
             resultado[aluno_id]["dias_sem_treinar"] = (dia_de_hoje - ler_dia(dia)).days
     return resultado
+
+
+# ------------------------------------------------------------------ ficha do aluno (opção B do Canva, 11/11/2026)
+
+SEMANAS_NA_FREQUENCIA = 4
+
+
+def frequencia(conn: sqlite3.Connection, aluno_id: int, agora: datetime | None = None, semanas: int = SEMANAS_NA_FREQUENCIA) -> dict:
+    """O calendário de frequência da ficha: as últimas `semanas` semanas (segunda a domingo, a de hoje por último).
+
+    {"semanas": [[{"dia": "10/11", "treinou": bool, "futuro": bool, "hoje": bool}, ... 7 dias], ...],
+     "dias_treinados": N (nas semanas mostradas, sem contar o futuro), "media_por_semana": "2,5"}.
+    Conta DIAS com alguma sessão (duas fichas no mesmo dia = um dia), como "Esta semana" no app do aluno.
+    """
+    from datetime import timedelta
+
+    dia_de_hoje = ler_dia(hoje(agora))
+    segunda_desta = dia_de_hoje - timedelta(days=dia_de_hoje.weekday())
+    primeiro = segunda_desta - timedelta(weeks=semanas - 1)
+    dias_com_treino = {
+        dia_local(linha[0])
+        for linha in conn.execute(
+            "SELECT s.feita_em FROM sessao s JOIN treino t ON t.id = s.treino_id WHERE t.aluno_id = ? AND s.feita_em >= ?",
+            (aluno_id, (primeiro - timedelta(days=1)).isoformat()),  # um dia de folga: o fuso de Brasília empurra a data
+        )
+    }
+    grade = []
+    for semana in range(semanas):
+        linha = []
+        for d in range(7):
+            dia = primeiro + timedelta(weeks=semana, days=d)
+            linha.append(
+                {
+                    "dia": dia.strftime("%d/%m"),
+                    "treinou": dia.isoformat() in dias_com_treino,
+                    "futuro": dia > dia_de_hoje,
+                    "hoje": dia == dia_de_hoje,
+                }
+            )
+        grade.append(linha)
+    treinados = sum(1 for linha in grade for d in linha if d["treinou"] and not d["futuro"])
+    media = treinados / semanas
+    return {"semanas": grade, "dias_treinados": treinados, "media_por_semana": f"{media:.1f}".replace(".", ",").replace(",0", "")}
