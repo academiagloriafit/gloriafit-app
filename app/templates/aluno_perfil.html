@@ -16,13 +16,20 @@
 
   <main class="pagina pagina-aluno pagina-perfil">
     {# A foto: a única coisa que o aluno muda sozinho (vale na hora, aqui e para o professor). #}
-    <section id="minha-foto" class="painel painel-aluno perfil-cabeca" aria-labelledby="titulo-perfil">
+    {# Visual novo (opção B do Canva, 11/11/2026): o alto parece uma carteirinha de sócio, com a faixa laranja da marca. #}
+    <section id="minha-foto" class="painel painel-aluno perfil-cabeca perfil-carteirinha" aria-labelledby="titulo-perfil">
+      <div class="carteirinha">
+      <span class="carteirinha-faixa" aria-hidden="true"><span>Glória Fit</span></span>
       <div class="minha-foto-quadro">
         <img id="minha-foto-atual" class="minha-foto-imagem" alt="Sua foto" width="160" height="160" hidden>
         <span id="minha-foto-vazia" class="minha-foto-imagem minha-foto-vazia" aria-hidden="true">{{ perfil.nome | iniciais }}</span>
         <canvas id="minha-foto-previa" class="minha-foto-imagem" width="320" height="320" aria-label="Prévia da foto escolhida" hidden></canvas>
       </div>
-      <h1 id="titulo-perfil" class="perfil-nome">{{ perfil.nome }}</h1>
+      <div class="carteirinha-texto">
+        <h1 id="titulo-perfil" class="perfil-nome">{{ perfil.nome }}</h1>
+        <p class="carteirinha-academia">Aluno(a) Academia Glória Fit</p>
+      </div>
+      </div>
       <p id="minha-foto-texto" class="texto-apoio minha-foto-texto"></p>
       <input id="minha-foto-arquivo" class="so-leitor" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
       <div class="minha-foto-botoes">
@@ -38,18 +45,18 @@
     <section class="painel painel-aluno perfil-dados" aria-labelledby="titulo-dados">
       <h2 id="titulo-dados" class="meu-comentarios-titulo">Seus dados</h2>
       <dl class="perfil-lista">
-        <div><dt>Nome</dt><dd>{{ perfil.nome }}</dd></div>
-        <div><dt>CPF</dt><dd>{{ perfil.cpf }}</dd></div>
-        <div><dt>WhatsApp</dt><dd>{{ perfil.whatsapp }}</dd></div>
-        <div><dt>E-mail</dt><dd class="perfil-email">{{ perfil.email }}</dd></div>
-        <div><dt>Endereço</dt><dd>{% for linha in perfil.endereco %}{{ linha }}{% if not loop.last %}<br>{% endif %}{% endfor %}</dd></div>
+        <div class="perfil-pessoa"><dt>Nome</dt><dd>{{ perfil.nome }}</dd></div>
+        <div class="perfil-documento"><dt>CPF</dt><dd>{{ perfil.cpf }}</dd></div>
+        <div class="perfil-telefone"><dt>WhatsApp</dt><dd>{{ perfil.whatsapp }}</dd></div>
+        <div class="perfil-envelope"><dt>E-mail</dt><dd class="perfil-email">{{ perfil.email }}</dd></div>
+        <div class="perfil-casa"><dt>Endereço</dt><dd>{% for linha in perfil.endereco %}{{ linha }}{% if not loop.last %}<br>{% endif %}{% endfor %}</dd></div>
       </dl>
     </section>
 
     <section class="painel painel-aluno perfil-aviso" aria-labelledby="titulo-aviso">
-      <h2 id="titulo-aviso" class="perfil-aviso-titulo">Algum dado errado ou mudou?</h2>
-      <p class="texto-apoio">Para sua segurança, as alterações de cadastro são feitas na recepção. É só levar um documento com foto na próxima vez que vier treinar.</p>
-      <a class="botao-link botao-largo botao-whatsapp" href="https://wa.me/{{ whatsapp_da_academia }}?text={{ 'Olá! Sou aluno(a) da Glória Fit e quero atualizar meu cadastro.' | urlencode }}" target="_blank" rel="noopener">Falar com a academia no WhatsApp</a>
+      <h2 id="titulo-aviso" class="perfil-aviso-titulo">Para mudar algum dado, fale com a recepção</h2>
+      <p class="texto-apoio">Por segurança, o cadastro só muda na recepção: leve um documento com foto na próxima vez que vier treinar.</p>
+      <a class="botao-link botao-largo botao-whatsapp botao-whatsapp-verde" href="https://wa.me/{{ whatsapp_da_academia }}?text={{ 'Olá! Sou aluno(a) da Glória Fit e quero atualizar meu cadastro.' | urlencode }}" target="_blank" rel="noopener">WhatsApp da academia</a>
     </section>
   </main>
 

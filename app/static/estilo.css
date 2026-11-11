@@ -2275,3 +2275,33 @@ img.avatar-foto { cursor: zoom-in; }
 .meu-proximo-nome { flex: 1; min-width: 0; font-size: 16px; font-weight: 800; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meu-proximo-seta { flex: none; font-size: 28px; line-height: 1; color: var(--laranja-texto); }
 @media (max-width: 360px) { .meu-numero-valor { font-size: 44px; } .meu-exercicio-topo .meu-exercicio-titulo { font-size: 38px; } }
+
+/* ---------- "Meu perfil" do aluno, visual novo (opção B do Canva, escolhida pelo Thiago em 11/11/2026) ----------
+   Carteirinha de sócio com a faixa laranja; dados com ícone; WhatsApp da academia em verde. Sem "aluno desde" nem situação
+   (o app não tem a data, e a situação do Data4U confunde quem é de Wellhub/TotalPass). */
+.pagina-perfil .perfil-carteirinha { align-items: stretch; text-align: left; gap: 12px; background: none; border: 0; padding: 0; }
+.carteirinha { display: grid; grid-template-columns: 34px auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 18px 18px 18px 0; border: 1px solid var(--linha); border-radius: 22px; background: var(--papel); overflow: hidden; }
+.carteirinha-faixa { align-self: stretch; margin: -18px 0; display: flex; align-items: center; justify-content: center; background: var(--laranja); color: #0d0d0d; }
+.carteirinha-faixa span { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; }
+.perfil-carteirinha .minha-foto-quadro { margin: 0; }
+.perfil-carteirinha .minha-foto-imagem { width: 92px; height: 92px; border: 3px solid var(--laranja); }
+.perfil-carteirinha .minha-foto-vazia { font-size: 34px; }
+.carteirinha-texto { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.perfil-carteirinha .perfil-nome { font-size: 24px; line-height: 1.05; font-family: var(--fonte-titulo); font-stretch: 78%; font-weight: 800; text-transform: uppercase; overflow-wrap: anywhere; }
+.carteirinha-academia { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--texto-suave); }
+.perfil-carteirinha .minha-foto-texto { margin: 0; text-align: left; }
+.pagina-perfil .perfil-dados { border-radius: 22px; }
+.perfil-lista > div { grid-template-columns: 26px minmax(0, 1fr); column-gap: 14px; align-items: center; }
+.perfil-lista > div::before { content: ""; grid-row: span 2; width: 24px; height: 24px; background: var(--texto-suave); -webkit-mask: var(--icone) center / contain no-repeat; mask: var(--icone) center / contain no-repeat; }
+.perfil-pessoa { --icone: url("perfil/pessoa.svg"); }
+.perfil-documento { --icone: url("perfil/documento.svg"); }
+.perfil-telefone { --icone: url("perfil/telefone.svg"); }
+.perfil-envelope { --icone: url("perfil/envelope.svg"); }
+.perfil-casa { --icone: url("perfil/casa.svg"); }
+.pagina-perfil .perfil-aviso { background: none; border: 0; padding: 4px 0 0; text-align: center; align-items: stretch; }
+.pagina-perfil .perfil-aviso-titulo { font-size: 15px; font-weight: 700; color: var(--texto-suave); }
+.pagina-perfil .perfil-aviso .texto-apoio { font-size: 13.5px; }
+.botao-whatsapp-verde { min-height: 56px; border-color: #25a244; background: #25a244; color: #ffffff; font-size: 17px; font-weight: 800; }
+.botao-whatsapp-verde:hover { border-color: #2bb84d; background: #2bb84d; color: #ffffff; }
+@media (max-width: 360px) { .carteirinha { gap: 12px; } .perfil-carteirinha .minha-foto-imagem { width: 76px; height: 76px; } }
+.perfil-carteirinha .aviso-campo:empty { display: none; }

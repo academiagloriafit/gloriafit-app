@@ -585,7 +585,7 @@ def test_meu_perfil_mostra_os_dados_do_aluno_logado_e_nada_se_edita(cliente, rem
     html = resposta.get_data(as_text=True)
     assert resposta.status_code == 200 and "no-store" in resposta.headers["Cache-Control"]
     for esperado in ("Ana Souza", CPF_FORMATADO, "(27) 98888-7766", "ana@exemplo.com", "Rua Dom Pedro II, 28 – Apto 101",
-                     "Glória – Vila Velha/ES", "CEP 29122-300", "feitas na recepção", "https://wa.me/5527992882112?text=",
+                     "Glória – Vila Velha/ES", "CEP 29122-300", "só muda na recepção", "https://wa.me/5527992882112?text=",
                      'aria-current="page">Meu perfil', "aluno_foto.js"):
         assert esperado in html, esperado
     assert NOME_SECRETO_DO_PROFESSOR not in html
