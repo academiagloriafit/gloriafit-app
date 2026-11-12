@@ -11,9 +11,11 @@
 <body>
   {% include "_topo.html" %}
 
-  <main class="pagina">
-    <section class="painel" aria-labelledby="titulo-lista">
-      <h1 id="titulo-lista">Lista de exercícios</h1>
+  {# Visual novo (12/11/2026): no padrão das outras telas, com a ilustração de cada exercício (quando já tem). Só consulta. #}
+  <main class="pagina pagina-larga exercicios-nova" data-pasta-fotos="{{ url_for('static', filename='') }}">
+    <h1 class="titulo-grande" id="titulo-lista">Lista de exercícios</h1>
+    <p class="texto-apoio">Os exercícios da academia, como aparecem na hora de lançar treino. Só consulta: para mudar um exercício, fale com o Thiago.</p>
+    <section class="painel painel-exercicios" aria-labelledby="titulo-lista">
       {% include "_biblioteca.html" %}
     </section>
   </main>

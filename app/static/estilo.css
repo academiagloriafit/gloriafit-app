@@ -2579,3 +2579,14 @@ img.avatar-foto { cursor: zoom-in; }
 @media (max-width: 900px) { .caixa-comentarios { grid-template-columns: minmax(0, 1fr); } .caixa-previas { border-right: 0; border-bottom: 1px solid var(--linha); max-height: 40vh; } }
 /* antes do script rodar (ou se ele falhar), o primeiro comentário aparece */
 .comentarios-nova .caixa-aberto .lista-comentarios:not(.caixa-pronta) > li.comentario:first-child { display: flex; }
+
+/* ---------- Lista de exercícios (consulta), visual novo (12/11/2026) ---------- */
+.exercicios-nova .painel-exercicios { border-radius: 18px; padding: 20px; gap: 12px; }
+.exercicios-nova .grupo[aria-pressed="true"] { background: #f25420; border-color: #f25420; color: #0d0d0d; }
+.exercicios-nova .lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; border-top: 0; }
+.exercicios-nova .item { justify-content: flex-start; gap: 12px; padding: 10px; border: 1px solid var(--linha); border-radius: 14px; background: var(--papel); }
+.exercicios-nova .item-texto { min-width: 0; }
+.exercicios-nova .item-nome { text-transform: uppercase; font-size: 14px; letter-spacing: 0.01em; }
+.exercicios-nova .item-detalhe { font-size: 12.5px; }
+.exercicios-nova .miniatura-exercicio { width: 80px; height: 60px; }
+.exercicios-nova .painel-exercicios { max-width: none; width: 100%; }

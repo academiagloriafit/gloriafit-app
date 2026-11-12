@@ -125,3 +125,20 @@ def test_todo_par_de_fotos_tem_ilustracao_e_ela_e_preferida(monkeypatch, tmp_pat
     assert fotos_exercicios.miniatura_do_exercicio("CORRIDA NA ESTEIRA") is None
     monkeypatch.setattr(fotos_exercicios, "PASTA_DAS_ILUSTRACOES", tmp_path)  # pasta vazia: sem ilustração
     assert fotos_exercicios.miniatura_do_exercicio("VOADOR") == "exercicios/Butterfly_0.jpg"
+
+
+def test_a_tela_de_exercicios_passa_a_pasta_das_ilustracoes(tmp_path):
+    """Lista de exercícios (consulta), visual novo (12/11/2026): a página entrega a pasta das imagens para o script."""
+    from app import acesso
+    from app.db import conectar, criar_tabelas
+    from app.web import criar_app
+
+    caminho = tmp_path / "e.db"
+    c = conectar(caminho)
+    criar_tabelas(c)
+    token = acesso.autorizar(c, acesso.gerar_codigo(c, "Teste").codigo).token
+    c.close()
+    navegador = criar_app(caminho).test_client()
+    navegador.set_cookie(acesso.NOME_DO_COOKIE, token)
+    html = navegador.get("/exercicios").get_data(as_text=True)
+    assert 'class="pagina pagina-larga exercicios-nova" data-pasta-fotos="/static/"' in html and "data-biblioteca" in html
