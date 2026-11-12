@@ -10,10 +10,11 @@
 </head>
 <body>
   {% from "_comentario.html" import comentario %}
+  {% from "_avatar.html" import avatar with context %}
   {% set menu_ativo = "comentarios" %}
   {% include "_topo.html" %}
 
-  <main class="pagina pagina-larga" id="tela-comentarios" data-so-novos="{{ 0 if todos else 1 }}">
+  <main class="pagina pagina-larga comentarios-nova" id="tela-comentarios" data-so-novos="{{ 0 if todos else 1 }}">
     <h1 class="titulo-grande">Comentários dos alunos</h1>
     <p class="texto-apoio">O que os alunos escreveram sobre o treino, no celular deles. Leia, abra a ficha do aluno e faça as mudanças que precisar no treino. Depois de ler, marque como lido.</p>
 
@@ -22,18 +23,38 @@
       <a class="botao-link{{ ' filtro-ativo' if todos else '' }}" href="{{ url_for('pagina_comentarios', todos=1) }}"{% if todos %} aria-current="page"{% endif %}>Todos</a>
     </nav>
 
+    {# Visual novo (opção A do Canva, "caixa de entrada", escolhida pelo Thiago em 11/11/2026): a lista à esquerda (prévia de
+       cada comentário) e o comentário aberto à direita, com os mesmos botões de antes. A lista da direita continua sendo a
+       #lista-comentarios de sempre (comentarios.js não mudou); comentarios_caixa.js só escolhe qual dela fica à mostra. #}
     <section class="cartao-lista" aria-labelledby="titulo-lista-comentarios">
       <div class="cabecalho-lista">
         <h2 id="titulo-lista-comentarios">{{ "Todos os comentários" if todos else "Comentários novos" }}</h2>
         <p class="resumo" id="resumo-comentarios" aria-live="polite">{{ lista.total }} {{ "comentário" if lista.total == 1 else "comentários" }}{% if lista.total > lista.comentarios|length %} (mostrando os {{ lista.comentarios|length }} mais novos){% endif %}</p>
       </div>
-      <ul class="lista-comentarios" id="lista-comentarios">
-        {% for c in lista.comentarios %}{{ comentario(c, com_aluno=True) }}{% endfor %}
-      </ul>
+      <div class="caixa-comentarios"{% if not lista.comentarios %} hidden{% endif %}>
+        <ul class="caixa-previas" id="caixa-previas" aria-label="Escolha um comentário">
+          {% for c in lista.comentarios %}
+          <li><button type="button" class="caixa-previa{{ '' if c.lido else ' previa-nova' }}" data-abrir-comentario="{{ c.id }}" aria-controls="lista-comentarios" aria-pressed="{{ 'true' if loop.first else 'false' }}">
+            {{ avatar(c.aluno_id, c.aluno) }}
+            <span class="previa-texto">
+              <span class="previa-topo"><span class="previa-nome">{{ c.aluno | nome_de_pessoa }}</span><span class="previa-quando">{{ c.quando }}</span></span>
+              <span class="previa-trecho">{{ c.texto | truncate(90, True, "…") }}</span>
+            </span>
+            {% if not c.lido %}<span class="previa-ponto"><span class="so-leitor">Não lido</span></span>{% endif %}
+          </button></li>
+          {% endfor %}
+        </ul>
+        <div class="caixa-aberto">
+          <ul class="lista-comentarios" id="lista-comentarios">
+            {% for c in lista.comentarios %}{{ comentario(c, com_aluno=True) }}{% endfor %}
+          </ul>
+        </div>
+      </div>
       <p class="lista-vazia" id="comentarios-vazio"{% if lista.comentarios %} hidden{% endif %}>{{ "Nenhum comentário ainda." if todos else "Nenhum comentário novo. Quando um aluno escrever pelo celular, ele aparece aqui." }}</p>
     </section>
   </main>
 
   <script type="module" src="{{ url_for('static', filename='comentarios.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='comentarios_caixa.js') }}"></script>
 </body>
 </html>

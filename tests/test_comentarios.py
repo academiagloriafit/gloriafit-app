@@ -1024,3 +1024,15 @@ def test_a_ficha_sem_nenhum_sem_ler_na_tela_nao_tem_o_botao(caminho, professor):
 
     assert "data-marcar-todos-do-aluno" not in html
     assert "5 sem ler · 35 no total" in html
+
+
+def test_visual_novo_caixa_de_entrada_tem_uma_previa_por_comentario(caminho, professor):
+    """Comentários, opção A (11/11/2026): prévias à esquerda (a primeira marcada), a lista de sempre à direita."""
+    _tres_comentarios(caminho)
+
+    html = professor.get("/comentarios").get_data(as_text=True)
+
+    assert html.count("data-abrir-comentario=") == 3 and html.count('class="caixa-previa previa-nova"') == 3
+    assert html.count('aria-pressed="true"') == 1
+    assert 'id="lista-comentarios"' in html and "comentarios_caixa.js" in html
+    assert "<b>Bruno</b>" not in html  # a prévia também sai escapada

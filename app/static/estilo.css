@@ -2553,3 +2553,29 @@ img.avatar-foto { cursor: zoom-in; }
 .cartao-ausente-acoes .ausente-whatsapp { font-size: 13px; text-align: center; }
 @media (max-width: 700px) { .ausentes-numeros { grid-template-columns: minmax(0, 1fr); } }
 .cartao-ausente-foto, .cartao-ausente-foto:hover { text-decoration: none; color: var(--texto); }
+
+/* ---------- Comentários, visual novo (opção A do Canva, "caixa de entrada", escolhida pelo Thiago em 11/11/2026) ---------- */
+.caixa-comentarios { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); min-height: 420px; }
+.caixa-comentarios[hidden] { display: none; }
+.caixa-previas { list-style: none; margin: 0; padding: 8px; border-right: 1px solid var(--linha); max-height: 70vh; overflow-y: auto; }
+.caixa-previa { width: 100%; display: grid; grid-template-columns: 40px minmax(0, 1fr) 10px; align-items: start; gap: 10px; padding: 10px; border: 0; border-radius: 12px; background: none; color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.caixa-previa:hover { background: #f6f7f8; }
+.caixa-previa[aria-pressed="true"] { background: #fff1ea; box-shadow: inset 3px 0 0 #f25420; }
+.caixa-previa:focus-visible { outline: 2px solid #f25420; outline-offset: -2px; }
+.previa-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.previa-topo { display: flex; justify-content: space-between; gap: 8px; }
+.previa-nome { font-weight: 750; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.previa-quando { flex: none; font-size: 12px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+.previa-trecho { font-size: 13px; color: var(--texto-suave); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.previa-nova .previa-nome { color: #c4400d; }
+.previa-ponto { width: 10px; height: 10px; margin-top: 6px; border-radius: 50%; background: #f25420; }
+.caixa-aberto { min-width: 0; padding: 8px 12px; }
+.comentarios-nova .caixa-aberto .lista-comentarios > li.comentario:not(.comentario-aberto) { display: none; }
+.comentarios-nova .caixa-aberto .comentario { border: 0; background: none; box-shadow: none; gap: 12px; padding: 16px 20px; }
+.comentarios-nova .caixa-aberto .comentario-aluno { font-size: 20px; }
+.comentarios-nova .caixa-aberto .comentario-texto { padding: 14px 16px; border-radius: 14px 14px 14px 4px; background: #f3f4f5; font-size: 16px; max-width: 640px; }
+.comentarios-nova .caixa-aberto .comentario-resposta { border-radius: 14px 14px 4px 14px; background: #fff1ea; border-color: #ffd5c2; max-width: 640px; margin-left: auto; }
+.comentarios-nova .caixa-aberto .comentario-acoes { padding-top: 12px; border-top: 1px solid var(--linha); }
+@media (max-width: 900px) { .caixa-comentarios { grid-template-columns: minmax(0, 1fr); } .caixa-previas { border-right: 0; border-bottom: 1px solid var(--linha); max-height: 40vh; } }
+/* antes do script rodar (ou se ele falhar), o primeiro comentário aparece */
+.comentarios-nova .caixa-aberto .lista-comentarios:not(.caixa-pronta) > li.comentario:first-child { display: flex; }
