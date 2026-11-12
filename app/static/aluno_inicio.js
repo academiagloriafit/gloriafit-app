@@ -5,6 +5,7 @@ import { atualizarMeusComentarios } from "./aluno_comentarios.js";
 import { iniciarDescanso } from "./aluno_descanso.js";
 import { el } from "./dom.js";
 import { criarMiniatura, listaDeImagens } from "./foto_exercicio.js";
+import { ajustarTitulo } from "./titulo_ajuste.js";
 import {
   ESFORCOS,
   numerosDoExercicio,
@@ -581,8 +582,16 @@ function desenharTelaDoExercicio(treino, indiceDaFicha, posicao, mensagemInicial
       ),
   ];
   raiz.append(...filhos.flat().filter(Boolean));
+  // nome comprido: a letra do título diminui até cada palavra caber inteira (depois de a tela estar na página)
+  requestAnimationFrame(() => ajustarTitulo(raiz.querySelector("#exercicio-titulo"), tamanhosDoTitulo()));
   return raiz;
 }
+
+// 46px no celular comum, 38px nos bem estreitos (até 360px); o mínimo é 24px.
+function tamanhosDoTitulo() {
+  return { maior: window.matchMedia("(max-width: 360px)").matches ? 38 : 46, menor: 24 };
+}
+window.addEventListener("resize", () => ajustarTitulo(document.getElementById("exercicio-titulo"), tamanhosDoTitulo()));
 
 // Uma linha da lista de exercícios (tela 2): o nome e a dose; tocar abre a tela do exercício. O ✓ aparece nos que já foram feitos.
 function desenharLinha(exercicio, posicao, treino, indiceDaFicha) {

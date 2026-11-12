@@ -2603,3 +2603,31 @@ img.avatar-foto { cursor: zoom-in; }
 /* a imagem que temos tem 160 px de largura: na tela do exercício ela fica pequena o bastante para não borrar */
 .meu-exercicio-ilustracao .miniatura-grande { width: min(100%, 240px); border: 0; }
 .meu-exercicio-ilustracao .miniatura-exercicio, .meu-exercicio-ilustracao .miniatura-exercicio:has(img) { border: 0 !important; }
+
+/* ---------- Lançar treino: ficha estreita (notebook de 1280 com a lista ao lado, janela reduzida) ----------
+   As colunas de séries, repetições, peso e intervalo têm largura fixa; sem espaço, o nome do exercício
+   ficava com poucos pixels e quebrava uma letra por linha. Quando a ficha tem menos de 760px, o nome
+   ocupa a linha inteira e os quatro campos vão para a linha de baixo, cada um com a sua coluna. */
+.montador-novo .cartao-lista { container-type: inline-size; container-name: ficha; }
+@container ficha (max-width: 760px) {
+  .titulos-colunas, .linha { grid-template-columns: 32px 34px repeat(4, minmax(0, 1fr)); }
+  .titulos-colunas .coluna-nome { grid-column: 3 / -1; }
+  .titulos-colunas .coluna-pequena { grid-row: 2; }
+  .titulos-colunas .coluna-pequena:nth-child(2) { grid-column: 3; }
+  .titulos-colunas .coluna-pequena:nth-child(3) { grid-column: 4; }
+  .titulos-colunas .coluna-pequena:nth-child(4) { grid-column: 5; }
+  .titulos-colunas .coluna-pequena:nth-child(5) { grid-column: 6; }
+  .titulos-colunas { row-gap: 2px; }
+  .linha > .linha-nome { grid-column: 3 / -1; }
+  .linha > [data-campo="series"] { grid-column: 3; }
+  .linha > [data-campo="repeticoes"] { grid-column: 4; }
+  .linha > [data-campo="carga"] { grid-column: 5; }
+  .linha > .celula-intervalo { grid-column: 6; }
+  .linha > .celula-marcar, .linha > .celula-vazia, .linha > .etiqueta { grid-row: 1; }
+  .celula-intervalo .campo-prescricao { min-width: 0; }
+}
+
+/* Nome do exercício no app do aluno: encolhe até cada palavra caber (titulo_ajuste.js), em vez de cortar no meio. */
+.meu-exercicio-topo .meu-exercicio-titulo { overflow-wrap: normal; font-size: var(--tamanho-titulo, 46px); min-width: 0; max-width: 100%; }
+@media (max-width: 360px) { .meu-exercicio-topo .meu-exercicio-titulo { font-size: var(--tamanho-titulo, 38px); } }
+.meu-exercicio-topo .meu-exercicio-titulo.titulo-sem-espaco { overflow-wrap: anywhere; }
