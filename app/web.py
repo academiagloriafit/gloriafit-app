@@ -998,8 +998,11 @@ def criar_app(caminho_banco: str | Path | None = None) -> Flask:
     @app.get("/ausentes")
     def pagina_ausentes():
         """"Quem sumiu": alunos com treino ativo que não treinam há 7, 14 ou 30 dias (?dias=). Só leitura."""
-        lista = ausentes.listar(conexao(), ausentes.prazo_pedido(request.args.get("dias")))
-        return render_template("ausentes.html", lista=lista, prazos=ausentes.PRAZOS, limite=ausentes.LIMITE_DA_LISTA)
+        conn = conexao()
+        lista = ausentes.listar(conn, ausentes.prazo_pedido(request.args.get("dias")))
+        # os três números do alto (visual novo, 11/11/2026): quantos estão parados há 7, 14 e 30 dias ou mais
+        contagens = {prazo: ausentes.listar(conn, prazo, limite=0)["total"] for prazo in ausentes.PRAZOS}
+        return render_template("ausentes.html", lista=lista, prazos=ausentes.PRAZOS, contagens=contagens, limite=ausentes.LIMITE_DA_LISTA)
 
     @app.get("/pendencias")
     def pagina_pendencias():

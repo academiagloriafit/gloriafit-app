@@ -356,3 +356,16 @@ def test_sem_ninguem_sem_registro_a_secao_nem_aparece(caminho, professor):
     _com_sumidos(caminho)
 
     assert "lista-sem-registro" not in professor.get("/ausentes").get_data(as_text=True)
+
+
+def test_visual_novo_numeros_do_alto_sao_o_filtro_e_cada_aluno_e_um_cartao(caminho, professor):
+    """Quem sumiu, opção B (11/11/2026): 7+, 14+ e 30+ no alto (o escolhido marcado) e um cartão por aluno."""
+    _com_sumidos(caminho)  # Ana: 9 dias; Bruno: 20 dias
+
+    html = professor.get("/ausentes?dias=14").get_data(as_text=True)
+
+    assert html.count('class="painel-numero numero-prazo-') == 3
+    assert 'href="/ausentes?dias=14" aria-current="page"' in html
+    for prazo, total in ((7, 2), (14, 1), (30, 0)):
+        assert f'<span class="painel-numero-valor">{total}</span><span class="painel-numero-rotulo">Parados há {prazo} dias' in html
+    assert html.count('<li class="cartao-ausente">') == 1 and 'class="botao-whatsapp"' in html and "Abrir ficha" in html

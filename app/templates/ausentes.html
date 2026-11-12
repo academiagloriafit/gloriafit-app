@@ -13,23 +13,33 @@
   {% set menu_ativo = "ausentes" %}
   {% include "_topo.html" %}
 
-  <main class="pagina pagina-larga" id="tela-ausentes">
+  <main class="pagina pagina-larga ausentes-nova" id="tela-ausentes">
     <h1 class="titulo-grande">Quem sumiu</h1>
     <p class="texto-apoio">Alunos com treino ativo que estão há dias sem treinar. Conta como treino quando o aluno toca em "Treino concluído" no celular ou quando a recepção imprime a ficha. Quem treina sem fazer nenhum dos dois também aparece aqui.</p>
 
-    <nav class="filtro-comentarios" aria-label="Há quantos dias sem treinar">
+    {# Visual novo (opção B do Canva, "cartões de aluno", escolhida pelo Thiago em 11/11/2026): os três números do alto são
+       também o filtro (7, 14 ou 30 dias ou mais) e cada aluno vira um cartão com os dias parados em destaque. #}
+    <nav class="painel-numeros ausentes-numeros" aria-label="Há quantos dias sem treinar">
       {% for prazo in prazos %}
-      <a class="botao-link{{ ' filtro-ativo' if prazo == lista.dias else '' }}" href="{{ url_for('pagina_ausentes', dias=prazo) }}"{% if prazo == lista.dias %} aria-current="page"{% endif %}>{{ prazo }} dias ou mais</a>
+      <a class="painel-numero numero-prazo-{{ prazo }}{{ ' filtro-ativo' if prazo == lista.dias else '' }}" href="{{ url_for('pagina_ausentes', dias=prazo) }}"{% if prazo == lista.dias %} aria-current="page"{% endif %}><span class="painel-numero-valor">{{ contagens[prazo] }}</span><span class="painel-numero-rotulo">Parados há {{ prazo }} dias ou mais</span></a>
       {% endfor %}
     </nav>
 
     {% macro linha(a) %}
-        <li class="linha-ausente">
-          <a class="ausente-nome com-avatar" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ avatar(a.id, a.nome) }}<span>{{ a.nome | nome_de_pessoa }}</span>{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}</a>
-          <span class="ausente-ultimo">{% if a.nunca %}Nenhum registrado<span class="ausente-desde"> · treino desde {{ a.desde }}</span>{% else %}{{ a.ultima }}{% endif %}</span>
-          <span class="ausente-dias">{{ a.dias }} {{ "dia" if a.dias == 1 else "dias" }}</span>
-          <span class="ausente-treino">{{ a.treino }}</span>
-          <span class="ausente-whatsapp">{% if a.whatsapp_link %}<a href="{{ a.whatsapp_link }}" target="_blank" rel="noopener noreferrer">{{ a.whatsapp }}</a>{% elif a.whatsapp %}{{ a.whatsapp }}{% else %}<span class="sem-valor">sem WhatsApp</span>{% endif %}</span>
+        <li class="cartao-ausente">
+          <a class="cartao-ausente-foto" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}" tabindex="-1" aria-hidden="true">{{ avatar(a.id, a.nome, "avatar-medio") }}</a>
+          <div class="cartao-ausente-texto">
+            <a class="ausente-nome" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">{{ a.nome | nome_de_pessoa }}</a>{% if a.provisorio %} <span class="selo-situacao">Provisório</span>{% endif %}
+            <span class="ausente-dias">{{ a.dias }} {{ "dia" if a.dias == 1 else "dias" }}</span>
+            <span class="ausente-ultimo">{% if a.nunca %}Nenhum treino registrado<span class="ausente-desde"> · treino desde {{ a.desde }}</span>{% else %}Último treino em {{ a.ultima }}{% endif %}</span>
+            <span class="ausente-treino">{{ a.treino }}</span>
+          </div>
+          <div class="cartao-ausente-acoes">
+            {% if a.whatsapp_link %}<a class="botao-whatsapp" href="{{ a.whatsapp_link }}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp de {{ a.nome | nome_de_pessoa }}: {{ a.whatsapp }}">WhatsApp</a>
+            {% elif a.whatsapp %}<span class="ausente-whatsapp">{{ a.whatsapp }}</span>
+            {% else %}<span class="ausente-whatsapp sem-valor">sem WhatsApp</span>{% endif %}
+            <a class="botao-link" href="{{ url_for('pagina_ficha', aluno_id=a.id) }}">Abrir ficha</a>
+          </div>
         </li>
     {% endmacro %}
 
@@ -39,10 +49,7 @@
         <p class="resumo" aria-live="polite">{{ lista.total }} de {{ lista.total_com_treino }} {{ "aluno com treino ativo" if lista.total_com_treino == 1 else "alunos com treino ativo" }}{% if lista.total > lista.alunos|length %} (mostrando os {{ limite }} mais sumidos){% endif %}</p>
       </div>
       {% if lista.alunos %}
-      <div class="titulos-ausentes" aria-hidden="true">
-        <span>Aluno</span><span>Último treino</span><span>Sem treinar</span><span>Treino atual</span><span>WhatsApp</span>
-      </div>
-      <ul class="linhas" id="lista-ausentes">
+      <ul class="cartoes-ausentes" id="lista-ausentes">
         {% for a in lista.alunos %}{{ linha(a) }}{% endfor %}
       </ul>
       {% elif lista.total_com_treino %}
@@ -59,10 +66,7 @@
         <p class="resumo" aria-live="polite">{{ lista.total_sem_registro }} {{ "aluno" if lista.total_sem_registro == 1 else "alunos" }}, contando os dias desde o início do treino atual{% if lista.total_sem_registro > lista.sem_registro|length %} (mostrando os {{ limite }} mais antigos){% endif %}</p>
       </div>
       <p class="texto-apoio">Estes alunos nunca tocaram em "Treino concluído" e nunca tiveram a ficha impressa na recepção. Podem estar treinando normalmente: o app só enxerga o treino de quem o usa.</p>
-      <div class="titulos-ausentes" aria-hidden="true">
-        <span>Aluno</span><span>Último treino</span><span>Sem treinar</span><span>Treino atual</span><span>WhatsApp</span>
-      </div>
-      <ul class="linhas" id="lista-sem-registro">
+      <ul class="cartoes-ausentes" id="lista-sem-registro">
         {% for a in lista.sem_registro %}{{ linha(a) }}{% endfor %}
       </ul>
     </section>
