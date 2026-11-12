@@ -2590,3 +2590,16 @@ img.avatar-foto { cursor: zoom-in; }
 .exercicios-nova .item-detalhe { font-size: 12.5px; }
 .exercicios-nova .miniatura-exercicio { width: 80px; height: 60px; }
 .exercicios-nova .painel-exercicios { max-width: none; width: 100%; }
+
+/* ---------- Ilustrações dos exercícios no app do aluno (pedido do Thiago, 12/11/2026) ---------- */
+.miniatura-combinada { gap: 1px; display: inline-flex !important; }
+.miniatura-combinada img { flex: 1; min-width: 0; object-fit: contain; background: #fff; }
+.meu-linha-botao:has(.miniatura-aluno) { grid-template-columns: 36px 64px minmax(0, 1fr) auto; }
+[data-tela="ficha"] .meu-linha-botao:has(.miniatura-aluno) { grid-template-columns: 44px 64px minmax(0, 1fr) auto; }
+.miniatura-aluno { width: 64px; height: 48px; border-radius: 10px; background: #fff; border: 1px solid var(--linha); }
+.miniatura-aluno img, .miniatura-grande img { object-fit: contain; }
+.meu-exercicio-ilustracao { margin: 0; display: flex; justify-content: center; padding: 10px; border: 1px solid var(--linha); border-radius: 18px; background: #fff; }
+.miniatura-grande { width: min(100%, 360px); height: auto; aspect-ratio: 4 / 3; background: #fff; border-radius: 12px; }
+/* a imagem que temos tem 160 px de largura: na tela do exercício ela fica pequena o bastante para não borrar */
+.meu-exercicio-ilustracao .miniatura-grande { width: min(100%, 240px); border: 0; }
+.meu-exercicio-ilustracao .miniatura-exercicio, .meu-exercicio-ilustracao .miniatura-exercicio:has(img) { border: 0 !important; }

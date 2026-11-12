@@ -25,6 +25,7 @@ from datetime import datetime, time, timedelta
 from app import ciclo, execucao, treinos
 from app.alunos import dose_do_item, etiquetas_dos_itens, texto_da_pausa
 from app.datas import FUSO_DA_ACADEMIA, agora_utc, dia_local, formatar_dia, hoje, ler_dia, limites_do_dia, momento_para_texto
+from app.fotos_exercicios import miniaturas_do_exercicio
 
 _NOME_DO_BLOCO = {2: "Bi-set", 3: "Tri-set"}
 
@@ -50,6 +51,7 @@ def _exercicio(item: dict, etiqueta: str) -> dict:
         "intervalo": texto_da_pausa(item["pausa"]),
         "pausa_segundos": item["pausa"] or 0,  # preenche o campo do tempo de descanso no celular (0 = o professor não informou: o campo fica em branco)
         "observacao": (item["observacao"] or "").strip(),
+        "imagens": miniaturas_do_exercicio(item["exercicio"]),  # ilustrações do exercício (caminhos em /static), pedido do Thiago 12/11/2026
     }
 
 

@@ -23,23 +23,29 @@ export function lerMapaDeFotos(texto) {
   }
 }
 
-// O elemento da miniatura: a imagem, ou o halter quando não há. A imagem é decorativa (alt vazio):
-// o nome do exercício já está escrito ao lado.
-export function criarMiniatura(pasta, caminho) {
+// As imagens de um exercício, como vieram do servidor: uma lista (combinado = uma por parte) ou, nos dados antigos, um texto só.
+export function listaDeImagens(valor) {
+  const lista = Array.isArray(valor) ? valor : valor ? [valor] : [];
+  return lista.filter((c) => typeof c === "string" && CAMINHO_VALIDO.test(c)).slice(0, 3);
+}
+
+// O elemento da miniatura: as imagens lado a lado (combinado), ou o halter quando não há. As imagens são decorativas
+// (alt vazio): o nome do exercício já está escrito ao lado. `classeExtra`: tamanho maior na tela do exercício do aluno.
+export function criarMiniatura(pasta, valor, classeExtra = "") {
   const caixa = document.createElement("span");
-  caixa.className = "miniatura-exercicio";
-  const endereco = caminhoDaMiniatura(pasta, caminho);
-  if (endereco) {
+  caixa.className = "miniatura-exercicio" + (classeExtra ? " " + classeExtra : "");
+  const enderecos = listaDeImagens(valor).map((c) => caminhoDaMiniatura(pasta, c)).filter(Boolean);
+  if (enderecos.length > 1) caixa.classList.add("miniatura-combinada");
+  for (const endereco of enderecos) {
     const img = document.createElement("img");
     img.src = endereco;
     img.alt = "";
     img.loading = "lazy";
     img.decoding = "async";
-    // imagem que não carregou: volta para o halter
-    img.addEventListener("error", () => { img.remove(); caixa.classList.add("sem-foto"); });
+    // imagem que não carregou: some; sem nenhuma, volta o halter
+    img.addEventListener("error", () => { img.remove(); if (!caixa.querySelector("img")) caixa.classList.add("sem-foto"); });
     caixa.append(img);
-  } else {
-    caixa.classList.add("sem-foto");
   }
+  if (!enderecos.length) caixa.classList.add("sem-foto");
   return caixa;
 }

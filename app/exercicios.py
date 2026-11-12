@@ -2,7 +2,7 @@
 
 import sqlite3
 
-from app.fotos_exercicios import miniatura_do_exercicio
+from app.fotos_exercicios import miniaturas_do_exercicio
 from app.texto import nome_para_exibir, normalizar
 
 LIMITE_PADRAO = 50
@@ -94,7 +94,7 @@ def buscar_exercicios(
             "nome": nome_para_exibir(linha["nome"]),
             "combinado": bool(linha["combinado"]),
             "grupos": grupos_por_exercicio.get(linha["id"], []),
-            "miniatura": miniatura_do_exercicio(linha["nome"]),  # ilustração ou foto pequena (caminho em /static), ou None
+            "miniaturas": miniaturas_do_exercicio(linha["nome"]),  # ilustrações (caminhos em /static); combinado: uma por parte
         }
         for linha in linhas
     ]

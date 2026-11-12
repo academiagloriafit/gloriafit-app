@@ -1,0 +1,333 @@
+{
+ "(24) HACK MACHINE": [
+  "Hack_Squat"
+ ],
+ "5' ESTEIRA": [
+  "Walking_Treadmill"
+ ],
+ "ROSCA POLIA + TRÍCEPS POLIA": [
+  "Standing_Biceps_Cable_Curl",
+  "Triceps_Pushdown"
+ ],
+ "ESTEIRA OU BIKE": [
+  "Walking_Treadmill",
+  "Bicycling_Stationary"
+ ],
+ "SUPINO RETO BARRA": [
+  "Barbell_Bench_Press_-_Medium_Grip"
+ ],
+ "CADEIRA ADUTORA 10/10 CURTINHA": [
+  "Thigh_Adductor"
+ ],
+ "ROSCA SCOTT MAQUINA": [
+  "Machine_Bicep_Curl"
+ ],
+ "AGACHAMENTO BULGARO COM HALTER": [
+  "Split_Squat_with_Dumbbells"
+ ],
+ "TRICEPS BARRA POLIA": [
+  "Triceps_Pushdown"
+ ],
+ "SUPINO MAQUINA RETO": [
+  "Machine_Bench_Press"
+ ],
+ "CADEIRA EXTENSORA COM ISO.10\"": [
+  "Leg_Extensions"
+ ],
+ "CADEIRA FLEXORA + STIFF": [
+  "Seated_Leg_Curl",
+  "Stiff-Legged_Barbell_Deadlift"
+ ],
+ "MESA FLEXORA + STIFF": [
+  "Lying_Leg_Curls",
+  "Stiff-Legged_Barbell_Deadlift"
+ ],
+ "DESENVOLVIMENTO + ELEVAÇÃO FRONTAL": [
+  "Dumbbell_Shoulder_Press",
+  "Front_Dumbbell_Raise"
+ ],
+ "PUXADA FRENTE": [
+  "Wide-Grip_Lat_Pulldown"
+ ],
+ "LEG 45 NOVA": [
+  "Leg_Press"
+ ],
+ "FACE PULL + TRÍCEPS CORDA": [
+  "Face_Pull",
+  "Triceps_Pushdown_-_Rope_Attachment"
+ ],
+ "GLUTEO COICE POLIA": [
+  "One-Legged_Cable_Kickback"
+ ],
+ "SUPINO INCLINADO BARRA": [
+  "Barbell_Incline_Bench_Press_-_Medium_Grip"
+ ],
+ "TRICEPS CORDA POLIA": [
+  "Triceps_Pushdown_-_Rope_Attachment"
+ ],
+ "ROSCA MARTELO ALTERNADO": [
+  "Hammer_Curls"
+ ],
+ "LEG PRESS 45º": [
+  "Leg_Press"
+ ],
+ "CRUCIFIXO MAQUINA": [
+  "Butterfly"
+ ],
+ "ABS PRANCHA": [
+  "Plank"
+ ],
+ "PRANCHA": [
+  "Plank"
+ ],
+ "AGACHAMENTO LIVRE (PIRÂMIDE CRESCENTE)": [
+  "Barbell_Squat"
+ ],
+ "TRÍCEPS CORDA + TRICEPS MAQUINA": [
+  "Triceps_Pushdown_-_Rope_Attachment",
+  "Machine_Triceps_Extension"
+ ],
+ "HACK MACHINE COM ISO. 3\"": [
+  "Hack_Squat"
+ ],
+ "ROSCA MAQUINA": [
+  "Machine_Bicep_Curl"
+ ],
+ "PUXADA ABERTA NO PULLEY": [
+  "Wide-Grip_Lat_Pulldown"
+ ],
+ "AFUNDO BÚLGARO COM HALTERES": [
+  "Split_Squat_with_Dumbbells"
+ ],
+ "CADEIRA ABDUTORA 10/10 CURTINHA": [
+  "Thigh_Abductor"
+ ],
+ "CADEIRA ADUTORA COM 3\" ISO.": [
+  "Thigh_Adductor"
+ ],
+ "VOADOR + TRICEPS MAQUINA": [
+  "Butterfly",
+  "Machine_Triceps_Extension"
+ ],
+ "STIFF BARRA": [
+  "Stiff-Legged_Barbell_Deadlift"
+ ],
+ "5' BIKE": [
+  "Bicycling_Stationary"
+ ],
+ "ELEVAÇÃO LATERAL + ELEVAÇÃO FRONTAL": [
+  "Side_Lateral_Raise",
+  "Front_Dumbbell_Raise"
+ ],
+ "SUPINO MAQUINA + ROSCA DIRETA POLIA": [
+  "Machine_Bench_Press",
+  "Standing_Biceps_Cable_Curl"
+ ],
+ "CRUCIFIXO INCLINADO": [
+  "Incline_Dumbbell_Flyes"
+ ],
+ "Caminhada na esteira": [
+  "Walking_Treadmill"
+ ],
+ "ROSCA DIRETA NA POLIA": [
+  "Standing_Biceps_Cable_Curl"
+ ],
+ "CADEIRA EXTENSORA ISO. 3\"": [
+  "Leg_Extensions"
+ ],
+ "ELEVAÇÃO FRONTAL HALTER": [
+  "Front_Dumbbell_Raise"
+ ],
+ "TRÍCEPS PULLEY": [
+  "Triceps_Pushdown"
+ ],
+ "ELEVAÇÃO PÉLVICA + STIFF": [
+  "Barbell_Hip_Thrust",
+  "Stiff-Legged_Barbell_Deadlift"
+ ],
+ "Prancha frontal": [
+  "Plank"
+ ],
+ "ABDOMINAL SUPRA + PRANCHA": [
+  "Crunches",
+  "Plank"
+ ],
+ "LEG 45 + STIFF": [
+  "Leg_Press",
+  "Stiff-Legged_Barbell_Deadlift"
+ ],
+ "GLÚTEO POLIA": [
+  "One-Legged_Cable_Kickback"
+ ],
+ "REMADA BAIXA NA POLIA": [
+  "Seated_Cable_Rows"
+ ],
+ "ELEVAÇÃO LATERAL DROP SET": [
+  "Side_Lateral_Raise"
+ ],
+ "CADEIRA EXTENSORA + AGACHAMENTO LIVRE": [
+  "Leg_Extensions",
+  "Barbell_Squat"
+ ],
+ "PULLEY FRENTE DROP SET": [
+  "Wide-Grip_Lat_Pulldown"
+ ],
+ "VOADOR+ELEVAÇÃO LATERAL": [
+  "Butterfly",
+  "Side_Lateral_Raise"
+ ],
+ "AGACHAMENTO LIVRE BARRA": [
+  "Barbell_Squat"
+ ],
+ "ROSCA MARTELO + REMADA ALTA": [
+  "Hammer_Curls",
+  "Upright_Cable_Row"
+ ],
+ "DESENVOLVIMENTO + ELEVAÇÃO LATERAL": [
+  "Dumbbell_Shoulder_Press",
+  "Side_Lateral_Raise"
+ ],
+ "TRÍCEPS MÁQUINA + TRÍCEPS POLIA": [
+  "Machine_Triceps_Extension",
+  "Triceps_Pushdown"
+ ],
+ "CADEIRA EXTENSORA DROP SET": [
+  "Leg_Extensions"
+ ],
+ "CADEIRA ABDUTORA NOVA": [
+  "Thigh_Abductor"
+ ],
+ "CADEIRA ADUTORA REST PAUSE": [
+  "Thigh_Adductor"
+ ],
+ "VOADOR + TRICEPS NA POLIA": [
+  "Butterfly",
+  "Triceps_Pushdown"
+ ],
+ "AFUNDO COM HALTER + STIFF": [
+  "Dumbbell_Lunges",
+  "Stiff-Legged_Barbell_Deadlift"
+ ],
+ "7' ESTEIRA": [
+  "Walking_Treadmill"
+ ],
+ "REMADA BAIXA + ROSCA MARTELO": [
+  "Seated_Cable_Rows",
+  "Hammer_Curls"
+ ],
+ "CADEIRA FLEXORA + MESA FLEXORA": [
+  "Seated_Leg_Curl",
+  "Lying_Leg_Curls"
+ ],
+ "CADEIRA EXTENSORA + STIFF": [
+  "Leg_Extensions",
+  "Stiff-Legged_Barbell_Deadlift"
+ ],
+ "7' BIKE": [
+  "Bicycling_Stationary"
+ ],
+ "Afundo búlgaro": [
+  "Split_Squat_with_Dumbbells"
+ ],
+ "PUXADA ALTA + TRÍCEPS CORDA": [
+  "Wide-Grip_Lat_Pulldown",
+  "Triceps_Pushdown_-_Rope_Attachment"
+ ],
+ "SUPINO MAQUINA + TRICEPS MAQUINA": [
+  "Machine_Bench_Press",
+  "Machine_Triceps_Extension"
+ ],
+ "DESENVOLVIMENTO COM HALTER + ELEVAÇÃO LATERAL": [
+  "Dumbbell_Shoulder_Press",
+  "Side_Lateral_Raise"
+ ],
+ "PUXADA FRENTE NO PULLEY": [
+  "Wide-Grip_Lat_Pulldown"
+ ],
+ "LEG 45 + HACK MACHINE": [
+  "Leg_Press",
+  "Hack_Squat"
+ ],
+ "PUXADA FRENTE + DESENVOLVIMENTO": [
+  "Wide-Grip_Lat_Pulldown",
+  "Dumbbell_Shoulder_Press"
+ ],
+ "ROSCA DIRETA NA POLIA + REMADA ALTA": [
+  "Standing_Biceps_Cable_Curl",
+  "Upright_Cable_Row"
+ ],
+ "Puxada alta pegada aberta": [
+  "Wide-Grip_Lat_Pulldown"
+ ],
+ "TRÍCEPS CORDA DROP SET": [
+  "Triceps_Pushdown_-_Rope_Attachment"
+ ],
+ "Peck Deck": [
+  "Butterfly"
+ ],
+ "CRUCIFIXO INVERSO NA MAQUINA + ROSCA MARTELO HALTER": [
+  "Reverse_Machine_Flyes",
+  "Hammer_Curls"
+ ],
+ "PULLEY DE FRENTE + DESENVOLVIMENTO": [
+  "Wide-Grip_Lat_Pulldown",
+  "Dumbbell_Shoulder_Press"
+ ],
+ "ELEVAÇÃO PÉLVICA COM 2\"ISO.": [
+  "Barbell_Hip_Thrust"
+ ],
+ "CRUCIFIXO INCLINADO COM HALTER": [
+  "Incline_Dumbbell_Flyes"
+ ],
+ "VOADOR + ELEVAÇÃO FRONTAL": [
+  "Butterfly",
+  "Front_Dumbbell_Raise"
+ ],
+ "TRICEPS PULLEY + ELEVAÇÃO FRONTAL": [
+  "Triceps_Pushdown",
+  "Front_Dumbbell_Raise"
+ ],
+ "REMADA BAIXA + TRÍCEPS POLIA": [
+  "Seated_Cable_Rows",
+  "Triceps_Pushdown"
+ ],
+ "ABDOMINAL RETO + PRANCHA": [
+  "Crunches",
+  "Plank"
+ ],
+ "SUPINO MAQUINA + FACE PULL": [
+  "Machine_Bench_Press",
+  "Face_Pull"
+ ],
+ "SUPINO INCLINADO COM BARRA + CRUCIFIXO COM HALTER": [
+  "Barbell_Incline_Bench_Press_-_Medium_Grip",
+  "Dumbbell_Flyes"
+ ],
+ "MESA FLEXORA DROP SET": [
+  "Lying_Leg_Curls"
+ ],
+ "ROSCA POLIA + TRÍCEPS MÁQUINA": [
+  "Standing_Biceps_Cable_Curl",
+  "Machine_Triceps_Extension"
+ ],
+ "TRICEPS MAQUINA DROP SET": [
+  "Machine_Triceps_Extension"
+ ],
+ "ELEVAÇÃO PELVICA COM ISO \"10\"": [
+  "Barbell_Hip_Thrust"
+ ],
+ "ELEVAÇÃO PELVICA BARRA": [
+  "Barbell_Hip_Thrust"
+ ],
+ "CADEIRA ADUTORA + CADEIRA ABDUTORA": [
+  "Thigh_Adductor",
+  "Thigh_Abductor"
+ ],
+ "PASSADA + AGACHAMENTO LIVRE": [
+  "Bodyweight_Walking_Lunge",
+  "Barbell_Squat"
+ ],
+ "CADEIRA FLEXORA CURTINHA": [
+  "Seated_Leg_Curl"
+ ]
+}

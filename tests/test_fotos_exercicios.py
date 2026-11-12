@@ -104,15 +104,15 @@ def test_fotos_por_id_e_a_api_da_lista_trazem_a_foto(tmp_path):
     c.execute("INSERT INTO exercicio (id, nome, origem) VALUES (1, '(7) VOADOR', 'app'), (2, 'CORRIDA NA ESTEIRA', 'app')")
     c.execute("INSERT INTO aluno (id, nome, cpf, situacao, data4u_id) VALUES (1, 'ANA', '00000000001', 'A', 1)")
     c.commit()
-    assert fotos_exercicios.fotos_por_id(c) == {"1": "ilustracoes/Butterfly.jpg"}  # sem imagem: fica de fora
+    assert fotos_exercicios.fotos_por_id(c) == {"1": ["ilustracoes/Butterfly.jpg"]}  # sem imagem: fica de fora
     token = acesso.autorizar(c, acesso.gerar_codigo(c, "Teste").codigo).token
     c.close()
     navegador = criar_app(caminho).test_client()
     navegador.set_cookie(acesso.NOME_DO_COOKIE, token)
-    lista = {e["nome"]: e["miniatura"] for e in navegador.get("/api/exercicios").get_json()["exercicios"]}
-    assert lista == {"VOADOR": "ilustracoes/Butterfly.jpg", "CORRIDA NA ESTEIRA": None}
+    lista = {e["nome"]: e["miniaturas"] for e in navegador.get("/api/exercicios").get_json()["exercicios"]}
+    assert lista == {"VOADOR": ["ilustracoes/Butterfly.jpg"], "CORRIDA NA ESTEIRA": []}
     html = navegador.get("/alunos/1/montar").get_data(as_text=True)
-    assert "data-fotos='{\"1\": \"ilustracoes/Butterfly.jpg\"}'" in html and 'data-pasta-fotos="/static/"' in html
+    assert "data-fotos='{\"1\": [\"ilustracoes/Butterfly.jpg\"]}'" in html and 'data-pasta-fotos="/static/"' in html
     assert "montador-novo" in html
 
 
@@ -142,3 +142,20 @@ def test_a_tela_de_exercicios_passa_a_pasta_das_ilustracoes(tmp_path):
     navegador.set_cookie(acesso.NOME_DO_COOKIE, token)
     html = navegador.get("/exercicios").get_data(as_text=True)
     assert 'class="pagina pagina-larga exercicios-nova" data-pasta-fotos="/static/"' in html and "data-biblioteca" in html
+
+
+def test_variacao_e_combinado_usam_os_desenhos_que_ja_existem():
+    """Ligados em 12/11/2026 (ilustracoes_exercicios.json): o mesmo movimento com outro nome usa o desenho dele;
+    o combinado mostra um desenho por parte; variação que muda o desenho não está no mapa."""
+    assert fotos_exercicios.miniaturas_do_exercicio("(24) HACK MACHINE") == ["ilustracoes/Hack_Squat.jpg"]
+    assert fotos_exercicios.miniaturas_do_exercicio("CADEIRA EXTENSORA COM ISO.10\"") == ["ilustracoes/Leg_Extensions.jpg"]
+    assert fotos_exercicios.miniaturas_do_exercicio("ROSCA POLIA + TRÍCEPS POLIA") == [
+        "ilustracoes/Standing_Biceps_Cable_Curl.jpg", "ilustracoes/Triceps_Pushdown.jpg"]
+    assert fotos_exercicios.miniaturas_do_exercicio("CADEIRA EXTENSORA UNILATERAL") == []
+    assert fotos_exercicios.miniaturas_do_exercicio(None) == []
+
+
+def test_todo_desenho_do_mapa_novo_existe():
+    desenhos = {d for lista in json.loads(fotos_exercicios.ARQUIVO_DAS_ILUSTRACOES.read_text(encoding="utf-8")).values() for d in lista}
+    for desenho in desenhos:
+        assert (fotos_exercicios.PASTA_DAS_ILUSTRACOES / f"{desenho}.jpg").is_file(), desenho

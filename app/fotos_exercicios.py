@@ -50,31 +50,64 @@ def foto_do_exercicio(nome: object) -> str | None:
 
 
 PASTA_DAS_ILUSTRACOES = Path(__file__).resolve().parent / "static" / "ilustracoes"
+# Exercícios que não estão no mapa das fotos mas são o MESMO movimento de um desenho que já existe (outro nome, número da
+# máquina, isometria, pirâmide, "nova/preta"), ou são combinados ("ROSCA POLIA + TRÍCEPS POLIA": um desenho de cada parte).
+# Ligados a partir do quadro de exercícios em 12/11/2026; variação que muda o desenho (unilateral, articulada, pegada...) NÃO entra.
+ARQUIVO_DAS_ILUSTRACOES = Path(__file__).resolve().parent / "ilustracoes_exercicios.json"
+MAXIMO_DE_IMAGENS = 3  # combinado com muitas partes: só as primeiras
+
+
+@lru_cache(maxsize=1)
+def _mapa_das_ilustracoes() -> dict[str, tuple[str, ...]]:
+    """{nome do exercício como o aluno o vê: (desenho, desenho...)}. Dois nomes iguais com desenhos diferentes: o app não sobe."""
+    mapa: dict[str, tuple[str, ...]] = {}
+    for nome, desenhos in json.loads(ARQUIVO_DAS_ILUSTRACOES.read_text(encoding="utf-8")).items():
+        chave = _chave(nome)
+        valor = tuple(desenhos)
+        if mapa.setdefault(chave, valor) != valor:
+            raise ValueError(f"ilustracoes_exercicios.json: '{nome}' vira '{chave}' e já tem outros desenhos")
+    return mapa
+
+
+def _caminho_do_desenho(desenho: str) -> str | None:
+    if not _NOME_VALIDO.fullmatch(desenho):
+        return None
+    if (PASTA_DAS_ILUSTRACOES / f"{desenho}.jpg").is_file():
+        return f"ilustracoes/{desenho}.jpg"
+    if (PASTA_DAS_FOTOS / f"{desenho}_0.jpg").is_file():
+        return f"exercicios/{desenho}_0.jpg"
+    return None
+
+
+def miniaturas_do_exercicio(nome: object) -> list[str]:
+    """As imagens do exercício (caminhos dentro de /static), na ordem; lista vazia se não tem nenhuma.
+
+    Primeiro o mapa das fotos (um desenho); senão o mapa das ilustrações (um ou mais desenhos, para os combinados).
+    Cada desenho: a ilustração do Canva (static/ilustracoes/<desenho>.jpg); se ainda não existe, a foto de "como fazer".
+    """
+    if not isinstance(nome, str):
+        return []
+    foto = foto_do_exercicio(nome)
+    desenhos = (foto,) if foto else _mapa_das_ilustracoes().get(_chave(nome), ())
+    caminhos = [c for c in (_caminho_do_desenho(d) for d in desenhos) if c]
+    return list(dict.fromkeys(caminhos))[:MAXIMO_DE_IMAGENS]
 
 
 def miniatura_do_exercicio(nome: object) -> str | None:
-    """A imagem pequena do exercício, como caminho dentro de /static, ou None.
-
-    Lançar treino, visual novo (11/11/2026): primeiro a ilustração (gerada no Canva, homem e mulher alternando, em
-    static/ilustracoes/<par>.jpg); se o exercício ainda não tem ilustração, a foto inicial de "como fazer".
-    """
-    foto = foto_do_exercicio(nome)
-    if not foto:
-        return None
-    if (PASTA_DAS_ILUSTRACOES / f"{foto}.jpg").is_file():
-        return f"ilustracoes/{foto}.jpg"
-    return f"exercicios/{foto}_0.jpg"
+    """A primeira imagem do exercício, ou None."""
+    imagens = miniaturas_do_exercicio(nome)
+    return imagens[0] if imagens else None
 
 
-def fotos_por_id(conn: sqlite3.Connection) -> dict[str, str]:
-    """{id do exercício (texto): caminho da miniatura} de todos os exercícios que têm imagem.
+def fotos_por_id(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """{id do exercício (texto): [caminhos das imagens]} de todos os exercícios que têm imagem.
 
     A tela de lançar treino põe a imagem pequena ao lado de cada exercício da ficha. Os exercícios chegam lá por vários
     caminhos (lista, importar, IA, fila, editar), mas todos trazem o id: por isso o mapa é por id.
     """
     fotos = {}
     for exercicio_id, nome in conn.execute("SELECT id, nome FROM exercicio"):
-        caminho = miniatura_do_exercicio(nome)
-        if caminho:
-            fotos[str(exercicio_id)] = caminho
+        imagens = miniaturas_do_exercicio(nome)
+        if imagens:
+            fotos[str(exercicio_id)] = imagens
     return fotos

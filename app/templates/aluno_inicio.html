@@ -14,7 +14,7 @@
   {% set aba = "treino" %}
   {% include "_topo_aluno.html" %}
 
-  <main class="pagina pagina-aluno">
+  <main class="pagina pagina-aluno" data-pasta-fotos="{{ url_for('static', filename='') }}">
     <section class="painel painel-aluno meu-saudacao" aria-labelledby="titulo-inicio">
       <h1 id="titulo-inicio">{{ saudacao }}, {{ primeiro_nome }}!</h1>
       <p id="aviso-treino" class="texto-apoio" role="status">Buscando o seu treino…</p>

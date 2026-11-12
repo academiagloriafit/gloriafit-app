@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { caminhoDaMiniatura, lerMapaDeFotos } from "../app/static/foto_exercicio.js";
+import { caminhoDaMiniatura, lerMapaDeFotos, listaDeImagens } from "../app/static/foto_exercicio.js";
 
 describe("caminhoDaMiniatura", () => {
   it("monta o endereço da ilustração ou da foto", () => {
@@ -26,5 +26,15 @@ describe("lerMapaDeFotos", () => {
     expect(lerMapaDeFotos("{quebrado")).toEqual({});
     expect(lerMapaDeFotos("[1,2]")).toEqual({});
     expect(lerMapaDeFotos("null")).toEqual({});
+  });
+});
+
+describe("listaDeImagens", () => {
+  it("aceita lista (combinado) ou texto (dados antigos) e descarta o que não é caminho válido", () => {
+    expect(listaDeImagens(["ilustracoes/A.jpg", "ilustracoes/B.jpg"])).toEqual(["ilustracoes/A.jpg", "ilustracoes/B.jpg"]);
+    expect(listaDeImagens("ilustracoes/A.jpg")).toEqual(["ilustracoes/A.jpg"]);
+    expect(listaDeImagens(["../x.jpg", 3, null, "ilustracoes/A.jpg"])).toEqual(["ilustracoes/A.jpg"]);
+    expect(listaDeImagens(undefined)).toEqual([]);
+    expect(listaDeImagens(["ilustracoes/A.jpg", "ilustracoes/B.jpg", "ilustracoes/C.jpg", "ilustracoes/D.jpg"])).toHaveLength(3);
   });
 });

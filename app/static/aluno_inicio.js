@@ -4,6 +4,7 @@ import { buscarJson, enviarJson } from "./api.js";
 import { atualizarMeusComentarios } from "./aluno_comentarios.js";
 import { iniciarDescanso } from "./aluno_descanso.js";
 import { el } from "./dom.js";
+import { criarMiniatura, listaDeImagens } from "./foto_exercicio.js";
 import {
   ESFORCOS,
   numerosDoExercicio,
@@ -70,6 +71,8 @@ import {
   textoDosExercicios,
 } from "./aluno_modelo.js";
 
+// Ilustrações dos exercícios (pedido do Thiago, 12/11/2026): a pasta das imagens vem da página.
+const pastaDasFotos = document.querySelector(".pagina-aluno")?.dataset.pastaFotos;
 const avisoTreino = document.getElementById("aviso-treino");
 const botaoDeNovo = document.getElementById("botao-de-novo");
 const areaDoTreino = document.getElementById("treino");
@@ -550,6 +553,8 @@ function desenharTelaDoExercicio(treino, indiceDaFicha, posicao, mensagemInicial
           ),
         ),
     ),
+    listaDeImagens(exercicio.imagens).length > 0 &&
+      el("figure", { classe: "meu-exercicio-ilustracao" }, criarMiniatura(pastaDasFotos, exercicio.imagens, "miniatura-grande")),
     mensagemInicial && el("p", { classe: "meu-aviso-ok", role: "status", texto: mensagemInicial }),
     grupo && grupo.instrucao && el("p", { classe: "meu-bloco-instrucao", texto: grupo.instrucao }),
     linhasDeBaixo.map((linha, i) =>
@@ -589,6 +594,7 @@ function desenharLinha(exercicio, posicao, treino, indiceDaFicha) {
       "button",
       { type: "button", classe: "meu-linha-botao", aoClicar: () => abrirExercicio(treino, indiceDaFicha, posicao) },
       el("span", { classe: "meu-exercicio-etiqueta", texto: exercicio.etiqueta, "aria-hidden": "true" }),
+      listaDeImagens(exercicio.imagens).length > 0 && criarMiniatura(pastaDasFotos, exercicio.imagens, "miniatura-aluno"),
       el(
         "span",
         { classe: "meu-exercicio-corpo" },

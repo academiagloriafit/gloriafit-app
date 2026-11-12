@@ -131,8 +131,9 @@ def test_o_exercicio_sai_em_texto_pronto(conn):
         "ultima_carga": "",
         "ultima_data": "",
         "cargas_recentes": [],  # a linha "Últimas: 20 → 22,5 → 25 kg" (26/10/2026)
+        "imagens": ["ilustracoes/Barbell_Bench_Press_-_Medium_Grip.jpg"],  # a ilustração volta ao app do aluno (pedido do Thiago, 12/11/2026)
     }
-    assert "foto" not in primeiro  # a foto de "Como fazer" saiu da tela do aluno (22/10/2026)
+    assert "foto" not in primeiro  # as fotos de "Como fazer" continuam fora (22/10/2026); só a ilustração aparece
     assert segundo["ordem"] == 2 and segundo["etiqueta"] == "2" and segundo["carga"] == "" and segundo["intervalo"] == "" and segundo["observacao"] == ""
     assert segundo["pausa_segundos"] == 0  # sem intervalo informado, sem cronômetro
 
